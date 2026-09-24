@@ -9,6 +9,7 @@ import {
   type BrewStage,
   type MeasurementKind,
 } from "./brewing.ts";
+import { BSMX_MAX_BYTES, type BsmxSourceData } from "../import/bsmx.ts";
 import { equipmentKinds, type ProfileValues } from "./equipment-profile.ts";
 import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
 import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
@@ -16,6 +17,17 @@ import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
 /**
  * Request schemas and response types shared by the Worker API and the React client.
  */
+
+/**
+ * When something happened (log entries, stage starts). It may be set back in time to log after the
+ * fact, but not into the future; a few minutes of slack cover clocks that disagree.
+ */
+export const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+export const timestampSchema = z
+  .number()
+  .int()
+  .positive()
+  .refine((time) => time <= Date.now() + MAX_FUTURE_SKEW_MS, { error: "Tidspunktet kan ikke være frem i tid." });
 
 export type Role = "admin" | "member";
 export const roleSchema = z.enum(["admin", "member"]);
@@ -178,7 +190,16 @@ export interface RecipeDetail {
   updatedAt: number;
   current: RecipeVersionSummary & { data: RecipeDocument; parentVersionId: string | null };
   versions: RecipeVersionSummary[];
-  source: { kind: string; url: string | null; originalText: string | null } | null;
+  source: {
+    kind: string;
+    url: string | null;
+    /** The source as text (library data). Imported files are downloaded separately instead. */
+    originalText: string | null;
+    /** Set when the recipe was imported from a file that can be downloaded again. */
+    filename: string | null;
+    /** What the BeerSmith import read besides the recipe (equipment, water plan, warnings). */
+    bsmx: BsmxSourceData | null;
+  } | null;
 }
 
 export const recipeSourceKinds = ["manual", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
@@ -192,6 +213,21 @@ export const createRecipeSchema = z.object({
       originalText: z.string().max(200_000).optional(),
     })
     .optional(),
+});
+
+/**
+ * A BeerSmith file as picked on the device. The server parses `text` itself and stores it
+ * unchanged; `recipeIndex` chooses the recipe when the file holds several.
+ */
+export const importBsmxSchema = z.object({
+  filename: z.string().trim().min(1).max(200),
+  text: z
+    .string()
+    .min(1)
+    .refine((text) => new TextEncoder().encode(text).length <= BSMX_MAX_BYTES, {
+      error: `Filen er for stor (maks ${BSMX_MAX_BYTES / 1000} kB). Eksporter én oppskrift om gangen fra BeerSmith.`,
+    }),
+  recipeIndex: z.number().int().min(0).max(1000).default(0),
 });
 
 export const saveRecipeVersionSchema = z.object({
@@ -244,6 +280,8 @@ export interface BatchSummary {
   number: number;
   name: string;
   status: BatchStatus;
+  /** Short result for the history list; only on list responses, once results are recorded. */
+  result?: { abvPct: [number, number] | null; rating: number | null };
   currentStage: BrewStage | null;
   stageStartedAt: number | null;
   brewDate: string | null;
@@ -266,7 +304,67 @@ export interface BatchDetail extends BatchSummary {
   recipeSnapshot: RecipeDocument;
   equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues };
   splits: BatchSplit[];
+  outcomes: BatchOutcome[];
 }
+
+// --- Batch results -----------------------------------------------------------------
+
+export const packagingKinds = ["cans", "keg", "bottles", "other"] as const;
+export type PackagingKind = (typeof packagingKinds)[number];
+export const packagingLabels: Record<PackagingKind, string> = { cans: "Bokser", keg: "Fat", bottles: "Flasker", other: "Annet" };
+
+/** Where a result gravity came from: a logged SG, a logged Brix reading, or typed in on the result form. */
+export const gravitySources = ["sg", "brix", "manual"] as const;
+export type GravitySource = (typeof gravitySources)[number];
+
+/** Actual result for the whole batch (`splitId` null) or one fermentation variant. Null = ikke målt. */
+export interface BatchOutcome {
+  id: string;
+  splitId: string | null;
+  og: number | null;
+  ogSource: GravitySource | null;
+  fg: number | null;
+  fgSource: GravitySource | null;
+  packagedVolumeL: number | null;
+  packagedOn: string | null;
+  packaging: PackagingKind | null;
+  carbonationVols: number | null;
+  tastingNotes: string | null;
+  rating: number | null;
+  nextTime: string | null;
+  updatedAt: number;
+  updatedBy: UserRef;
+}
+
+export const saveOutcomeSchema = z
+  .object({
+    splitId: z.string().min(1).nullable(),
+    og: z.number().min(1).max(1.2).nullable(),
+    ogSource: z.enum(gravitySources).nullable(),
+    fg: z.number().min(0.98).max(1.2).nullable(),
+    fgSource: z.enum(gravitySources).nullable(),
+    packagedVolumeL: z.number().positive().max(10_000).nullable(),
+    packagedOn: z.iso.date().nullable(),
+    packaging: z.enum(packagingKinds).nullable(),
+    carbonationVols: z.number().min(0).max(6).nullable(),
+    tastingNotes: z.string().trim().max(4000).nullable(),
+    rating: z.number().int().min(1).max(5).nullable(),
+    nextTime: z.string().trim().max(2000).nullable(),
+    /** Optimistic concurrency: the result's `updatedAt` when the form was opened; absent for a new result. */
+    baseUpdatedAt: z.number().int().positive().optional(),
+  })
+  .superRefine((input, ctx) => {
+    if ((input.og === null) !== (input.ogSource === null)) {
+      ctx.addIssue({ code: "custom", path: ["ogSource"], message: "OG og kilde må fylles ut sammen." });
+    }
+    if ((input.fg === null) !== (input.fgSource === null)) {
+      ctx.addIssue({ code: "custom", path: ["fgSource"], message: "FG og kilde må fylles ut sammen." });
+    }
+    if (input.og !== null && input.fg !== null && input.fg >= input.og) {
+      ctx.addIssue({ code: "custom", path: ["fg"], message: "FG må være lavere enn OG." });
+    }
+  });
+export type SaveOutcomeInput = z.output<typeof saveOutcomeSchema>;
 
 export const createBatchSchema = z.object({
   recipeId: z.string().min(1),
@@ -284,7 +382,7 @@ export const updateBatchSchema = z.object({
 
 export const startStageSchema = z.object({
   stage: brewStageSchema,
-  occurredAt: z.number().int().positive().optional(),
+  occurredAt: timestampSchema.optional(),
 });
 
 export const createSplitSchema = z.object({
@@ -341,7 +439,7 @@ export interface TimelineItem {
   attachment: TimelineAttachment | null;
 }
 
-const optionalTimestamp = z.number().int().positive().optional();
+const optionalTimestamp = timestampSchema.optional();
 
 export const createMeasurementSchema = z.object({
   kind: measurementKindSchema,
@@ -389,7 +487,7 @@ export const correctLogEntrySchema = z.discriminatedUnion("entryKind", [
     valueMax: z.number().finite().optional(),
     unit: z.string().trim().min(1).max(20),
     label: z.string().trim().max(80).nullable().optional(),
-    occurredAt: z.number().int().positive(),
+    occurredAt: timestampSchema,
     stage: brewStageSchema.nullable(),
     splitId: z.string().min(1).nullable(),
     sampleTempC: z.number().min(-10).max(110).nullable().optional(),
@@ -406,7 +504,7 @@ export const correctLogEntrySchema = z.discriminatedUnion("entryKind", [
   z.object({
     entryKind: z.literal("event"),
     baseUpdatedAt: z.number().int().positive(),
-    occurredAt: z.number().int().positive(),
+    occurredAt: timestampSchema,
     stage: brewStageSchema.nullable(),
     splitId: z.string().min(1).nullable(),
     data: z.record(z.string(), z.unknown()),

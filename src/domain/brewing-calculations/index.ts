@@ -1,6 +1,6 @@
 /**
  * Deterministic brewing calculations. Pure functions only: no React, no database, no AI.
- * The assistant calls these as tools and explains the results — it never computes them itself.
+ * The UI and API call these; no language model computes brewing numbers.
  * See docs/calculations.md for formulas and sources.
  */
 export * from "./abv.ts";

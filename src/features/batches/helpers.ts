@@ -7,8 +7,10 @@ import { formatNumber, formatSg } from "../../lib/format.ts";
 
 export function toBrewDayLog(items: TimelineItem[]): BrewDayLogEntry[] {
   return items.map((item) => ({
+    id: item.id,
     type: item.type,
     stage: item.stage,
+    splitId: item.splitId,
     occurredAt: item.occurredAt,
     data: item.data,
     measurement: item.measurement

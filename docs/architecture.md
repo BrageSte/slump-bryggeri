@@ -51,7 +51,8 @@ En felles bryggerikode (`BREWERY_ACCESS_CODE`, secret) skrives inn én gang per 
 «Hvem er du?» blant bryggeriets personer. Personer er vanlige `users`-rader med plassholder-e-post, og
 `requireUser` godtar enten en Better Auth-sesjon eller personen valgt på enheten (signerte cookies,
 HMAC med `BETTER_AUTH_SECRET`). All autorisasjon videre (medlemskap, roller, isolasjon) er uendret.
-Avvik fra §20 etter ønske fra Brage; ekte innlogging er M9 i implementeringsplanen.
+Avvik fra §20 etter ønske fra Brage. Innlogging for andre (Google/e-post) er strøket fra planen;
+e-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
 
 ## Autorisasjon (§50)
 
@@ -93,7 +94,7 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
   Oppskriften er et versjonert JSON-dokument (`recipe_versions.data`) validert av
   `recipeDocumentSchema`. Skalering, tilpasning og batch-snapshot blir da rene funksjoner på ett
   dokument, og versjoner kan ikke komme ut av sync med radtabeller. Trenger vi spørringer som
-  «hvilke oppskrifter bruker Citra» (fase 4), legges en avledet indekstabell til.
+  «hvilke oppskrifter bruker Citra», legges en avledet indekstabell til.
 - **`brewery_invites`** er lagt til (MVP krever invitasjoner).
 - **`batch_splits`** er lagt til for delt gjæring (Sunset Tropical / Sunset Pine). Målinger og hendelser
   kan knyttes til en split.
@@ -107,6 +108,14 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 `measurements`, `comments`, `attachments`. Nye bryggesteg krever ingen skjemaendring.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
+Alle loggskjemaer og «Gå til steg» kan settes tilbake i tid; `timestampSchema` avviser tidspunkt mer enn
+fem minutter frem i tid (klokker som går litt fort er greit).
+
+Under gjæring og modning oppsummeres loggen per variant (`batch_splits`) av
+`src/domain/brew-day/fermentation.ts`: OG fra siste SG/Brix etter kok, målinger i gjæringskaret (Brix
+korrigeres for alkohol bare når en Brix-måling fra før gjæringen finnes), temperatur og trykk. SG vurderes
+ikke mot FG-målet mens gjæringen pågår. Det samme grunnlaget tegner gjæringsgrafen; manglende målinger
+interpoleres aldri.
 
 Loggkorrigering bruker en ny `brew_events`-rad med `data.corrections` som revisjonsspor. Originalhendelsen
 og eventuell målerad markeres slettet, men beholdes i databasen. `baseUpdatedAt` gir konfliktkontroll; batch
@@ -123,15 +132,39 @@ Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggeda
 hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
 enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
 
+### Timere og alarmer
+
+Timere er vanlige logghendelser: `timer_started` `{ label, durationMin, dueAt }` (serveren regner ut
+`dueAt` fra tidspunktet) og `timer_cancelled` `{ timerId }` (må peke på en timer i samme batch). Alle ser
+samme nedtelling via pollingen. `dueAlarms` gir forfalte timere, ferdige meske-/koke-/whirlpoolsteg og
+tilsetninger (forvarsel 1 min) med faste nøkler; hvilke som er kvittert lagres per enhet i localStorage.
+Lyd (Web Audio) låses opp ved første trykk; vibrasjon der nettleseren støtter det. Varsler når appen er
+lukket (Web Push) er ikke bygget.
+
+### Resultater
+
+`batch_outcomes` har ett resultat per variant (`split_id`, NULL = hele batchen; unik indeks på
+`(batch_id, IFNULL(split_id, ''))`). OG/FG lagres med kilde (`sg`, `brix`, `manual`), og NULL betyr
+«ikke målt». Resultater kan endres: `PUT /batches/:id/outcomes` krever `baseUpdatedAt` fra skjemaet og gir
+409 ved samtidige endringer; `updated_by/updated_at` viser hvem som endret sist. ABV, forgjæring, fordampning
+og brygghuseffektivitet regnes ut ved visning (`src/domain/brew-day/outcome.ts`), aldri lagret.
+
+### Bryggerapport
+
+`/batcher/:id/rapport` (`BatchReportPage`) setter sammen oppskriftssnapshot, logg og resultater til ett
+dokument: plan mot faktisk, malt, humle (plan mot registrert), gjær og fordeling, bryggedagsmålinger,
+gjæringsgraf med tabell, resultater, kommentarer og usikkerheter. Ingen server-PDF: `@page`/`@media print` i
+`tokens.css` gir A4 i lys palett, og appens navigasjon har `print:hidden`.
+
 ## Bryggeri-eksport
 
 Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker
 `c.var.membership.breweryId` etter `requireMember("admin")` og returnerer formatet
 `slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
 bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
-batcher/snapshots/splits og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og credentials er ikke
-med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger fortsatt i objektlageret.
-Resultattabellen er en tom liste fram til M4 legger til batchresultater. Gjenoppretting støttes ikke ennå.
+batcher/snapshots/splits/resultater og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og
+credentials er ikke med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger
+fortsatt i objektlageret. Gjenoppretting støttes ikke ennå.
 
 ## Oppskriftsbibliotek
 
@@ -150,14 +183,18 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
   originalen lagres i `recipe_sources` (§9).
 - Oppdatering: `npm run library:build -- <sti til punkapi-klon>` → `db/seeds/recipe-library.sql`
   (validerer alle oppskrifter), deretter `npm run db:seed:library:local|remote`.
-- Neste kilde bør være import av BeerXML/BeerJSON-filer (BeerSmith, Brewfather, Brewer's Friend
-  eksporterer alle BeerXML) og, i fase 5, import fra nettadresse med AI-tolkning.
+- BeerSmith-filer (`.bsmx`): `POST /breweries/:id/recipes/import/bsmx` tar filnavn og tekst, parser på
+  serveren med samme rene adapter som gjennomgangsskjermen (`src/domain/import/bsmx.ts`) og lager bare
+  oppskrift + kilde + versjon 1. Kilden (`recipe_sources`) har originalfilen uendret i `original_text`,
+  `filename` og `data` (BeerSmith-utstyr adskilt i oppgitt/avledet, vannplan, advarsler, ignorerte målte
+  felt). Bryggeriets utstyrsprofil endres aldri. `GET …/recipes/:id/source/file` gir filen tilbake
+  byte-lik. Kilder er uforanderlige (trigger). Maks 250 kB per fil. Se [import-bsmx.md](import-bsmx.md).
+- BeerXML og AI-tolkning er strøket inntil videre.
 
 ## Navigasjon (avvik fra §5)
 
-Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Inventar · Mer.
-Brygg viser nå bare batcher. Assistenten ligger under Mer til fase 6, og blir da en flytende knapp slik
-§57 beskriver.
+Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Mer.
+Brygg viser bare batcher. Inventar og assistent er strøket (2026-09-24), så de har ingen plassholdere.
 
 ## Sanntid
 
@@ -221,4 +258,4 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 - Hovedbundelen er ~176 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
-- Assistent (fase 6), inventar (fase 4), smart import (fase 5) og kalibreringsforslag (fase 7) er ikke bygget.
+- Assistent, inventar, smart import og kalibreringsforslag er strøket fra planen (2026-09-24).

@@ -159,11 +159,12 @@ describe("deriveBrewDayState", () => {
     });
     expect(state.fermentationDay).toBe(0);
     expect(state.step?.label).toBe("Dag 0");
-    expect(state.targets.find((t) => t.key === "ferm-temp")?.target).toEqual({ kind: "value", value: 18 });
+    // Fermentation readings are summarized per variant (tests/domain/fermentation.test.ts), not as stage targets.
+    expect(state.targets).toEqual([]);
     expect(state.nextAction).toEqual({ kind: "log_measurement", measurementKind: "sg", label: "Sjekk gravity" });
   });
 
-  it("prompts the dry hop on day 4 and uses the alcohol-corrected refractometer reading", () => {
+  it("prompts the dry hop on day 4", () => {
     const pitch = Date.parse("2026-09-23T14:30:00+02:00");
     const now = pitch + 4 * DAY + 60 * MIN;
     const log = [
@@ -175,11 +176,24 @@ describe("deriveBrewDayState", () => {
     expect(state.step?.label).toBe("Dag 3–5");
     expect(state.additions.filter((a) => a.status === "due")).toHaveLength(5);
     expect(state.nextAction).toMatchObject({ kind: "add_ingredient", addition: { variant: "Tropical" } });
-    const fg = state.targets.find((t) => t.key === "fg");
-    expect(fg?.actual?.derivedFrom).toBe("brix");
-    // 15.0 → 9.5 °Bx corrected ≈ 1.021 (Terrill), inside the 1.020–1.025 dry-hop window in the plan
-    expect(fg?.actual?.value).toBeGreaterThan(1.019);
-    expect(fg?.actual?.value).toBeLessThan(1.025);
+  });
+
+  it("marks a dry hop done with the amount actually added", () => {
+    const pitch = Date.parse("2026-09-23T14:30:00+02:00");
+    const now = pitch + 4 * DAY + 60 * MIN;
+    const log = [
+      ...sunsetLog,
+      entry({
+        type: "ingredient_added",
+        stage: "fermentation",
+        occurredAt: now - 10 * MIN,
+        data: { ingredientKind: "hop", ingredientId: "h-dry-t-citra", name: "Citra", amount: 100, unit: "g" },
+      }),
+    ];
+    const state = deriveBrewDayState({ recipe: sunsetIpaRecipe, stage: "fermentation", stageStartedAt: pitch, log, now });
+    const citra = state.additions.find((a) => a.ingredientId === "h-dry-t-citra");
+    expect(citra).toMatchObject({ status: "done", amount: 120, actual: { amount: 100, unit: "g" } });
+    expect(state.additions.filter((a) => a.status === "due")).toHaveLength(4);
   });
 
   it("offers to finish the batch in the packaging stage and nothing once completed", () => {

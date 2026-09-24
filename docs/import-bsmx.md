@@ -2,7 +2,8 @@
 
 Adapter: [`src/domain/import/bsmx.ts`](../src/domain/import/bsmx.ts) (ren funksjon, ingen DB).
 XML leses av [`src/domain/import/xml.ts`](../src/domain/import/xml.ts), som avviser `DOCTYPE`/entiteter
-og har grenser for størrelse (2 MB), dybde (32) og antall elementer (50 000).
+og har grenser for dybde (32) og antall elementer (50 000). BSMX-filer kan være maks 250 kB
+(`BSMX_MAX_BYTES`; én oppskrift er 20–30 kB).
 
 BeerSmith er en **importkilde for planer**. Målte verdier i filen blir aldri observasjoner i Slump
 (se «Hard importregel» nederst).
@@ -97,6 +98,15 @@ Disse feltene beskriver et tidligere brygg og importeres **aldri**, heller ikke 
 `F_R_OG_SECONDARY`, `F_R_MASH_PH`, `F_R_RUNOFF_PH`, `F_R_RUNNING_GRAVITY`. Tidtakere
 (`F_R_MASH_TIMER` …) og priser/inventar ignoreres også. Felt med `_SET = 1` listes i
 `ignoredMeasuredFields` for review-visningen.
+
+## I appen
+
+Oppskrifter → Importer → «BeerSmith-fil (.bsmx)». Nettleseren leser filen (`decodeBsmxFile`: UTF-8 med
+byte-order-mark bevart, ellers Windows-1252 med varsel) og viser oppskrift, varsler, ignorerte målte felt,
+utstyr og vannplan. Ved lagring parser serveren filen på nytt og lagrer bare oppskriften og kilden:
+originalfilen uendret, filnavn og `BsmxSourceData`. Oppskriften viser «Fra BeerSmith» med utstyret og
+«Last ned fil». Testene (`tests/integration/recipe-import.test.ts`) importerer alle sju filene og sjekker
+byte-lik nedlasting, hard importregel, fiendtlig/ødelagt XML, for store filer og isolasjon.
 
 ## Testfiler
 

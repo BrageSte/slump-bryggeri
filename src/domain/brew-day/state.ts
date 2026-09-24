@@ -1,5 +1,4 @@
-import { brixToSg, expectedGravities, refractometerFinalGravity } from "../brewing-calculations/index.ts";
-import { fermentationHasStarted } from "../model/brewing.ts";
+import { brixToSg, expectedGravities } from "../brewing-calculations/index.ts";
 import {
   brewStageLabels,
   brewStages,
@@ -19,8 +18,12 @@ import type { RecipeDocument } from "../model/recipe.ts";
  */
 
 export interface BrewDayLogEntry {
+  /** Timeline id; needed to cancel a timer. */
+  id?: string;
   type: string;
   stage: BrewStage | null;
+  /** Fermentation variant (batch split) the entry belongs to; null or absent for the whole batch. */
+  splitId?: string | null;
   occurredAt: number;
   data: Record<string, unknown> | null;
   measurement: { kind: MeasurementKind; value: number; valueMin?: number | null; valueMax?: number | null } | null;
@@ -50,6 +53,8 @@ export interface PlannedAddition {
   dueAt: number;
   dueLabel: string;
   status: "done" | "due" | "upcoming";
+  /** What was logged as added; dry hops are adjusted to taste, so it can differ from the plan. */
+  actual?: { amount: number; unit: string };
 }
 
 export type NextAction =
@@ -63,6 +68,8 @@ export interface StageStep {
   detail: string | null;
   totalMin: number | null;
   remainingMin: number | null;
+  /** When the current timed step ends (mash rest, boil, whirlpool), or null. */
+  endsAt: number | null;
 }
 
 export interface BrewDayState {
@@ -124,13 +131,12 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
 
   const stageStartedAt = input.stageStartedAt ?? findStageStart(log, stage);
   const elapsedMin = stageStartedAt === null ? null : Math.max(0, (now - stageStartedAt) / MINUTE);
-  const doneIngredientIds = new Set(
-    log.flatMap((e) =>
-      (e.type === "ingredient_added" || e.type === "yeast_pitched") && typeof e.data?.ingredientId === "string"
-        ? [e.data.ingredientId]
-        : [],
-    ),
-  );
+  const doneIngredients = new Map<string, { amount: number; unit: string } | null>();
+  for (const e of log) {
+    if ((e.type !== "ingredient_added" && e.type !== "yeast_pitched") || typeof e.data?.ingredientId !== "string") continue;
+    const { amount, unit } = e.data;
+    doneIngredients.set(e.data.ingredientId, typeof amount === "number" && typeof unit === "string" ? { amount, unit } : null);
+  }
 
   const fermentationStart = findFermentationStart(log);
   const fermentationDay =
@@ -138,9 +144,9 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
       ? Math.floor((now - fermentationStart) / DAY)
       : null;
 
-  const additions = plannedAdditions(recipe, stage, elapsedMin ?? 0, fermentationDay, doneIngredientIds);
-  const targets = stageTargets(input, log, stage, stageStartedAt, fermentationDay);
-  const step = stageStep(recipe, stage, elapsedMin, fermentationDay);
+  const additions = plannedAdditions(recipe, stage, elapsedMin ?? 0, fermentationDay, doneIngredients);
+  const targets = stageTargets(input, log, stage, stageStartedAt);
+  const step = stageStep(recipe, stage, elapsedMin, fermentationDay, stageStartedAt);
   const nextAction = chooseNextAction(recipe, stage, additions, log, elapsedMin ?? 0, now);
 
   return { stage, stageStartedAt, elapsedMin, step, fermentationDay, targets, additions, nextAction };
@@ -181,7 +187,7 @@ function plannedAdditions(
   stage: BrewStage,
   elapsedMin: number,
   fermentationDay: number | null,
-  done: Set<string>,
+  done: Map<string, { amount: number; unit: string } | null>,
 ): PlannedAddition[] {
   const additions: PlannedAddition[] = [];
   const status = (id: string, isDue: boolean): PlannedAddition["status"] =>
@@ -265,6 +271,10 @@ function plannedAdditions(
     }
   }
 
+  for (const addition of additions) {
+    const actual = done.get(addition.ingredientId);
+    if (actual) addition.actual = actual;
+  }
   return additions.sort((a, b) => a.dueAt - b.dueAt);
 }
 
@@ -292,7 +302,7 @@ export function compareMeasurementToTarget(
   return "ok";
 }
 
-function temperatureTarget(min: number | undefined, max: number | undefined): TargetValue | null {
+export function temperatureTarget(min: number | undefined, max: number | undefined): TargetValue | null {
   if (min === undefined) return null;
   return max === undefined || max === min ? { kind: "value", value: min } : { kind: "range", min, max };
 }
@@ -302,7 +312,6 @@ function stageTargets(
   log: BrewDayLogEntry[],
   stage: BrewStage,
   stageStartedAt: number | null,
-  fermentationDay: number | null,
 ): StageTarget[] {
   const { recipe } = input;
   const wcf = input.wcf ?? 1;
@@ -393,20 +402,8 @@ function stageTargets(
       add("og", "sg", "OG", og === null ? null : { kind: "value", value: round3(og) }, latestGravity(postBoil, wcf));
       break;
     }
-    case "fermentation": {
-      const step = currentFermentationStep(recipe, fermentationDay ?? 0);
-      add(
-        "ferm-temp",
-        "temperature",
-        "Gjæringstemperatur",
-        temperatureTarget(step?.temperatureC, step?.temperatureMaxC),
-        actualOf(latest(inStage, "temperature")),
-      );
-      const { fg } = expectedGravities(recipe);
-      const originalBrix = log.findLast((e) => e.measurement?.kind === "brix" && !fermentationHasStarted(e.stage))?.measurement?.value;
-      add("fg", "sg", "FG (mål)", fg === null ? null : { kind: "value", value: round3(fg) }, latestFermentingGravity(inStage, wcf, originalBrix));
-      break;
-    }
+    // Fermentation is summarized per variant in fermentation.ts; gravity is not judged against the FG
+    // target while the yeast is still working.
     default:
       break;
   }
@@ -424,24 +421,6 @@ function latestGravity(entries: BrewDayLogEntry[], wcf: number): StageTarget["ac
   return { value: round3(brixToSg(entry.measurement.value, wcf)), occurredAt: entry.occurredAt, derivedFrom: "brix" };
 }
 
-/** During fermentation a Brix reading must be alcohol-corrected against the original Brix. */
-function latestFermentingGravity(
-  entries: BrewDayLogEntry[],
-  wcf: number,
-  originalBrix: number | undefined,
-): StageTarget["actual"] {
-  const entry = entries.findLast(
-    (e) => e.measurement?.kind === "sg" || (e.measurement?.kind === "brix" && originalBrix !== undefined),
-  );
-  if (!entry?.measurement) return null;
-  if (entry.measurement.kind === "sg") return { value: entry.measurement.value, occurredAt: entry.occurredAt };
-  return {
-    value: round3(refractometerFinalGravity({ originalBrix: originalBrix ?? 0, finalBrix: entry.measurement.value, wcf })),
-    occurredAt: entry.occurredAt,
-    derivedFrom: "brix",
-  };
-}
-
 function currentMashStep(recipe: RecipeDocument, elapsedMin: number) {
   let cumulative = 0;
   for (const step of recipe.mashSteps) {
@@ -451,7 +430,8 @@ function currentMashStep(recipe: RecipeDocument, elapsedMin: number) {
   return recipe.mashSteps.at(-1);
 }
 
-function currentFermentationStep(recipe: RecipeDocument, day: number) {
+/** The planned fermentation step for a fermentation day (0 = pitch day). */
+export function currentFermentationStep(recipe: RecipeDocument, day: number) {
   let cumulative = 0;
   for (const step of recipe.fermentationSteps) {
     cumulative += step.durationDays ?? 0;
@@ -465,10 +445,12 @@ function stageStep(
   stage: BrewStage,
   elapsedMin: number | null,
   fermentationDay: number | null,
+  stageStartedAt: number | null,
 ): StageStep {
+  const endsAt = (minutesIntoStage: number) => (stageStartedAt === null ? null : stageStartedAt + minutesIntoStage * MINUTE);
   switch (stage) {
     case "mash": {
-      if (recipe.mashSteps.length === 0) return { label: "Mesk", detail: null, totalMin: null, remainingMin: null };
+      if (recipe.mashSteps.length === 0) return { label: "Mesk", detail: null, totalMin: null, remainingMin: null, endsAt: null };
       let cumulative = 0;
       const elapsed = elapsedMin ?? 0;
       for (const [index, step] of recipe.mashSteps.entries()) {
@@ -480,10 +462,11 @@ function stageStep(
             detail: recipe.mashSteps.length > 1 ? `Steg ${index + 1} av ${recipe.mashSteps.length}` : null,
             totalMin: step.durationMin,
             remainingMin: elapsedMin === null ? null : Math.max(0, cumulative - elapsed),
+            endsAt: endsAt(cumulative),
           };
         }
       }
-      return { label: "Mesk", detail: null, totalMin: null, remainingMin: null };
+      return { label: "Mesk", detail: null, totalMin: null, remainingMin: null, endsAt: null };
     }
     case "boil":
       return {
@@ -491,6 +474,7 @@ function stageStep(
         detail: `${recipe.boilTimeMin} min`,
         totalMin: recipe.boilTimeMin,
         remainingMin: elapsedMin === null ? null : Math.max(0, recipe.boilTimeMin - elapsedMin),
+        endsAt: endsAt(recipe.boilTimeMin),
       };
     case "whirlpool": {
       const whirlpoolHops = recipe.hops.filter((h) => h.use === "whirlpool");
@@ -500,6 +484,7 @@ function stageStep(
         detail: null,
         totalMin: total,
         remainingMin: elapsedMin === null ? null : Math.max(0, total - elapsedMin),
+        endsAt: endsAt(total),
       };
     }
     case "fermentation": {
@@ -509,10 +494,11 @@ function stageStep(
         detail: step?.notes ?? null,
         totalMin: null,
         remainingMin: null,
+        endsAt: null,
       };
     }
     default:
-      return { label: brewStageLabels[stage], detail: null, totalMin: null, remainingMin: null };
+      return { label: brewStageLabels[stage], detail: null, totalMin: null, remainingMin: null, endsAt: null };
   }
 }
 

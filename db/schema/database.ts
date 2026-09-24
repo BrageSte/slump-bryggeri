@@ -92,6 +92,10 @@ export interface RecipeSourcesTable {
   original_text: string | null;
   url: string | null;
   attachment_id: string | null;
+  /** Name of the imported file (BeerSmith). */
+  filename: string | null;
+  /** JSON: what the importer read besides the recipe (BsmxSourceData for BeerSmith). */
+  data: string | null;
   created_by: string;
   created_at: number;
 }
@@ -227,6 +231,28 @@ export interface AttachmentsTable {
   deleted_at: number | null;
 }
 
+export interface BatchOutcomesTable {
+  id: string;
+  brewery_id: string;
+  batch_id: string;
+  split_id: string | null;
+  og: number | null;
+  og_source: "sg" | "brix" | "manual" | null;
+  fg: number | null;
+  fg_source: "sg" | "brix" | "manual" | null;
+  packaged_volume_l: number | null;
+  packaged_on: string | null;
+  packaging: "cans" | "keg" | "bottles" | "other" | null;
+  carbonation_vols: number | null;
+  tasting_notes: string | null;
+  rating: number | null;
+  next_time: string | null;
+  created_by: string;
+  created_at: number;
+  updated_by: string;
+  updated_at: number;
+}
+
 export interface RecipeLibraryTable {
   id: string;
   source: string;
@@ -267,5 +293,6 @@ export interface Database {
   measurements: MeasurementsTable;
   comments: CommentsTable;
   attachments: AttachmentsTable;
+  batch_outcomes: BatchOutcomesTable;
   recipe_library: RecipeLibraryTable;
 }

@@ -19,6 +19,7 @@ import type { RecipeDocument } from "../../src/domain/model/recipe.ts";
 import type { SessionUser } from "../lib/context.ts";
 import { atomic, newId, parseJson, type DB } from "../lib/db.ts";
 import { notFound } from "../lib/errors.ts";
+import { listOutcomes, resultSummaries } from "./batch-outcomes.ts";
 import { getActiveProfile, listEquipment, profileValuesOf } from "./equipment.ts";
 import { getRecipeVersion } from "./recipes.ts";
 
@@ -79,7 +80,11 @@ export async function listBatches(db: DB, breweryId: string, statuses?: BatchSta
   let query = batchQuery(db, breweryId);
   if (statuses && statuses.length > 0) query = query.where("b.status", "in", statuses);
   const rows = await query.orderBy("b.updated_at", "desc").limit(200).execute();
-  return rows.map(toSummary);
+  const results = await resultSummaries(db, breweryId, rows.filter((r) => r.status === "completed").map((r) => r.id));
+  return rows.map((row) => {
+    const result = results.get(row.id);
+    return result ? { ...toSummary(row), result } : toSummary(row);
+  });
 }
 
 /** Loads a batch scoped to the brewery; batches in other breweries are reported as missing. */
@@ -91,7 +96,7 @@ export async function findBatch(db: DB, breweryId: string, batchId: string): Pro
 
 export async function getBatch(db: DB, breweryId: string, batchId: string): Promise<BatchDetail> {
   const summary = await findBatch(db, breweryId, batchId);
-  const [recipeSnapshot, equipmentSnapshot, version, splits] = await Promise.all([
+  const [recipeSnapshot, equipmentSnapshot, version, splits, outcomes] = await Promise.all([
     db.selectFrom("batch_recipe_snapshots").selectAll().where("batch_id", "=", batchId).executeTakeFirstOrThrow(),
     db.selectFrom("batch_equipment_snapshots").selectAll().where("batch_id", "=", batchId).executeTakeFirst(),
     db
@@ -101,6 +106,7 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
       .where("b.id", "=", batchId)
       .executeTakeFirstOrThrow(),
     listSplits(db, breweryId, batchId),
+    listOutcomes(db, breweryId, batchId),
   ]);
   const equipment = parseJson<{ values: ProfileValues }>(equipmentSnapshot?.data ?? null);
   return {
@@ -113,6 +119,7 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
       values: equipment?.values ?? {},
     },
     splits,
+    outcomes,
   };
 }
 

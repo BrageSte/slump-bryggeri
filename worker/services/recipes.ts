@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { BsmxSourceData } from "../../src/domain/import/bsmx.ts";
 import type { createRecipeSchema, RecipeDetail, RecipeSummary, saveRecipeVersionSchema } from "../../src/domain/model/api.ts";
 import type { RecipeDocument } from "../../src/domain/model/recipe.ts";
 import type { MembershipContext, SessionUser } from "../lib/context.ts";
@@ -59,7 +60,7 @@ export async function getRecipe(db: DB, breweryId: string, recipeId: string): Pr
       .execute(),
     db
       .selectFrom("recipe_sources")
-      .select(["kind", "url", "original_text"])
+      .select(["kind", "url", "original_text", "filename", "data"])
       .where("recipe_id", "=", recipe.id)
       .orderBy("created_at")
       .executeTakeFirst(),
@@ -89,8 +90,31 @@ export async function getRecipe(db: DB, breweryId: string, recipeId: string): Pr
       parentVersionId: current.parent_version_id,
     },
     versions: versions.map(summarize),
-    source: source ? { kind: source.kind, url: source.url, originalText: source.original_text } : null,
+    source: source
+      ? {
+          kind: source.kind,
+          url: source.url,
+          // An imported file can be large; it is downloaded on its own (getRecipeSourceFile).
+          originalText: source.filename === null ? source.original_text : null,
+          filename: source.filename,
+          bsmx: source.kind === "bsmx" ? parseJson<BsmxSourceData>(source.data) : null,
+        }
+      : null,
   };
+}
+
+/** The imported file behind a recipe, exactly as it was picked (for download). */
+export async function getRecipeSourceFile(db: DB, breweryId: string, recipeId: string): Promise<{ filename: string; text: string }> {
+  const recipe = await findRecipe(db, breweryId, recipeId);
+  const source = await db
+    .selectFrom("recipe_sources")
+    .select(["filename", "original_text"])
+    .where("recipe_id", "=", recipe.id)
+    .where("filename", "is not", null)
+    .orderBy("created_at")
+    .executeTakeFirst();
+  if (!source?.filename || source.original_text === null) throw notFound("Originalfilen");
+  return { filename: source.filename, text: source.original_text };
 }
 
 export async function getRecipeVersion(db: DB, breweryId: string, recipeId: string, versionId: string) {
@@ -105,18 +129,24 @@ export async function getRecipeVersion(db: DB, breweryId: string, recipeId: stri
   return { ...version, data: parseJson<RecipeDocument>(version.data) as RecipeDocument };
 }
 
+/** A new recipe with where it came from. Imports add the file name and what they read from the file. */
+export type NewRecipe = {
+  recipe: RecipeDocument;
+  source?: { kind: string; url?: string; originalText?: string; filename?: string; data?: unknown };
+};
+
 export async function createRecipe(
   d1: D1Database,
   db: DB,
   breweryId: string,
   user: SessionUser,
-  input: z.output<typeof createRecipeSchema>,
+  input: z.output<typeof createRecipeSchema> | NewRecipe,
 ): Promise<string> {
   const now = Date.now();
   const recipeId = newId();
   const versionId = newId();
   const sourceId = newId();
-  const source = input.source ?? { kind: "manual" as const };
+  const source: NonNullable<NewRecipe["source"]> = input.source ?? { kind: "manual" };
 
   await atomic(d1, [
     db.insertInto("recipes").values({
@@ -136,6 +166,8 @@ export async function createRecipe(
       original_text: source.originalText ?? null,
       url: source.url ?? null,
       attachment_id: null,
+      filename: source.filename ?? null,
+      data: source.data === undefined ? null : JSON.stringify(source.data),
       created_by: user.id,
       created_at: now,
     }),

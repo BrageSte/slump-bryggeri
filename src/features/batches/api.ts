@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BatchDetail, BatchSummary, CorrectLogEntryInput, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
+import type { BatchDetail, BatchSummary, CorrectLogEntryInput, CreatedResponse, SaveOutcomeInput, TimelineItem } from "../../domain/model/api.ts";
 import { measurementToCanonical } from "../../domain/brewing-calculations/measurement-units.ts";
 import type { BatchStatus, BrewStage, MeasurementKind } from "../../domain/model/brewing.ts";
 import { measurementKindSpecs } from "../../domain/model/brewing.ts";
@@ -123,7 +123,7 @@ export function useLogMeasurement(batchId: string, currentUser: { id: string; na
 }
 
 export const useAddComment = (batchId: string) =>
-  useBatchMutation(batchId, (base, input: { body: string; stage?: BrewStage | null; splitId?: string | null }) =>
+  useBatchMutation(batchId, (base, input: { body: string; stage?: BrewStage | null; splitId?: string | null; occurredAt?: number }) =>
     api.post<CreatedResponse>(`${base}/comments`, input),
   );
 
@@ -149,7 +149,7 @@ export const useDeleteEvent = (batchId: string) =>
   useBatchMutation(batchId, (base, eventId: string) => api.delete(`${base}/events/${eventId}`));
 
 export const useStartStage = (batchId: string) =>
-  useBatchMutation(batchId, (base, stage: BrewStage) => api.post<CreatedResponse>(`${base}/stage`, { stage }));
+  useBatchMutation(batchId, (base, input: { stage: BrewStage; occurredAt?: number }) => api.post<CreatedResponse>(`${base}/stage`, input));
 
 export const useUpdateBatch = (batchId: string) =>
   useBatchMutation(batchId, (base, input: { name?: string; status?: BatchStatus; brewDate?: string | null }) => api.patch(base, input));
@@ -158,6 +158,9 @@ export const useCreateSplit = (batchId: string) =>
   useBatchMutation(batchId, (base, input: { name: string; vessel?: string | null; volumeL?: number | null }) =>
     api.post<CreatedResponse>(`${base}/splits`, input),
   );
+
+export const useSaveOutcome = (batchId: string) =>
+  useBatchMutation(batchId, (base, input: SaveOutcomeInput) => api.put<CreatedResponse>(`${base}/outcomes`, input));
 
 export const useUploadPhoto = (batchId: string) =>
   useBatchMutation(batchId, (base, form: FormData) => api.upload<CreatedResponse>(`${base}/attachments`, form));

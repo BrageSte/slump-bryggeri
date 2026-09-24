@@ -3,7 +3,7 @@ import { brixToSg, refractometerFinalGravity } from "../../domain/brewing-calcul
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasStarted, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
-import { formatAmount, formatLogTime, formatSg } from "../../lib/format.ts";
+import { formatAmount, formatDuration, formatLogTime, formatSg, formatTime } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
 import { CorrectionForm } from "./CorrectionForm.tsx";
 import { formatMeasurement, formatMeasurementInUnit, formatMeasurementRange } from "./helpers.ts";
@@ -97,6 +97,10 @@ function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: 
       title: `${item.type === "yeast_pitched" ? "Gjær tilsatt" : "Tilsatt"}: ${amount}${data.name}`,
       detail: typeof data.note === "string" ? data.note : undefined,
     };
+  }
+  if (item.type === "timer_started" && typeof data.label === "string") {
+    const until = typeof data.dueAt === "number" ? ` · ferdig ${formatTime(data.dueAt)}` : "";
+    return { title: `Timer: ${data.label}`, detail: typeof data.durationMin === "number" ? `${formatDuration(data.durationMin)}${until}` : undefined };
   }
   if (item.type === "status_changed" && typeof data.to === "string") {
     return { title: `Status: ${batchStatusLabels[data.to as BatchStatus] ?? data.to}` };

@@ -1,7 +1,7 @@
 # Slump Bryggeri
 
-Mobil-først PWA for brygging: oppskrifter, bryggerikalibrering, felles bryggelogg og (senere)
-inventar og en bryggeassistent. Cloudflare Workers + D1 + R2 (KV fallback), React + Vite + TypeScript.
+Enkel, mobil-først PWA for brygging: oppskrifter, bryggerikalibrering og en felles bryggelogg fra
+bryggedag til ferdig øl. Cloudflare Workers + D1 + R2 (KV fallback), React + Vite + TypeScript.
 
 **Source of truth:** [docs/implementation-package.md](docs/implementation-package.md) · **Neste steg:** [docs/implementation-plan.md](docs/implementation-plan.md)
 
@@ -46,16 +46,15 @@ kan endres fra batchmenyen.
 |---|---|---|
 | 0 Foundation | Repo, CI, D1-migrasjoner, bryggerimodus (+ e-post-OTP klar for senere), PWA, designtokens, komponenter | ✅ |
 | 1 Brewery | Bryggerier, medlemmer, invitasjoner, roller, utstyr, versjonert kalibreringsprofil | ✅ |
-| 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ — BeerXML/BeerJSON-import gjenstår |
-| 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring | ✅ |
-| 4 Inventory | Lots, alfasyre, transaksjoner | ⏳ |
-| 5 Smart Import | Bilde/PDF/tekst/URL + AI-tolkning med gjennomgang | ⏳ |
-| 6 Assistant | Kontekstbevisst assistent med beregningsmotoren som verktøy | ⏳ (ligger under Mer til den er bygget) |
-| 7 Calibration intelligence | Observasjoner → forslag → admin godkjenner | ⏳ (beregningen `summarizeCalibrationObservations` finnes) |
+| 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ inkl. BeerSmith-import (.bsmx) med originalfilen tatt vare på |
+| 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring, enheter, pH-strips, korrigering, gjæring per variant med graf, etterregistrering, resultater per variant, bryggerapport (PDF), delte timere og alarmer | ✅ |
+
+Inventar, AI-assistent, smart import, kalibreringsforslag, vannkjemi og innlogging for andre er strøket
+(2026-09-24). Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
 
 ## Dokumentasjon
 
-- **[Implementeringsplan v0.3](docs/implementation-plan.md)** — neste milepæler (M1–M9)
+- **[Implementeringsplan v0.4](docs/implementation-plan.md)** — steg 1–6 i rekkefølge
 - [Arkitektur og beslutninger](docs/architecture.md)
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
-import { addMember, createBrewery, createUser, request, type TestUser } from "./client.ts";
+import { bsmxFixtures } from "../fixtures/beersmith/index.ts";
+import { addMember, createBrewery, createUser, download, request, type TestUser } from "./client.ts";
 
 /**
  * Spec §52: Alice – Brewery A, Bob – Brewery B.
@@ -12,6 +13,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
   let breweryA: string;
   let breweryB: string;
   let recipeA: string;
+  let importedA: string;
   let batchA: string;
   let eventA: string;
   let attachmentA: string;
@@ -23,10 +25,17 @@ describe("brewery isolation (Alice vs Bob)", () => {
     breweryB = await createBrewery(bob, "Brewery B");
 
     recipeA = (await alice.post(`/breweries/${breweryA}/recipes`, { recipe: sunsetIpaRecipe, source: { kind: "example" } })).body.id;
+    importedA = (await alice.post(`/breweries/${breweryA}/recipes/import/bsmx`, { filename: "IRA.bsmx", text: bsmxFixtures["IRA.bsmx"] })).body.id;
+    expect(importedA).toBeTruthy();
     batchA = (await alice.post(`/breweries/${breweryA}/batches`, { recipeId: recipeA })).body.id;
     eventA = (await alice.post(`/breweries/${breweryA}/batches/${batchA}/measurements`, { kind: "temperature", value: 66.8 })).body.id;
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/splits`, { name: "Lille tank", volumeL: 24 });
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/comments`, { body: "Backup test comment" });
+    const outcome = await alice.put(`/breweries/${breweryA}/batches/${batchA}/outcomes`, {
+      splitId: null, og: 1.061, ogSource: "brix", fg: 1.012, fgSource: "sg", packagedVolumeL: 55, packagedOn: "2026-10-05",
+      packaging: "keg", carbonationVols: 2.4, tastingNotes: "Backup test result", rating: 4, nextTime: null,
+    });
+    expect(outcome.status).toBe(200);
 
     const form = new FormData();
     form.set("file", new File([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], "mash.jpg", { type: "image/jpeg" }));
@@ -39,6 +48,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
       `/breweries/${breweryA}`,
       `/breweries/${breweryA}/recipes`,
       `/breweries/${breweryA}/recipes/${recipeA}`,
+      `/breweries/${breweryA}/recipes/${importedA}/source/file`,
       `/breweries/${breweryA}/batches`,
       `/breweries/${breweryA}/batches/${batchA}`,
       `/breweries/${breweryA}/batches/${batchA}/timeline`,
@@ -69,7 +79,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
         equipment_profiles: unknown[];
         equipment_profile_values: unknown[];
         recipes: { id: string }[];
-        recipe_sources: { recipe_id: string }[];
+        recipe_sources: { recipe_id: string; kind: string; filename: string | null; original_text: string | null }[];
         recipe_versions: { recipe_id: string }[];
         batches: { id: string }[];
         batch_recipe_snapshots: { batch_id: string }[];
@@ -79,7 +89,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
         measurements: { event_id: string }[];
         comments: { body: string }[];
         attachments: { id: string }[];
-        batch_outcomes: unknown[];
+        batch_outcomes: { batch_id: string; tasting_notes: string | null }[];
       };
     };
     expect(backup.format).toBe("slump-brewery-backup");
@@ -92,6 +102,10 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect(backup.tables.equipment_profile_values.length).toBeGreaterThan(0);
     expect(backup.tables.recipes.some((recipe) => recipe.id === recipeA)).toBe(true);
     expect(backup.tables.recipe_sources.some((source) => source.recipe_id === recipeA)).toBe(true);
+    // An imported file is part of the backup, unchanged.
+    expect(backup.tables.recipe_sources).toContainEqual(
+      expect.objectContaining({ recipe_id: importedA, kind: "bsmx", filename: "IRA.bsmx", original_text: bsmxFixtures["IRA.bsmx"] }),
+    );
     expect(backup.tables.recipe_versions.some((version) => version.recipe_id === recipeA)).toBe(true);
     expect(backup.tables.batches.some((batch) => batch.id === batchA)).toBe(true);
     expect(backup.tables.batch_recipe_snapshots.some((snapshot) => snapshot.batch_id === batchA)).toBe(true);
@@ -101,7 +115,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect(backup.tables.measurements.some((measurement) => measurement.event_id === eventA)).toBe(true);
     expect(backup.tables.comments.some((comment) => comment.body === "Backup test comment")).toBe(true);
     expect(backup.tables.attachments.some((attachment) => attachment.id === attachmentA)).toBe(true);
-    expect(backup.tables.batch_outcomes).toEqual([]);
+    expect(backup.tables.batch_outcomes).toMatchObject([{ batch_id: batchA, tasting_notes: "Backup test result" }]);
     expect(backup.tables).not.toHaveProperty("sessions");
     expect(backup.tables).not.toHaveProperty("accounts");
     expect(backup.files.binaryIncluded).toBe(false);
@@ -125,14 +139,20 @@ describe("brewery isolation (Alice vs Bob)", () => {
 
   it("does not leak A's resources through Bob's own brewery id", async () => {
     expect((await bob.get(`/breweries/${breweryB}/recipes/${recipeA}`)).status).toBe(404);
+    expect((await download(bob, `/breweries/${breweryB}/recipes/${importedA}/source/file`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/timeline`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
   });
 
   it("refuses every write into Brewery A", async () => {
+    const bobsResult = {
+      splitId: null, og: null, ogSource: null, fg: null, fgSource: null, packagedVolumeL: null, packagedOn: null,
+      packaging: null, carbonationVols: null, tastingNotes: "Bob var her", rating: 1, nextTime: null,
+    };
     const writes = [
       bob.post(`/breweries/${breweryA}/recipes`, { recipe: sunsetIpaRecipe }),
+      bob.post(`/breweries/${breweryA}/recipes/import/bsmx`, { filename: "IRA.bsmx", text: bsmxFixtures["IRA.bsmx"] }),
       bob.post(`/breweries/${breweryA}/batches`, { recipeId: recipeA }),
       bob.post(`/breweries/${breweryB}/batches`, { recipeId: recipeA }),
       bob.post(`/breweries/${breweryA}/batches/${batchA}/measurements`, { kind: "temperature", value: 99 }),
@@ -143,8 +163,14 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.delete(`/breweries/${breweryB}/batches/${batchA}/events/${eventA}`),
       bob.post(`/breweries/${breweryA}/invites`, { email: bob.email, role: "admin" }),
       bob.post(`/breweries/${breweryA}/equipment-profile/versions`, { values: {} }),
+      bob.put(`/breweries/${breweryA}/batches/${batchA}/outcomes`, bobsResult),
+      bob.put(`/breweries/${breweryB}/batches/${batchA}/outcomes`, bobsResult),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
+    expect((await alice.get(`/breweries/${breweryA}/recipes`)).body).toHaveLength(2);
+
+    const batch = await alice.get(`/breweries/${breweryA}/batches/${batchA}`);
+    expect(batch.body.outcomes).toMatchObject([{ splitId: null, rating: 4, tastingNotes: "Backup test result" }]);
 
     const timeline = await alice.get(`/breweries/${breweryA}/batches/${batchA}/timeline`);
     expect(timeline.body.map((e: { id: string }) => e.id)).toContain(eventA);

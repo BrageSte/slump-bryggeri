@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { calculateRecipeMetrics } from "../../src/domain/brewing-calculations/index.ts";
-import { BsmxImportError, parseBsmx, type BsmxRecipeImport } from "../../src/domain/import/bsmx.ts";
+import {
+  BSMX_MAX_BYTES,
+  BSMX_MEASURED_FIELDS,
+  bsmxMeasuredFieldLabels,
+  bsmxSourceData,
+  BsmxImportError,
+  decodeBsmxFile,
+  parseBsmx,
+  type BsmxRecipeImport,
+} from "../../src/domain/import/bsmx.ts";
 import { parseXml, XmlParseError } from "../../src/domain/import/xml.ts";
 import { recipeDocumentSchema } from "../../src/domain/model/recipe.ts";
 import { bsmxFixtures } from "../fixtures/beersmith/index.ts";
@@ -205,6 +214,45 @@ describe("BSMX import adapter", () => {
     expect(() => parseBsmx("<Recipes><Name>Tom</Name></Recipes>")).toThrow(BsmxImportError);
     expect(() => parseBsmx("<Recipes><Recipe>")).toThrow(/ikke avsluttet/);
     expect(() => parseBsmx("ikke xml")).toThrow(BsmxImportError);
+    expect(() => parseBsmx(`<Recipe>${" ".repeat(BSMX_MAX_BYTES)}</Recipe>`)).toThrow(/for stor/);
+  });
+
+  it("keeps what the recipe's source stores besides the recipe", () => {
+    const imported = load("KES_Belgian_Double.bsmx");
+    expect(bsmxSourceData(imported, 0, 1)).toEqual({
+      format: "bsmx",
+      recipeIndex: 0,
+      recipeCount: 1,
+      equipment: imported.equipment,
+      waterPlan: imported.waterPlan,
+      sourceDate: "2020-12-02",
+      ignoredMeasuredFields: ["F_R_OG_MEASURED"],
+      warnings: imported.warnings,
+    });
+    for (const field of BSMX_MEASURED_FIELDS) expect(bsmxMeasuredFieldLabels[field]).toBeTruthy();
+  });
+});
+
+describe("reading the picked file", () => {
+  it.each(files)("reads %s as text that encodes back to the same bytes", (file) => {
+    const raw = bsmxFixtures[file]!;
+    // BeerSmith writes ASCII, so the raw import is the file's bytes one for one.
+    expect(raw).toMatch(/^[\x00-\x7f]*$/);
+    const bytes = new TextEncoder().encode(raw);
+    expect(bytes).toHaveLength(raw.length);
+    expect(decodeBsmxFile(bytes)).toEqual({ text: raw, converted: false });
+  });
+
+  it("keeps a byte-order mark so the stored copy stays identical", () => {
+    const bytes = new Uint8Array([0xef, 0xbb, 0xbf, ...new TextEncoder().encode("<Recipe/>")]);
+    const { text } = decodeBsmxFile(bytes);
+    expect(text).toBe("\uFEFF<Recipe/>");
+    expect(new TextEncoder().encode(text)).toEqual(bytes);
+  });
+
+  it("reads a file that is not UTF-8 as Windows-1252 and says so", () => {
+    const bytes = new Uint8Array([...new TextEncoder().encode("<F_R_NAME>K"), 0xf6, ...new TextEncoder().encode("lsch</F_R_NAME>")]);
+    expect(decodeBsmxFile(bytes)).toEqual({ text: "<F_R_NAME>Kölsch</F_R_NAME>", converted: true });
   });
 });
 

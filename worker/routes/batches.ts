@@ -6,7 +6,9 @@ import {
   createMeasurementSchema,
   correctLogEntrySchema,
   createSplitSchema,
+  saveOutcomeSchema,
   startStageSchema,
+  timestampSchema,
   updateBatchSchema,
   updateCommentSchema,
 } from "../../src/domain/model/api.ts";
@@ -16,6 +18,7 @@ import { badRequest } from "../lib/errors.ts";
 import { clientIp, enforceRateLimit } from "../lib/middleware.ts";
 import { parse, parseJsonBody } from "../lib/validate.ts";
 import { addBatchAttachment } from "../services/attachments.ts";
+import { saveOutcome } from "../services/batch-outcomes.ts";
 import { createBatch, createSplit, deleteBatch, getBatch, listBatches, startStage, updateBatch } from "../services/batches.ts";
 import { addComment, correctLogEntry, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
 
@@ -46,6 +49,11 @@ export const batchRoutes = new Hono<AppEnv>()
     const input = await parseJsonBody(c, startStageSchema);
     const id = await startStage(c.env.DB, c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.var.user, input);
     return c.json({ id }, 201);
+  })
+  .put("/:batchId/outcomes", async (c) => {
+    const input = await parseJsonBody(c, saveOutcomeSchema);
+    const id = await saveOutcome(c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.var.user, input);
+    return c.json({ id });
   })
   .post("/:batchId/splits", async (c) => {
     const input = await parseJsonBody(c, createSplitSchema);
@@ -106,7 +114,7 @@ export const batchRoutes = new Hono<AppEnv>()
       file,
       caption: typeof caption === "string" && caption.trim() ? caption.trim().slice(0, 500) : null,
       stage: typeof stage === "string" && stage ? parse(brewStageSchema, stage) : undefined,
-      occurredAt: typeof occurredAt === "string" && occurredAt ? Number(occurredAt) : undefined,
+      occurredAt: typeof occurredAt === "string" && occurredAt ? parse(timestampSchema, Number(occurredAt)) : undefined,
     });
     return c.json({ id: result.eventId, attachmentId: result.attachmentId }, 201);
   });

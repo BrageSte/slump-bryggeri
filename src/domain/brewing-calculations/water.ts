@@ -7,6 +7,12 @@ export function calculateBoilOff(input: { preBoilVolumeL: number; boilOffLPerH: 
   return { postBoilVolumeL: Math.max(0, input.preBoilVolumeL - evaporatedL), evaporatedL };
 }
 
+/** Measured boil-off rate (L/h) from hot volumes before and after the boil. */
+export function calculateBoilOffRate(input: { preBoilVolumeL: number; postBoilVolumeL: number; boilTimeMin: number }): number {
+  if (input.boilTimeMin <= 0) throw new RangeError("boilTimeMin must be positive");
+  return (input.preBoilVolumeL - input.postBoilVolumeL) / (input.boilTimeMin / 60);
+}
+
 export interface WaterVolumeInput {
   /** Target volume into the fermenter(s). */
   batchVolumeL: number;

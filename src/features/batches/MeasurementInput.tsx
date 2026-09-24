@@ -13,6 +13,7 @@ import { commonPhStripIntervals, fermentationHasStarted, measurementKindSpecs, t
 import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
 import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
+import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
 
 export interface MeasurementSubmit {
   kind: MeasurementKind;
@@ -155,7 +156,8 @@ export function MeasurementInput({
       instrument: isPhStrips ? "pH-strips" : initial?.instrument ?? null,
       stage,
       splitId,
-      measuredAt: customTime ? new Date(customTime).getTime() : undefined,
+      // "Nå" while correcting an entry means the current time, not the entry's original one.
+      measuredAt: occurredAtOf(customTime) ?? (initial ? Date.now() : undefined),
       comment: comment.trim() || undefined,
     });
   }
@@ -253,18 +255,20 @@ export function MeasurementInput({
           ) : measurementUnitOptions[kind].length === 1 ? (
             <span className="shrink-0 text-section font-semibold text-muted">{unit}</span>
           ) : (
-            <>
+            // The width lives on a wrapper: Select's own `w-full` would win over a width class
+            // (cx does not merge Tailwind classes) and squeeze the number field to nothing.
+            <div className="w-28 shrink-0">
               <label htmlFor={unitId} className="sr-only">Måleenhet</label>
               <Select
                 id={unitId}
                 aria-label="Måleenhet"
-                className="w-24 shrink-0 px-2 text-small font-semibold"
+                className="font-semibold"
                 value={unit}
                 onChange={(event) => setUnit(event.target.value)}
               >
                 {measurementUnitOptions[kind].map((option) => <option key={option} value={option}>{option}</option>)}
               </Select>
-            </>
+            </div>
           )}
         </div>
         <div className="mt-2 flex min-h-7 flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted">
@@ -328,16 +332,7 @@ export function MeasurementInput({
       )}
 
       <div className="flex flex-wrap items-center gap-2 text-small">
-        {customTime === null ? (
-          <button type="button" onClick={() => setCustomTime(toDateTimeLocal(Date.now()))} className="min-h-11 text-muted underline underline-offset-4">
-            Tidspunkt: nå · endre
-          </button>
-        ) : (
-          <label className="flex items-center gap-2">
-            <span className="font-semibold">Tidspunkt</span>
-            <TextInput type="datetime-local" value={customTime} onChange={(e) => setCustomTime(e.target.value)} className="w-auto" />
-          </label>
-        )}
+        <OccurredAtInput value={customTime} onChange={setCustomTime} />
         {!showMore && (
           <button type="button" onClick={() => setShowMore(true)} className="min-h-11 text-muted underline underline-offset-4">
             + notat

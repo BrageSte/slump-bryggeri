@@ -465,3 +465,141 @@ describe("Sunset IPA reference batch replayed through the API", () => {
     expect((await brewer.post(`${base}/batches/${a}/events`, { type: "cold_crash_started", data: { targetC: 2 } })).status).toBe(201);
   });
 });
+
+describe("logging after the fact", () => {
+  it("starts a stage back in time and keeps back-dated entries in order", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const yesterday = Date.now() - 86_400_000;
+
+    expect((await brewer.post(`${base}/batches/${batchId}/stage`, { stage: "fermentation", occurredAt: yesterday })).status).toBe(201);
+    const batch = await brewer.get<BatchDetail>(`${base}/batches/${batchId}`);
+    expect(batch.body).toMatchObject({ status: "fermenting", currentStage: "fermentation", stageStartedAt: yesterday });
+
+    const comment = await brewer.post(`${base}/batches/${batchId}/comments`, { body: "Gjær strødd på i går", occurredAt: yesterday + 60_000 });
+    expect(comment.status).toBe(201);
+    const timeline = await brewer.get<TimelineItem[]>(`${base}/batches/${batchId}/timeline`);
+    expect(timeline.body.map((e) => [e.type, e.occurredAt])).toEqual([
+      ["fermentation_started", yesterday],
+      ["comment", yesterday + 60_000],
+    ]);
+  });
+
+  it("rejects times in the future but allows a phone clock that is a little ahead", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const tomorrow = Date.now() + 86_400_000;
+
+    const attempts: [string, Record<string, unknown>][] = [
+      ["stage", { stage: "mash", occurredAt: tomorrow }],
+      ["comments", { body: "For tidlig", occurredAt: tomorrow }],
+      ["events", { type: "cold_crash_started", occurredAt: tomorrow }],
+      ["measurements", { kind: "temperature", value: 20, measuredAt: tomorrow }],
+    ];
+    for (const [path, body] of attempts) {
+      expect((await brewer.post(`${base}/batches/${batchId}/${path}`, body)).status, path).toBe(400);
+    }
+    expect((await brewer.post(`${base}/batches/${batchId}/comments`, { body: "Klokka går litt fort", occurredAt: Date.now() + 60_000 })).status).toBe(201);
+  });
+});
+
+describe("batch results", () => {
+  it("records a result per variant, protects against stale edits and shows it in the history", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const tropical = (await brewer.post(`${base}/batches/${batchId}/splits`, { name: "Sunset Tropical", volumeL: 38 })).body.id;
+    const pine = (await brewer.post(`${base}/batches/${batchId}/splits`, { name: "Sunset Pine", volumeL: 22 })).body.id;
+    const empty = {
+      og: null, ogSource: null, fg: null, fgSource: null, packagedVolumeL: null, packagedOn: null,
+      packaging: null, carbonationVols: null, tastingNotes: null, rating: null, nextTime: null,
+    };
+    const url = `${base}/batches/${batchId}/outcomes`;
+
+    const saved = await brewer.put(url, {
+      ...empty, splitId: tropical, og: 1.061, ogSource: "brix", fg: 1.012, fgSource: "sg",
+      packagedVolumeL: 34, packagedOn: "2026-10-05", packaging: "cans", carbonationVols: 2.4,
+      tastingNotes: "Tropisk, rent", rating: 4, nextTime: "Mindre Special B",
+    });
+    expect(saved.status).toBe(200);
+    // Pine is kegged later, with only the FG measured so far.
+    expect((await brewer.put(url, { ...empty, splitId: pine, fg: 1.014, fgSource: "sg", packaging: "keg" })).status).toBe(200);
+
+    const batch = await brewer.get<BatchDetail>(`${base}/batches/${batchId}`);
+    expect(batch.body.outcomes.map((o) => [o.splitId, o.fg, o.og])).toEqual([
+      [tropical, 1.012, 1.061],
+      [pine, 1.014, null],
+    ]);
+    const tropicalResult = batch.body.outcomes[0]!;
+    expect(tropicalResult).toMatchObject({ packaging: "cans", rating: 4, updatedBy: { name: "Brage" } });
+
+    // Editing needs the version the form was opened with.
+    const edit = { ...empty, splitId: tropical, og: 1.061, ogSource: "brix", fg: 1.011, fgSource: "sg", rating: 5 };
+    expect((await brewer.put(url, edit)).status).toBe(409);
+    expect((await brewer.put(url, { ...edit, baseUpdatedAt: tropicalResult.updatedAt - 1 })).status).toBe(409);
+    expect((await brewer.put(url, { ...edit, baseUpdatedAt: tropicalResult.updatedAt })).status).toBe(200);
+
+    expect((await brewer.patch(`${base}/batches/${batchId}`, { status: "completed" })).status).toBe(204);
+    const history = await brewer.get<{ id: string; result?: { abvPct: [number, number] | null; rating: number | null } }[]>(
+      `${base}/batches?status=completed`,
+    );
+    const result = history.body.find((b) => b.id === batchId)?.result;
+    expect(result?.rating).toBe(5);
+    expect(result?.abvPct?.[0]).toBeCloseTo((1.061 - 1.011) * 131.25, 6);
+  });
+
+  it("validates results and rejects variants from other batches", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const a = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const b = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const splitOfB = (await brewer.post(`${base}/batches/${b}/splits`, { name: "B" })).body.id;
+    const empty = {
+      splitId: null, og: null, ogSource: null, fg: null, fgSource: null, packagedVolumeL: null, packagedOn: null,
+      packaging: null, carbonationVols: null, tastingNotes: null, rating: null, nextTime: null,
+    };
+    const url = `${base}/batches/${a}/outcomes`;
+
+    expect((await brewer.put(url, { ...empty, og: 1.05, ogSource: "sg", fg: 1.06, fgSource: "sg" })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, fg: 1.012 })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, rating: 6 })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, splitId: splitOfB })).status).toBe(400);
+    // "Ikke målt" everywhere is a valid result: the brewer can still write a tasting note.
+    expect((await brewer.put(url, { ...empty, tastingNotes: "Ikke målt, men god" })).status).toBe(200);
+  });
+});
+
+describe("shared timers", () => {
+  it("keeps the due time on the server and cancels only timers in the same batch", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const a = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const b = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+
+    // A dueAt sent by the client is ignored; the server derives it from the event time.
+    const started = await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { label: "Humle", durationMin: 15, dueAt: 1 } });
+    expect(started.status).toBe(201);
+    const timeline = await brewer.get<TimelineItem[]>(`${base}/batches/${a}/timeline`);
+    const timer = timeline.body.find((e) => e.id === started.body.id)!;
+    expect(timer.data).toEqual({ label: "Humle", durationMin: 15, dueAt: timer.occurredAt + 15 * 60_000 });
+
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { label: "Null", durationMin: 0 } })).status).toBe(400);
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { durationMin: 5 } })).status).toBe(400);
+
+    const other = await brewer.post(`${base}/batches/${b}/events`, { type: "timer_started", data: { label: "B", durationMin: 5 } });
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_cancelled", data: { timerId: other.body.id } })).status).toBe(400);
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_cancelled", data: { timerId: started.body.id } })).status).toBe(201);
+  });
+});
