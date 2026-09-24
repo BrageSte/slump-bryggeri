@@ -110,12 +110,15 @@ legg til **D1: Edit** (og **Workers KV Storage: Edit** for M1.2). Legg inn som G
 
 ### M1.4 JSON-backup av hele bryggeriet
 
-- [ ] Admin-eksport under Mer → Eksport: versjonert JSON med bryggeri/personer, utstyr og profilversjoner,
+- [x] Admin-eksport under Mer → Eksport: versjonert JSON med bryggeri/personer, utstyr og profilversjoner,
       oppskrifter/versjoner/kilder, batcher/snapshots/splits, logg/målinger, resultater og relasjoner/
       tidsstempler. Filvedlegg listes med metadata og kan lastes ned separat; merk tydelig at JSON
       alene ikke inneholder bildebytes. Gjenoppretting er en senere oppgave.
-- [ ] API-et bruker `c.var.membership.breweryId`, krever admin og avviser andre bryggerier med 404.
+- [x] API-et bruker `c.var.membership.breweryId`, krever admin og avviser andre bryggerier med 404.
       Test at relevante tabeller/referanser er med og at andre bryggeriers data ikke lekker.
+
+Gjort 2026-09-24. Eksportformat `slump-brewery-backup` v1 har en tom `batch_outcomes`-liste fram til M4
+oppretter resultattabellen. Auth-sesjoner og credentials eksporteres ikke.
 
 **Akseptanse:** bryggeriet kan tidlig ta ut en kontrollerbar kopi av egne strukturerte data.
 
