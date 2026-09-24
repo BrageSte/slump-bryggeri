@@ -229,7 +229,7 @@ begrenset, godkjent fixture-utvalg til `tests/fixtures/beersmith/`; utelat macOS
 Dokumenter hvilke faktiske filer/varianter testene dekker. BeerSmith er **importkilde**, ikke Slumps
 historiske bryggelogg.
 
-- [ ] Dokumenter BSMX-strukturen fra alle sju filer og lag `src/domain/import/bsmx.ts` som ren,
+- [x] Dokumenter BSMX-strukturen fra alle sju filer ([import-bsmx.md](import-bsmx.md)) og lag `src/domain/import/bsmx.ts` som ren,
       defensiv adapter. Utvid `recipeDocumentSchema` bakoverkompatibelt for navn/metadata,
       fermentables, hops, yeast, misc, planlagt OG/FG/IBU/farge/ABV, mash steps, meske-/skyllevann,
       infusjonsmengder, strike-temperatur, koketid, gjæringsplan og karbonering/pakking der data

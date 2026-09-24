@@ -48,3 +48,4 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 - [Arkitektur og beslutninger](docs/architecture.md)
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)
+- [BeerSmith-import (BSMX)](docs/import-bsmx.md)
