@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button, Card, EmptyState, InlineError, PageHeader } from "../../design-system/index.ts";
 import { api } from "../../lib/api.ts";
+import { saveFile } from "../../lib/save-file.ts";
 import { useBrewery } from "./BreweryContext.tsx";
 
 export function ExportPage() {
@@ -13,14 +14,7 @@ export function ExportPage() {
     setError(null);
     try {
       const { blob, filename } = await api.download(`/breweries/${breweryId}/export`);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      document.body.append(link);
-      link.click();
-      link.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      saveFile(blob, filename);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Kunne ikke laste ned sikkerhetskopien.");
     } finally {

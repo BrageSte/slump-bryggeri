@@ -92,6 +92,10 @@ export interface RecipeSourcesTable {
   original_text: string | null;
   url: string | null;
   attachment_id: string | null;
+  /** Name of the imported file (BeerSmith). */
+  filename: string | null;
+  /** JSON: what the importer read besides the recipe (BsmxSourceData for BeerSmith). */
+  data: string | null;
   created_by: string;
   created_at: number;
 }

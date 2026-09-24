@@ -9,6 +9,7 @@ import {
   type BrewStage,
   type MeasurementKind,
 } from "./brewing.ts";
+import { BSMX_MAX_BYTES, type BsmxSourceData } from "../import/bsmx.ts";
 import { equipmentKinds, type ProfileValues } from "./equipment-profile.ts";
 import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
 import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
@@ -189,7 +190,16 @@ export interface RecipeDetail {
   updatedAt: number;
   current: RecipeVersionSummary & { data: RecipeDocument; parentVersionId: string | null };
   versions: RecipeVersionSummary[];
-  source: { kind: string; url: string | null; originalText: string | null } | null;
+  source: {
+    kind: string;
+    url: string | null;
+    /** The source as text (library data). Imported files are downloaded separately instead. */
+    originalText: string | null;
+    /** Set when the recipe was imported from a file that can be downloaded again. */
+    filename: string | null;
+    /** What the BeerSmith import read besides the recipe (equipment, water plan, warnings). */
+    bsmx: BsmxSourceData | null;
+  } | null;
 }
 
 export const recipeSourceKinds = ["manual", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
@@ -203,6 +213,21 @@ export const createRecipeSchema = z.object({
       originalText: z.string().max(200_000).optional(),
     })
     .optional(),
+});
+
+/**
+ * A BeerSmith file as picked on the device. The server parses `text` itself and stores it
+ * unchanged; `recipeIndex` chooses the recipe when the file holds several.
+ */
+export const importBsmxSchema = z.object({
+  filename: z.string().trim().min(1).max(200),
+  text: z
+    .string()
+    .min(1)
+    .refine((text) => new TextEncoder().encode(text).length <= BSMX_MAX_BYTES, {
+      error: `Filen er for stor (maks ${BSMX_MAX_BYTES / 1000} kB). Eksporter én oppskrift om gangen fra BeerSmith.`,
+    }),
+  recipeIndex: z.number().int().min(0).max(1000).default(0),
 });
 
 export const saveRecipeVersionSchema = z.object({

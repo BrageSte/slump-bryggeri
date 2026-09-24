@@ -26,6 +26,16 @@ export function ImportRecipePage() {
           </Link>
         </li>
         <li>
+          <Link to="/oppskrifter/importer/beersmith" className={`${row} hover:bg-surface-2`}>
+            <Icon name="file" className="text-primary-strong" />
+            <span className="flex-1">
+              <span className="block font-semibold">BeerSmith-fil (.bsmx)</span>
+              <span className="block text-small text-muted">Oppskrift fra BeerSmith 2 eller 3, filen tas vare på</span>
+            </span>
+            <Icon name="chevronRight" size={20} className="text-muted" />
+          </Link>
+        </li>
+        <li>
           <Link to="/oppskrifter/ny" className={`${row} hover:bg-surface-2`}>
             <Icon name="edit" className="text-primary-strong" />
             <span className="flex-1 font-semibold">Opprett manuelt</span>

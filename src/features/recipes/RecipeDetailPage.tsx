@@ -1,11 +1,24 @@
 import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { Button, buttonClasses, ConfirmDialog, ErrorState, Icon, LoadingState, PageHeader, Section, StatusChip, useToast } from "../../design-system/index.ts";
+import {
+  Button,
+  buttonClasses,
+  ConfirmDialog,
+  ErrorState,
+  Icon,
+  InlineError,
+  LoadingState,
+  PageHeader,
+  Section,
+  StatusChip,
+  useToast,
+} from "../../design-system/index.ts";
 import { formatDate } from "../../lib/format.ts";
 import { useMe } from "../auth/session.ts";
 import { NewBatchSheet } from "../batches/NewBatchSheet.tsx";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
-import { useDeleteRecipe, useRecipe } from "./api.ts";
+import { downloadRecipeSourceFile, useDeleteRecipe, useRecipe } from "./api.ts";
+import { BsmxEquipmentCard, BsmxImportNotes } from "./BsmxSource.tsx";
 import { RecipeIngredients, RecipeMetrics } from "./RecipeView.tsx";
 
 const sourceLabels: Record<string, string> = {
@@ -18,18 +31,21 @@ const sourceLabels: Record<string, string> = {
   url: "Nettside",
   image: "Bilde",
   pdf: "PDF",
+  bsmx: "BeerSmith-fil",
 };
 
 export function RecipeDetailPage() {
   const { recipeId } = useParams();
   const recipe = useRecipe(recipeId);
   const me = useMe();
-  const { isAdmin } = useBrewery();
+  const { breweryId, isAdmin } = useBrewery();
   const deleteRecipe = useDeleteRecipe();
   const navigate = useNavigate();
   const toast = useToast();
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   if (recipe.isPending) return <LoadingState />;
   if (recipe.error) {
@@ -41,8 +57,20 @@ export function RecipeDetailPage() {
     );
   }
 
-  const { current } = recipe.data;
+  const { current, source } = recipe.data;
   const doc = current.data;
+
+  async function downloadFile(filename: string) {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      await downloadRecipeSourceFile(breweryId, recipe.data!.id, filename);
+    } catch (cause) {
+      setDownloadError(cause instanceof Error ? cause.message : "Kunne ikke laste ned filen.");
+    } finally {
+      setDownloading(false);
+    }
+  }
   const canDelete = isAdmin || recipe.data.versions.at(-1)?.createdBy.id === me.data?.user.id;
 
   return (
@@ -78,6 +106,33 @@ export function RecipeDetailPage() {
 
       <RecipeIngredients recipe={doc} />
 
+      {source?.bsmx && (
+        <Section
+          title="Fra BeerSmith"
+          action={
+            source.filename ? (
+              <Button size="sm" variant="ghost" icon="file" loading={downloading} onClick={() => void downloadFile(source.filename!)}>
+                Last ned fil
+              </Button>
+            ) : undefined
+          }
+        >
+          {downloadError && <InlineError>{downloadError}</InlineError>}
+          <BsmxEquipmentCard source={source.bsmx} />
+          {(source.bsmx.warnings.length > 0 || source.bsmx.ignoredMeasuredFields.length > 0) && (
+            <details className="group">
+              <summary className="flex min-h-11 cursor-pointer items-center gap-1 text-small font-semibold">
+                <Icon name="chevronRight" size={18} className="transition group-open:rotate-90" />
+                Merknader fra importen
+              </summary>
+              <div className="mt-2">
+                <BsmxImportNotes source={source.bsmx} />
+              </div>
+            </details>
+          )}
+        </Section>
+      )}
+
       <Section title="Versjoner">
         <ol className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
           {recipe.data.versions.map((v) => (
@@ -94,13 +149,14 @@ export function RecipeDetailPage() {
             </li>
           ))}
         </ol>
-        {recipe.data.source && (
+        {source && (
           <p className="text-small text-muted">
-            Kilde: {sourceLabels[recipe.data.source.kind] ?? recipe.data.source.kind}
-            {recipe.data.source.url && (
+            Kilde: {sourceLabels[source.kind] ?? source.kind}
+            {source.filename && ` · ${source.filename}`}
+            {source.url && (
               <>
                 {" · "}
-                <a href={recipe.data.source.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">
+                <a href={source.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">
                   original
                 </a>
               </>

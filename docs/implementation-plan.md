@@ -143,21 +143,26 @@ steg som er ferdige, timere som har gått ut — hver alarm har en fast nøkkel)
 tilsatt» der logger planlagt mengde med ett trykk, mens «Tilsatt» i listen lar deg endre mengden først.
 Alarmer som allerede var forfalt da siden ble åpnet, vises uten lyd.
 
-### Steg 6 — BeerSmith-import (tidl. M5-rest, forenklet)
+### Steg 6 — BeerSmith-import (tidl. M5-rest, forenklet) ✅
 
-- [ ] Importer → «BeerSmith-fil (.bsmx)»: velg fil → gjennomgang av oppskrift, utstyr, advarsler og
+- [x] Importer → «BeerSmith-fil (.bsmx)»: velg fil → gjennomgang av oppskrift, utstyr, advarsler og
       ignorerte målte felt → lagre som ny oppskrift. Filen lagres uendret i `recipe_sources.original_text`
       med filnavn og kan lastes ned igjen (test byte-lik rundtur for alle sju filene).
-- [ ] BeerSmith-utstyret lagres som oppskriftens kilde-snapshot og vises på oppskriften, adskilt fra aktiv
+- [x] BeerSmith-utstyret lagres som oppskriftens kilde-snapshot og vises på oppskriften, adskilt fra aktiv
       profil. Oppgitte og avledede verdier holdes adskilt ([import-bsmx.md](import-bsmx.md)).
-- [ ] Hard importregel (B10): ingen batch, målinger, hendelser, resultater eller kalibreringsdata fra
+- [x] Hard importregel (B10): ingen batch, målinger, hendelser, resultater eller kalibreringsdata fra
       BeerSmith. Test eksplisitt med `KES_Belgian_Double.bsmx` og `Love_in_a_canoe.bsmx`.
-- [ ] Tester: alle sju filer, ødelagt/fiendtlig XML, for stor fil, autorisasjon/isolasjon.
+- [x] Tester: alle sju filer, ødelagt/fiendtlig XML, for stor fil, autorisasjon/isolasjon.
 
 **Akseptanse:** De sju gamle oppskriftene kan importeres som planer, med originalfilen tatt vare på og
 uten at det oppstår bryggelogg.
 
-Steg 5 og 6 kan byttes om neste brygg er en av BeerSmith-oppskriftene.
+Gjort 2026-09-24. Oppskrifter → Importer → «BeerSmith-fil (.bsmx)». Filen leses og vises til gjennomgang
+i nettleseren; serveren parser den på nytt (`POST /recipes/import/bsmx`) og lagrer oppskrift, originalfil,
+filnavn og kilde-data (utstyr, vannplan, advarsler, ignorerte målte felt) i `recipe_sources`
+(migrering `0008`, tabellen er nå uforanderlig). Originalfilen lastes ned byte-lik fra oppskriften
+(`GET /recipes/:id/source/file`). Maks filstørrelse er 250 kB (én oppskrift er 20–30 kB), så parsingen
+holder seg godt innenfor CPU-grensen på gratisplanen.
 
 ---
 

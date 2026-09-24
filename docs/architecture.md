@@ -183,8 +183,13 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
   originalen lagres i `recipe_sources` (§9).
 - Oppdatering: `npm run library:build -- <sti til punkapi-klon>` → `db/seeds/recipe-library.sql`
   (validerer alle oppskrifter), deretter `npm run db:seed:library:local|remote`.
-- Neste kilde er BeerSmith-filer (`.bsmx`, steg 6 i implementeringsplanen). BeerXML og AI-tolkning
-  er strøket inntil videre.
+- BeerSmith-filer (`.bsmx`): `POST /breweries/:id/recipes/import/bsmx` tar filnavn og tekst, parser på
+  serveren med samme rene adapter som gjennomgangsskjermen (`src/domain/import/bsmx.ts`) og lager bare
+  oppskrift + kilde + versjon 1. Kilden (`recipe_sources`) har originalfilen uendret i `original_text`,
+  `filename` og `data` (BeerSmith-utstyr adskilt i oppgitt/avledet, vannplan, advarsler, ignorerte målte
+  felt). Bryggeriets utstyrsprofil endres aldri. `GET …/recipes/:id/source/file` gir filen tilbake
+  byte-lik. Kilder er uforanderlige (trigger). Maks 250 kB per fil. Se [import-bsmx.md](import-bsmx.md).
+- BeerXML og AI-tolkning er strøket inntil videre.
 
 ## Navigasjon (avvik fra §5)
 

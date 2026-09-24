@@ -44,6 +44,14 @@ export async function request<T = any>(
   return { status: response.status, body: parsed as T, headers: response.headers };
 }
 
+/** GET that keeps the body as bytes, for file downloads. */
+export async function download(user: TestUser, path: string): Promise<{ status: number; bytes: Uint8Array; headers: Headers }> {
+  const ctx = createExecutionContext();
+  const response = await app.request(`${ORIGIN}/api${path}`, { headers: user.headers }, env, ctx);
+  await waitOnExecutionContext(ctx);
+  return { status: response.status, bytes: new Uint8Array(await response.arrayBuffer()), headers: response.headers };
+}
+
 export interface TestUser {
   id: string;
   email: string;

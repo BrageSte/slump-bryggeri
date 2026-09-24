@@ -141,7 +141,19 @@ export function RecipeIngredients({ recipe }: { recipe: RecipeDocument }) {
         <Section title="Mesk">
           <Rows>
             {recipe.mashSteps.map((s) => (
-              <Row key={s.id} primary={s.name} secondary={s.notes} trailing={`${formatNumber(s.temperatureC, 1)} °C · ${s.durationMin} min`} />
+              <Row
+                key={s.id}
+                primary={s.name}
+                secondary={[
+                  s.infusionL !== undefined
+                    ? `${formatNumber(s.infusionL, 1)} L vann${s.infusionTemperatureC !== undefined ? ` ved ${formatNumber(s.infusionTemperatureC, 1)} °C` : ""}`
+                    : null,
+                  s.notes,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                trailing={`${formatNumber(s.temperatureC, 1)} °C · ${s.durationMin} min`}
+              />
             ))}
             {recipe.spargeTemperatureC !== undefined && <Row primary="Skyllevann" trailing={`${formatNumber(recipe.spargeTemperatureC, 1)} °C`} />}
           </Rows>

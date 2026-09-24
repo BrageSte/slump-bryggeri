@@ -33,7 +33,11 @@ import {
  * they are only listed in `ignoredMeasuredFields` so the review screen can say so.
  */
 
-export const BSMX_MAX_CHARS = 2_000_000;
+/**
+ * Largest file accepted, in bytes. One BeerSmith recipe is 20–30 kB; this leaves room for a small
+ * folder export while keeping the server-side parse well inside a free Worker's CPU budget.
+ */
+export const BSMX_MAX_BYTES = 250_000;
 
 const LITERS_PER_FLUID_OUNCE = LITERS_PER_US_GALLON / 128;
 const flOzToL = (flOz: number) => flOz * LITERS_PER_FLUID_OUNCE;
@@ -88,6 +92,36 @@ export interface BsmxRecipeImport {
   warnings: string[];
 }
 
+/**
+ * What a recipe imported from BeerSmith keeps from the file besides the recipe itself, stored with
+ * the recipe's source. It describes the file, never the brewery: the active equipment profile is
+ * not touched.
+ */
+export interface BsmxSourceData {
+  format: "bsmx";
+  /** Position of the recipe in the file (a folder export holds several), 0-based. */
+  recipeIndex: number;
+  recipeCount: number;
+  equipment: BsmxEquipmentSnapshot | null;
+  waterPlan: BsmxWaterPlan;
+  sourceDate?: string;
+  ignoredMeasuredFields: string[];
+  warnings: string[];
+}
+
+export function bsmxSourceData(imported: BsmxRecipeImport, recipeIndex: number, recipeCount: number): BsmxSourceData {
+  return {
+    format: "bsmx",
+    recipeIndex,
+    recipeCount,
+    equipment: imported.equipment,
+    waterPlan: imported.waterPlan,
+    ...(imported.sourceDate && { sourceDate: imported.sourceDate }),
+    ignoredMeasuredFields: imported.ignoredMeasuredFields,
+    warnings: imported.warnings,
+  };
+}
+
 export class BsmxImportError extends Error {
   constructor(message: string) {
     super(message);
@@ -113,6 +147,22 @@ export const BSMX_MEASURED_FIELDS = [
   "F_R_RUNOFF_PH",
   "F_R_RUNNING_GRAVITY",
 ] as const;
+
+/** Review labels for the measured fields that are left out. */
+export const bsmxMeasuredFieldLabels: Record<(typeof BSMX_MEASURED_FIELDS)[number], string> = {
+  F_R_OG_MEASURED: "Målt OG",
+  F_R_FG_MEASURED: "Målt FG",
+  F_R_VOLUME_MEASURED: "Målt volum",
+  F_R_FINAL_VOL_MEASURED: "Målt sluttvolum",
+  F_R_BOIL_VOL_MEASURED: "Målt volum før kok",
+  F_R_OG_BOIL_MEASURED: "Målt SG før kok",
+  F_R_OG_MASH_MEASURED: "Målt SG i mesken",
+  F_R_OG_PRIMARY: "SG i primærgjæring",
+  F_R_OG_SECONDARY: "SG i sekundærgjæring",
+  F_R_MASH_PH: "Mesk-pH",
+  F_R_RUNOFF_PH: "pH i avrenningen",
+  F_R_RUNNING_GRAVITY: "SG i avrenningen",
+};
 
 const fermentableTypeCodes: Record<string, FermentableType> = { "0": "grain", "1": "extract", "2": "sugar", "3": "adjunct", "4": "extract" };
 const hopFormCodes: Record<string, HopAddition["form"]> = { "0": "pellet", "1": "whole", "2": "whole" };
@@ -439,11 +489,24 @@ function convertRecipe(recipeElement: XmlElement): BsmxRecipeImport {
   };
 }
 
+/**
+ * Turns the file's bytes into the text that is parsed and stored. BeerSmith writes ASCII, so the
+ * text is normally the file byte for byte (a byte-order mark is kept). A file that is not valid
+ * UTF-8 is read as Windows-1252 instead; the stored copy is then UTF-8 and `converted` is true.
+ */
+export function decodeBsmxFile(bytes: Uint8Array): { text: string; converted: boolean } {
+  try {
+    return { text: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes), converted: false };
+  } catch {
+    return { text: new TextDecoder("windows-1252").decode(bytes), converted: true };
+  }
+}
+
 /** Parses a `.bsmx` file. A file can hold several recipes (BeerSmith exports folders the same way). */
 export function parseBsmx(text: string): BsmxRecipeImport[] {
   let root: XmlElement;
   try {
-    root = parseXml(text, { maxChars: BSMX_MAX_CHARS });
+    root = parseXml(text, { maxChars: BSMX_MAX_BYTES });
   } catch (error) {
     throw new BsmxImportError(error instanceof XmlParseError ? error.message : "Kunne ikke lese filen.");
   }

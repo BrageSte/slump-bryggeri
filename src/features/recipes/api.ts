@@ -9,6 +9,7 @@ import type {
 import type { LibraryCategory } from "../../domain/model/library.ts";
 import type { RecipeDocument } from "../../domain/model/recipe.ts";
 import { api } from "../../lib/api.ts";
+import { saveFile } from "../../lib/save-file.ts";
 import { breweryKey } from "../breweries/api.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 
@@ -36,6 +37,23 @@ export function useCreateRecipe() {
       api.post<CreatedResponse>(`/breweries/${breweryId}/recipes`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: recipesKey(breweryId) }),
   });
+}
+
+/** Imports one recipe from a BeerSmith file; the server parses and keeps the file (docs/import-bsmx.md). */
+export function useImportBsmx() {
+  const { breweryId } = useBrewery();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { filename: string; text: string; recipeIndex: number }) =>
+      api.post<CreatedResponse>(`/breweries/${breweryId}/recipes/import/bsmx`, input),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: recipesKey(breweryId) }),
+  });
+}
+
+/** Saves the file a recipe was imported from, exactly as it was picked. */
+export async function downloadRecipeSourceFile(breweryId: string, recipeId: string, filename: string): Promise<void> {
+  const { blob } = await api.download(`/breweries/${breweryId}/recipes/${recipeId}/source/file`);
+  saveFile(blob, filename);
 }
 
 export function useSaveRecipeVersion(recipeId: string) {
