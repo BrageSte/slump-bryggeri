@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
-import { plannedStepsForStage, type PlannedBrewStep } from "../../domain/brew-day/planned-steps.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
@@ -190,10 +189,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         </>
       )}
 
-      {batch.status !== "completed" && (
-        <PlannedStepsCard recipe={batch.recipeSnapshot} stage={batch.currentStage ?? "mash"} />
-      )}
-
       {state.nextAction && batch.currentStage !== null && (
         <Card highlight>
           <SectionLabel>Neste</SectionLabel>
@@ -278,53 +273,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       >
         Batchen flyttes til historikken. Du kan fortsatt legge til smaksnotater, og den kan gjenåpnes.
       </ConfirmDialog>
-    </div>
-  );
-}
-
-function PlannedStepsCard({ recipe, stage }: { recipe: BatchDetail["recipeSnapshot"]; stage: BrewStage }) {
-  const steps = plannedStepsForStage(recipe, stage);
-  if (steps.length === 0) {
-    return (
-      <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
-        <EmptyState icon="book" title="Ingen planlagte steg">
-          Oppskriften har ingen steg for dette bryggesteget.
-        </EmptyState>
-      </Section>
-    );
-  }
-
-  return (
-    <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
-      <Card className="space-y-3">
-        {steps.map((step) => <PlannedStepRow key={step.id} step={step} />)}
-      </Card>
-    </Section>
-  );
-}
-
-function PlannedStepRow({ step }: { step: PlannedBrewStep }) {
-  const details = [
-    step.targetC !== undefined ? `Mål ${formatNumber(step.targetC, 1)} °C` : null,
-    step.durationMin !== undefined ? `${formatNumber(step.durationMin, 0)} min` : null,
-    step.durationDays !== undefined ? `${formatNumber(step.durationDays, 0)} dager` : null,
-    step.offsetMin !== undefined ? `${formatNumber(step.offsetMin, 0)} min før kokeslutt` : null,
-    step.fermentationDay !== undefined ? `Gjæringsdag ${formatNumber(step.fermentationDay, 0)}` : null,
-    step.amount ? `${formatNumber(step.amount.value, 1)} ${step.amount.unit}` : null,
-    step.variant ?? null,
-  ].filter(Boolean);
-  const actionLabel: Record<PlannedBrewStep["action"], string> = {
-    measure_temperature: "Neste handling: Logg temperatur",
-    start_boil: "Neste handling: Start kok",
-    add_ingredient: "Neste handling: Registrer tilsatt",
-    follow_fermentation: "Neste handling: Følg gjæringsplanen",
-  };
-
-  return (
-    <div className="border-b border-border pb-3 last:border-0 last:pb-0">
-      <h3 className="font-semibold">{step.title}</h3>
-      {details.length > 0 && <p className="text-small text-muted">{details.join(" · ")}</p>}
-      <p className="mt-1 text-caption font-semibold text-primary-strong">{actionLabel[step.action]}</p>
     </div>
   );
 }

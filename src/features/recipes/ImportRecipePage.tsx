@@ -1,17 +1,9 @@
 import { Link, useNavigate } from "react-router";
 import { sunsetIpaRecipe } from "../../domain/fixtures/sunset-ipa.ts";
-import { Icon, InlineError, PageHeader, StatusChip, useToast, type IconName } from "../../design-system/index.ts";
+import { Icon, InlineError, PageHeader, useToast } from "../../design-system/index.ts";
 import { useCreateRecipe } from "./api.ts";
 
-const upcoming: { label: string; icon: IconName; phase: string }[] = [
-  { label: "Ta bilde av oppskrift", icon: "camera", phase: "Fase 5" },
-  { label: "Last opp bilde", icon: "image", phase: "Fase 5" },
-  { label: "PDF / BeerXML / BeerJSON", icon: "file", phase: "Fase 2" },
-  { label: "Nettadresse", icon: "link", phase: "Fase 5" },
-  { label: "Lim inn tekst", icon: "clipboard", phase: "Fase 5" },
-];
-
-/** Import entry point (wireframe §36). Methods not built yet are listed so the roadmap is visible. */
+/** Import entry point (wireframe §36). */
 export function ImportRecipePage() {
   const create = useCreateRecipe();
   const navigate = useNavigate();
@@ -65,13 +57,6 @@ export function ImportRecipePage() {
             <Icon name="chevronRight" size={20} className="text-muted" />
           </button>
         </li>
-        {upcoming.map((item) => (
-          <li key={item.label} className={`${row} text-muted`} aria-disabled="true">
-            <Icon name={item.icon} />
-            <span className="flex-1 font-semibold">{item.label}</span>
-            <StatusChip>{item.phase}</StatusChip>
-          </li>
-        ))}
       </ul>
       {create.error && (
         <div className="mt-3">

@@ -23,7 +23,6 @@ export function MorePage() {
           <ListLink to="/mer/medlemmer" title="Medlemmer" icon={icon("users")} />
           <ListLink to="/mer/omregner" title="Omregner" subtitle="Volum, temperatur, vekt og SG" icon={icon("sliders")} />
           {isAdmin && <ListLink to="/mer/eksport" title="Eksport" subtitle="Last ned sikkerhetskopi" icon={icon("file")} />}
-          <ListLink to="/assistent" title="Bryggeassistent" subtitle="Kommer i fase 6" icon={icon("sparkles")} />
         </ListCard>
       </Section>
 

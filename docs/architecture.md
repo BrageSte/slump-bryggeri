@@ -51,7 +51,8 @@ En felles bryggerikode (`BREWERY_ACCESS_CODE`, secret) skrives inn én gang per 
 «Hvem er du?» blant bryggeriets personer. Personer er vanlige `users`-rader med plassholder-e-post, og
 `requireUser` godtar enten en Better Auth-sesjon eller personen valgt på enheten (signerte cookies,
 HMAC med `BETTER_AUTH_SECRET`). All autorisasjon videre (medlemskap, roller, isolasjon) er uendret.
-Avvik fra §20 etter ønske fra Brage; ekte innlogging er M9 i implementeringsplanen.
+Avvik fra §20 etter ønske fra Brage. Innlogging for andre (Google/e-post) er strøket fra planen;
+e-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
 
 ## Autorisasjon (§50)
 
@@ -93,7 +94,7 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
   Oppskriften er et versjonert JSON-dokument (`recipe_versions.data`) validert av
   `recipeDocumentSchema`. Skalering, tilpasning og batch-snapshot blir da rene funksjoner på ett
   dokument, og versjoner kan ikke komme ut av sync med radtabeller. Trenger vi spørringer som
-  «hvilke oppskrifter bruker Citra» (fase 4), legges en avledet indekstabell til.
+  «hvilke oppskrifter bruker Citra», legges en avledet indekstabell til.
 - **`brewery_invites`** er lagt til (MVP krever invitasjoner).
 - **`batch_splits`** er lagt til for delt gjæring (Sunset Tropical / Sunset Pine). Målinger og hendelser
   kan knyttes til en split.
@@ -150,14 +151,13 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
   originalen lagres i `recipe_sources` (§9).
 - Oppdatering: `npm run library:build -- <sti til punkapi-klon>` → `db/seeds/recipe-library.sql`
   (validerer alle oppskrifter), deretter `npm run db:seed:library:local|remote`.
-- Neste kilde bør være import av BeerXML/BeerJSON-filer (BeerSmith, Brewfather, Brewer's Friend
-  eksporterer alle BeerXML) og, i fase 5, import fra nettadresse med AI-tolkning.
+- Neste kilde er BeerSmith-filer (`.bsmx`, steg 6 i implementeringsplanen). BeerXML og AI-tolkning
+  er strøket inntil videre.
 
 ## Navigasjon (avvik fra §5)
 
-Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Inventar · Mer.
-Brygg viser nå bare batcher. Assistenten ligger under Mer til fase 6, og blir da en flytende knapp slik
-§57 beskriver.
+Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Mer.
+Brygg viser bare batcher. Inventar og assistent er strøket (2026-09-24), så de har ingen plassholdere.
 
 ## Sanntid
 
@@ -221,4 +221,4 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 - Hovedbundelen er ~176 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
-- Assistent (fase 6), inventar (fase 4), smart import (fase 5) og kalibreringsforslag (fase 7) er ikke bygget.
+- Assistent, inventar, smart import og kalibreringsforslag er strøket fra planen (2026-09-24).

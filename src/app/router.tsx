@@ -1,7 +1,6 @@
 import { createBrowserRouter, Link } from "react-router";
 import { AppShell } from "../components/AppShell.tsx";
 import { buttonClasses, EmptyState } from "../design-system/index.ts";
-import { AssistantPage } from "../features/assistant/AssistantPage.tsx";
 import { LoginPage } from "../features/auth/LoginPage.tsx";
 import { BatchPage } from "../features/batches/BatchPage.tsx";
 import { BrewPage } from "../features/batches/BrewPage.tsx";
@@ -9,7 +8,6 @@ import { BreweryModePage } from "../features/breweries/BreweryModePage.tsx";
 import { OnboardingPage } from "../features/breweries/OnboardingPage.tsx";
 import { ExportPage } from "../features/breweries/ExportPage.tsx";
 import { UnitConverterPage } from "../features/batches/UnitConverter.tsx";
-import { InventoryPage } from "../features/inventory/InventoryPage.tsx";
 import { ImportRecipePage } from "../features/recipes/ImportRecipePage.tsx";
 import { LibraryRecipePage } from "../features/recipes/LibraryRecipePage.tsx";
 import { RecipeDetailPage } from "../features/recipes/RecipeDetailPage.tsx";
@@ -59,8 +57,6 @@ export const router = createBrowserRouter([
           { path: "oppskrifter/:recipeId", element: <RecipeDetailPage /> },
           { path: "oppskrifter/:recipeId/rediger", lazy: recipeEditor },
           { path: "oppskrifter/:recipeId/tilpass", lazy: adaptRecipe },
-          { path: "inventar", element: <InventoryPage /> },
-          { path: "assistent", element: <AssistantPage /> },
           { path: "mer", element: <MorePage /> },
           { path: "mer/medlemmer", lazy: members },
           { path: "mer/eksport", element: <ExportPage /> },

@@ -1,7 +1,7 @@
 # Beregningsmotor
 
 `src/domain/brewing-calculations/` — rene, deterministiske funksjoner uten React, database eller AI
-(§43). Assistenten (fase 6) skal kalle disse som verktøy og forklare resultatet; den skal aldri regne selv.
+(§43). UI og API kaller disse; ingen språkmodell regner ut brygge-tall.
 
 Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skjer i import-adapterne.
 

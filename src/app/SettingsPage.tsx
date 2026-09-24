@@ -31,12 +31,6 @@ export function SettingsPage() {
         </form>
       </Card>
       <Card className="space-y-3">
-        <h2 className="font-semibold">Måleenheter</h2>
-        <p className="text-small text-muted">
-          Målinger lagres metrisk. Du kan velge en annen enhet ved inntasting; verdien regnes om med én gang.
-        </p>
-      </Card>
-      <Card className="space-y-3">
         <h2 className="font-semibold">Tema</h2>
         <SegmentedControl
           label="Tema"

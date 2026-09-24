@@ -68,8 +68,8 @@ export function HomePage() {
             {(
               [
                 { to: "/oppskrifter", label: "Oppskrifter", icon: "book" },
-                { to: "/inventar", label: "Inventar", icon: "box" },
                 { to: "/mer/kalibrering", label: "Utstyr", icon: "wrench" },
+                { to: "/mer/omregner", label: "Omregner", icon: "sliders" },
                 { to: "/brygg", label: "Historikk", icon: "history" },
               ] satisfies { to: string; label: string; icon: IconName }[]
             ).map((item) => (
@@ -120,8 +120,9 @@ function ActiveBatchCard({ summary }: { summary: BatchSummary }) {
     [batch.data, timeline.data],
   );
 
+  // Only readings from the current stage: yesterday's whirlpool temperature says nothing about fermentation.
   const latest = (["temperature", "pressure", "sg"] as const).flatMap((kind) => {
-    const item = timeline.data?.findLast((t) => t.measurement?.kind === kind);
+    const item = timeline.data?.findLast((t) => t.measurement?.kind === kind && t.stage === summary.currentStage);
     return item?.measurement ? [{ kind, value: item.measurement.value, unit: item.measurement.unit, at: item.occurredAt }] : [];
   });
 
