@@ -120,9 +120,13 @@ function ActiveBatchCard({ summary }: { summary: BatchSummary }) {
     [batch.data, timeline.data],
   );
 
+  // The batch detail is polled; the list summary is not, so it can lag behind a stage change.
+  const currentStage = batch.data?.currentStage ?? summary.currentStage;
+  const status = batch.data?.status ?? summary.status;
+
   // Only readings from the current stage: yesterday's whirlpool temperature says nothing about fermentation.
   const latest = (["temperature", "pressure", "sg"] as const).flatMap((kind) => {
-    const item = timeline.data?.findLast((t) => t.measurement?.kind === kind && t.stage === summary.currentStage);
+    const item = timeline.data?.findLast((t) => t.measurement?.kind === kind && t.stage === currentStage);
     return item?.measurement ? [{ kind, value: item.measurement.value, unit: item.measurement.unit, at: item.occurredAt }] : [];
   });
 
@@ -131,8 +135,8 @@ function ActiveBatchCard({ summary }: { summary: BatchSummary }) {
       <div>
         <p className="text-section font-bold">{summary.name}</p>
         <div className="mt-1 flex flex-wrap items-center gap-2 text-small text-muted">
-          <StatusChip tone={statusTones[summary.status]}>{statusLabel(summary.status)}</StatusChip>
-          {summary.currentStage && <span>{brewStageLabels[summary.currentStage]}</span>}
+          <StatusChip tone={statusTones[status]}>{statusLabel(status)}</StatusChip>
+          {currentStage && <span>{brewStageLabels[currentStage]}</span>}
           {state?.fermentationDay !== null && state?.fermentationDay !== undefined && <span>· dag {state.fermentationDay}</span>}
         </div>
       </div>
