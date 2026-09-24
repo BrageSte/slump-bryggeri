@@ -108,6 +108,10 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
 
+Loggkorrigering bruker en ny `brew_events`-rad med `data.corrections` som revisjonsspor. Originalhendelsen
+og eventuell målerad markeres slettet, men beholdes i databasen. `baseUpdatedAt` gir konfliktkontroll; batch
+og bryggeri filtreres fra verifisert medlemskap. Kommentarer beholder egen forfatterstyrt redigering.
+
 Målinger lagrer både kanonisk `value/unit` og `entered_value/entered_unit`, slik at API-et kan regne med
 liter/°C/g/bar/SG samtidig som loggen viser det bryggeren skrev. Måleinput starter alltid metrisk; en annen
 valgt enhet gjelder bare for den aktuelle inntastingen og lagres ikke som en preferanse. Brix fra gjæring får bare

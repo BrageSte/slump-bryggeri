@@ -22,6 +22,7 @@ export interface MeasurementSubmit {
   unit?: string;
   label?: string;
   instrument?: string | null;
+  stage: BrewStage | null;
   splitId: string | null;
   measuredAt?: number;
   comment?: string;
@@ -47,6 +48,8 @@ export function MeasurementInput({
   defaultSplitId = null,
   submitting,
   error,
+  submitLabel,
+  initial,
   onSubmit,
 }: {
   kind: MeasurementKind;
@@ -60,23 +63,44 @@ export function MeasurementInput({
   defaultSplitId?: string | null;
   submitting?: boolean;
   error?: string | null;
+  submitLabel?: string;
+  initial?: {
+    value: number;
+    enteredValue: number;
+    enteredUnit: string;
+    valueMin: number | null;
+    valueMax: number | null;
+    occurredAt: number;
+    splitId: string | null;
+    label: string | null;
+    comment: string | null;
+    instrument: string | null;
+  };
   onSubmit: (value: MeasurementSubmit) => void;
 }) {
   const spec = measurementKindSpecs[kind];
   const valueId = useId();
   const unitId = useId();
-  const [raw, setRaw] = useState("");
-  const [unit, setUnit] = useState(() => defaultMeasurementUnit(kind));
-  const [customUnit, setCustomUnit] = useState("");
-  const [phMode, setPhMode] = useState<"point" | "strips">("strips");
-  const [stripMinRaw, setStripMinRaw] = useState("");
-  const [stripMaxRaw, setStripMaxRaw] = useState("");
-  const [selectedStripRange, setSelectedStripRange] = useState<string | null>(null);
-  const [label, setLabel] = useState(presetLabel ?? "");
-  const [comment, setComment] = useState("");
-  const [showMore, setShowMore] = useState(false);
-  const [customTime, setCustomTime] = useState<string | null>(null);
-  const [splitId, setSplitId] = useState<string | null>(defaultSplitId);
+  const [raw, setRaw] = useState(() => initial ? String(initial.enteredValue) : "");
+  const [unit, setUnit] = useState(() => {
+    if (initial?.enteredUnit && measurementUnitOptions[kind].includes(initial.enteredUnit)) return initial.enteredUnit;
+    return defaultMeasurementUnit(kind);
+  });
+  const [customUnit, setCustomUnit] = useState(initial && kind === "custom" ? initial.enteredUnit : "");
+  const [phMode, setPhMode] = useState<"point" | "strips">(() =>
+    initial ? initial.valueMin !== null && initial.valueMax !== null ? "strips" : "point" : "strips",
+  );
+  const [stripMinRaw, setStripMinRaw] = useState(initial?.valueMin == null ? "" : String(initial.valueMin));
+  const [stripMaxRaw, setStripMaxRaw] = useState(initial?.valueMax == null ? "" : String(initial.valueMax));
+  const [selectedStripRange, setSelectedStripRange] = useState<string | null>(() => {
+    const range = commonPhStripIntervals.find((candidate) => candidate.min === initial?.valueMin && candidate.max === initial?.valueMax);
+    return range ? `${range.min.toFixed(1)}-${range.max.toFixed(1)}` : null;
+  });
+  const [label, setLabel] = useState(initial?.label ?? presetLabel ?? "");
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [showMore, setShowMore] = useState(Boolean(initial?.comment));
+  const [customTime, setCustomTime] = useState<string | null>(initial ? toDateTimeLocal(initial.occurredAt) : null);
+  const [splitId, setSplitId] = useState<string | null>(initial?.splitId ?? defaultSplitId);
   const [validation, setValidation] = useState<string | null>(null);
 
   const parsed = parseDecimal(raw);
@@ -128,7 +152,8 @@ export function MeasurementInput({
       valueMax: isPhStrips ? intervalMax : undefined,
       unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
-      instrument: kind === "ph" && isPhStrips ? "pH-strips" : undefined,
+      instrument: isPhStrips ? "pH-strips" : initial?.instrument ?? null,
+      stage,
       splitId,
       measuredAt: customTime ? new Date(customTime).getTime() : undefined,
       comment: comment.trim() || undefined,
@@ -333,7 +358,7 @@ export function MeasurementInput({
 
       {(validation || error) && <InlineError>{validation ?? error}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={submitting}>
-        Logg {spec.label.toLowerCase()}
+        {submitLabel ?? `Logg ${spec.label.toLowerCase()}`}
       </Button>
     </form>
   );

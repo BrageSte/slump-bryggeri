@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { sunsetIpaBrewLog, sunsetIpaRecipe, sunsetIpaSplits } from "../../src/domain/fixtures/sunset-ipa.ts";
 import type { BatchDetail, TimelineItem } from "../../src/domain/model/api.ts";
+import { deriveBrewDayState } from "../../src/domain/brew-day/state.ts";
 import { addMember, createBrewery, createUser, type TestUser } from "./client.ts";
 
 /**
@@ -187,6 +188,99 @@ describe("collaborative brew day", () => {
     const comment = after.body.find((e) => e.id === created.body.id)?.comment;
     expect(comment?.body).toBe("Mesk-pH 5,34 – bra");
     expect(comment?.editedAt).toBeTypeOf("number");
+  });
+
+  it("replaces a corrected measurement and the new value drives target comparison", async () => {
+    const batch = await kari.post(`${base}/batches`, { recipeId });
+    const correctionBatchId = batch.body.id as string;
+    expect((await kari.post(`${base}/batches/${correctionBatchId}/stage`, { stage: "mash" })).status).toBe(201);
+    const logged = await kari.post(`${base}/batches/${correctionBatchId}/measurements`, { kind: "ph", value: 5.34 });
+    const before = await kari.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+    const original = before.body.find((item) => item.id === logged.body.id)!;
+
+    const corrected = await ola.patch(`${base}/batches/${correctionBatchId}/events/${original.id}/correction`, {
+      entryKind: "measurement",
+      baseUpdatedAt: original.updatedAt,
+      value: 5.48,
+      unit: "pH",
+      label: original.measurement?.label,
+      occurredAt: original.occurredAt + 1000,
+      stage: "mash",
+      splitId: null,
+      sampleTempC: null,
+      comment: "Første avlesning var feil",
+    });
+    expect(corrected.status).toBe(201);
+
+    const after = await ola.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+    expect(after.body.some((item) => item.id === original.id)).toBe(false);
+    const replacement = after.body.find((item) => item.id === corrected.body.id)!;
+    expect(replacement.measurement).toMatchObject({ kind: "ph", value: 5.48, unit: "pH", instrument: null, comment: "Første avlesning var feil" });
+    expect(replacement.data?.corrections).toEqual([
+      expect.objectContaining({
+        previousMeasurement: expect.objectContaining({ value: 5.34, unit: "pH" }),
+        previousCreatedByName: "Kari",
+        previousOccurredAt: original.occurredAt,
+        correctedBy: ola.id,
+      }),
+    ]);
+
+    const detail = await ola.get<BatchDetail>(`${base}/batches/${correctionBatchId}`);
+    const state = deriveBrewDayState({
+      recipe: detail.body.recipeSnapshot,
+      stage: "mash",
+      stageStartedAt: detail.body.stageStartedAt,
+      log: after.body.map((item) => ({
+        type: item.type,
+        stage: item.stage,
+        occurredAt: item.occurredAt,
+        data: item.data,
+        measurement: item.measurement
+          ? { kind: item.measurement.kind, value: item.measurement.value, valueMin: item.measurement.valueMin, valueMax: item.measurement.valueMax }
+          : null,
+      })),
+      now: Date.now(),
+    });
+    expect(state.targets.find((target) => target.key === "mash-ph")).toMatchObject({ actual: { value: 5.48 }, status: "high" });
+
+    const stale = await ola.patch(`${base}/batches/${correctionBatchId}/events/${replacement.id}/correction`, {
+      entryKind: "measurement",
+      baseUpdatedAt: replacement.updatedAt! - 1,
+      value: 5.3,
+      unit: "pH",
+      occurredAt: replacement.occurredAt,
+      stage: "mash",
+      splitId: null,
+    });
+    expect(stale.status).toBe(409);
+  });
+
+  it("corrects generic event data by replacing the old timeline row", async () => {
+    const batch = await kari.post(`${base}/batches`, { recipeId });
+    const correctionBatchId = batch.body.id as string;
+    const logged = await kari.post(`${base}/batches/${correctionBatchId}/events`, {
+      type: "custom",
+      stage: "boil",
+      data: { title: "Vørtervolum", amount: 20, unit: "US gal", note: "før" },
+    });
+    const before = await kari.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+    const original = before.body.find((item) => item.id === logged.body.id)!;
+    const corrected = await ola.patch(`${base}/batches/${correctionBatchId}/events/${original.id}/correction`, {
+      entryKind: "event",
+      baseUpdatedAt: original.updatedAt,
+      occurredAt: original.occurredAt + 1000,
+      stage: "boil",
+      splitId: null,
+      data: { ...original.data, amount: 19, unit: "US gal", note: "målt på nytt" },
+    });
+    expect(corrected.status).toBe(201);
+    const after = await ola.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+    expect(after.body.some((item) => item.id === original.id)).toBe(false);
+    const replacement = after.body.find((item) => item.id === corrected.body.id)!;
+    expect(replacement.data).toMatchObject({ amount: 19, unit: "US gal", note: "målt på nytt" });
+    expect(replacement.data?.corrections).toEqual([
+      expect.objectContaining({ previousData: expect.objectContaining({ amount: 20, note: "før" }) }),
+    ]);
   });
 
   it("lets authors and admins remove log entries, but not other members", async () => {
