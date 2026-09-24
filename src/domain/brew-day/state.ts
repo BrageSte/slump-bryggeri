@@ -1,4 +1,5 @@
 import { brixToSg, expectedGravities, refractometerFinalGravity } from "../brewing-calculations/index.ts";
+import { fermentationHasStarted } from "../model/brewing.ts";
 import {
   brewStageLabels,
   brewStages,
@@ -383,7 +384,7 @@ function stageTargets(
         actualOf(latest(inStage, "temperature")),
       );
       const { fg } = expectedGravities(recipe);
-      const originalBrix = log.findLast((e) => e.measurement?.kind === "brix" && e.stage !== "fermentation")?.measurement?.value;
+      const originalBrix = log.findLast((e) => e.measurement?.kind === "brix" && !fermentationHasStarted(e.stage))?.measurement?.value;
       add("fg", "sg", "FG (mål)", fg === null ? null : { kind: "value", value: round3(fg) }, latestFermentingGravity(inStage, wcf, originalBrix));
       break;
     }

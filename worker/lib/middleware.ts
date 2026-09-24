@@ -62,7 +62,11 @@ export function requireMember(minimumRole: "member" | "admin" = "member") {
       .executeTakeFirst();
     if (!membership) throw notFound("Bryggeriet");
     if (minimumRole === "admin" && membership.role !== "admin") throw forbidden("Dette krever administrator-tilgang.");
-    c.set("membership", { breweryId, breweryName: membership.name, role: membership.role });
+    c.set("membership", {
+      breweryId,
+      breweryName: membership.name,
+      role: membership.role,
+    });
     await next();
   });
 }

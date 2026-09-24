@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { brixToSg } from "../../domain/brewing-calculations/index.ts";
+import { brixToSg, refractometerFinalGravity } from "../../domain/brewing-calculations/index.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
-import { batchStatusLabels, brewStageLabels, eventTypeLabels, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
+import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasStarted, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
 import { formatAmount, formatLogTime, formatSg } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
-import { formatMeasurement } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementInUnit } from "./helpers.ts";
 
 function iconFor(item: TimelineItem): IconName {
   if (item.measurement) {
@@ -20,16 +20,25 @@ function iconFor(item: TimelineItem): IconName {
   return "flag";
 }
 
-function describe(item: TimelineItem, wcf = 1): { title: string; value?: string; unit?: string; detail?: string } {
+function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: string; value?: string; unit?: string; detail?: string } {
   if (item.measurement) {
     const m = item.measurement;
     const kindLabel = m.kind === "custom" ? (m.label ?? "Måling") : measurementKindSpecs[m.kind].label;
+    const fermented = fermentationHasStarted(item.stage);
+    const canonicalDetail = m.enteredUnit !== m.unit ? `(${formatMeasurement(m.kind, m.value)} ${m.unit})` : null;
+    const brixDetail = m.kind !== "brix"
+      ? null
+      : fermented
+        ? originalBrix === undefined
+          ? "SG etter gjæring kan ikke beregnes uten opprinnelig Brix."
+          : `FG-anslag SG ${formatSg(refractometerFinalGravity({ originalBrix, finalBrix: m.value, wcf }))} · Terrill 2011 · WCF ${wcf}; usikkerhet avhenger av WCF og målerens nøyaktighet`
+        : `≈ SG ${formatSg(brixToSg(m.value, wcf))} · WCF ${wcf}`;
     return {
       title: m.kind === "custom" ? kindLabel : m.label ? `${kindLabel} · ${m.label}` : kindLabel,
-      value: formatMeasurement(m.kind, m.value),
+      value: formatMeasurementInUnit(m.kind, m.enteredValue, m.enteredUnit),
       // Don't repeat the unit when it is also the label ("5,34 pH pH").
-      unit: m.kind === "sg" || m.unit === kindLabel ? undefined : m.unit,
-      detail: [m.kind === "brix" ? `≈ SG ${formatSg(brixToSg(m.value, wcf))}` : null, m.comment].filter(Boolean).join(" · ") || undefined,
+      unit: m.enteredUnit === kindLabel ? undefined : m.enteredUnit,
+      detail: [canonicalDetail, brixDetail, m.comment].filter(Boolean).join(" · ") || undefined,
     };
   }
   if (item.comment) return { title: item.comment.body };
@@ -67,12 +76,13 @@ export function BrewLog({
   const visible = limit ? newestFirst.slice(0, limit) : newestFirst;
   const splitName = (id: string | null) => batch.splits.find((s) => s.id === id)?.name;
   const wcf = batch.equipmentSnapshot.values.refractometer_wcf ?? 1;
+  const originalBrix = items.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
   return (
     <>
       <ol className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
         {visible.map((item) => {
-          const d = describe(item, wcf);
+          const d = describe(item, wcf, originalBrix);
           const pending = item.id.startsWith("optimistic-");
           return (
             <li key={item.id}>
@@ -113,6 +123,7 @@ export function BrewLog({
       <EntrySheet
         batch={batch}
         item={selected}
+        originalBrix={originalBrix}
         canEdit={selected?.createdBy.id === currentUserId}
         canDelete={selected?.createdBy.id === currentUserId || isAdmin}
         onClose={() => setSelected(null)}
@@ -124,12 +135,14 @@ export function BrewLog({
 function EntrySheet({
   batch,
   item,
+  originalBrix,
   canEdit,
   canDelete,
   onClose,
 }: {
   batch: BatchDetail;
   item: TimelineItem | null;
+  originalBrix?: number;
   canEdit: boolean;
   canDelete: boolean;
   onClose: () => void;
@@ -141,7 +154,7 @@ function EntrySheet({
   const [draft, setDraft] = useState<string | null>(null);
 
   if (!item) return null;
-  const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1);
+  const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1, originalBrix);
   const close = () => {
     setDraft(null);
     onClose();

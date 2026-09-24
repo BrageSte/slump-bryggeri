@@ -46,6 +46,10 @@ export function nextStage(stage: BrewStage | null): BrewStage | null {
   return brewStages[index + 1] ?? null;
 }
 
+export function fermentationHasStarted(stage: BrewStage | null): boolean {
+  return stage === "fermentation" || stage === "conditioning" || stage === "packaging";
+}
+
 /** Event type recorded when a stage starts, e.g. `boil_started`. */
 export function stageStartedEventType(stage: BrewStage): string {
   return `${stage}_started`;

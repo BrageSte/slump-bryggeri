@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
-import { brewStageLabels, brewStages, type BrewStage } from "../../domain/model/brewing.ts";
+import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import {
   BottomSheet,
   Button,
@@ -102,6 +102,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
 
   const user = me.data?.user ?? { id: "", name: "" };
   const pendingAdditions = state.additions.filter((a) => a.status !== "done");
+  const originalBrix = timeline.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
   function addIngredient(addition: PlannedAddition) {
     logEvent.mutate(
@@ -227,6 +228,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       <LogSheet
         batch={batch}
         stage={batch.currentStage}
+        originalBrix={originalBrix}
         intent={intent}
         onIntent={setIntent}
         onClose={() => setIntent(null)}
@@ -596,4 +598,3 @@ function BatchMenu({
     </>
   );
 }
-

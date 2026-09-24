@@ -1,11 +1,18 @@
 import { useId, useState, type FormEvent } from "react";
-import { brixToSg } from "../../domain/brewing-calculations/index.ts";
+import {
+  brixToSg,
+  defaultMeasurementUnit,
+  measurementFromCanonical,
+  measurementToCanonical,
+  measurementUnitOptions,
+  refractometerFinalGravity,
+} from "../../domain/brewing-calculations/index.ts";
 import type { TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchSplit } from "../../domain/model/api.ts";
-import { measurementKindSpecs, type MeasurementKind } from "../../domain/model/brewing.ts";
-import { Button, cx, Field, InlineError, parseDecimal, TargetStatusChip, TextInput } from "../../design-system/index.ts";
+import { fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
+import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
-import { formatMeasurement, formatTarget, normalizeMeasurementValue } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
 
 export interface MeasurementSubmit {
   kind: MeasurementKind;
@@ -29,6 +36,8 @@ function evaluate(kind: MeasurementKind, target: TargetValue, value: number) {
  */
 export function MeasurementInput({
   kind,
+  stage,
+  originalBrix,
   label: presetLabel,
   target,
   previous,
@@ -40,10 +49,12 @@ export function MeasurementInput({
   onSubmit,
 }: {
   kind: MeasurementKind;
+  stage: BrewStage | null;
   label?: string;
   target?: TargetValue;
   previous?: { value: number; occurredAt: number } | null;
   wcf?: number;
+  originalBrix?: number;
   splits?: BatchSplit[];
   defaultSplitId?: string | null;
   submitting?: boolean;
@@ -52,7 +63,9 @@ export function MeasurementInput({
 }) {
   const spec = measurementKindSpecs[kind];
   const valueId = useId();
+  const unitId = useId();
   const [raw, setRaw] = useState("");
+  const [unit, setUnit] = useState(() => defaultMeasurementUnit(kind));
   const [customUnit, setCustomUnit] = useState("");
   const [label, setLabel] = useState(presetLabel ?? "");
   const [comment, setComment] = useState("");
@@ -62,19 +75,40 @@ export function MeasurementInput({
   const [validation, setValidation] = useState<string | null>(null);
 
   const parsed = parseDecimal(raw);
-  const value = parsed === undefined || Number.isNaN(parsed) ? undefined : normalizeMeasurementValue(kind, parsed);
+  const enteredValue = parsed === undefined || Number.isNaN(parsed)
+    ? undefined
+    : kind === "sg" && unit === "SG"
+      ? normalizeMeasurementValue(kind, parsed)
+      : parsed;
+  const value = enteredValue === undefined
+    ? undefined
+    : kind === "custom"
+      ? enteredValue
+      : measurementToCanonical(kind, enteredValue, unit) ?? undefined;
   const inRange = value !== undefined && value >= spec.min && value <= spec.max;
+  const fermentationStarted = fermentationHasStarted(stage);
+  const brixEstimate = kind !== "brix" || value === undefined || !inRange
+    ? undefined
+    : fermentationStarted
+      ? originalBrix === undefined
+        ? undefined
+        : refractometerFinalGravity({ originalBrix, finalBrix: value, wcf })
+      : brixToSg(value, wcf);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (value === undefined) return setValidation("Skriv inn en verdi.");
-    if (!inRange) return setValidation(`Verdien må være mellom ${spec.min} og ${spec.max}.`);
+    if (enteredValue === undefined) return setValidation("Skriv inn en verdi.");
+    if (!inRange) {
+      const min = kind === "custom" ? spec.min : measurementFromCanonical(kind, spec.min, unit) ?? spec.min;
+      const max = kind === "custom" ? spec.max : measurementFromCanonical(kind, spec.max, unit) ?? spec.max;
+      return setValidation(`Verdien må være mellom ${formatMeasurementInUnit(kind, min, unit)} og ${formatMeasurementInUnit(kind, max, unit)} ${unit}.`);
+    }
     if (kind === "custom" && (!customUnit.trim() || !label.trim())) return setValidation("Egendefinerte målinger trenger navn og enhet.");
     setValidation(null);
     onSubmit({
       kind,
-      value,
-      unit: kind === "custom" ? customUnit.trim() : undefined,
+      value: enteredValue,
+      unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
       splitId,
       measuredAt: customTime ? new Date(customTime).getTime() : undefined,
@@ -97,7 +131,7 @@ export function MeasurementInput({
         <label htmlFor={valueId} className="sr-only">
           {spec.label}
         </label>
-        <div className="flex items-baseline gap-2 rounded-card border-2 border-border bg-surface px-4 py-2 focus-within:border-primary-strong">
+        <div className="flex items-center gap-2 rounded-card border-2 border-border bg-surface px-3 py-2 focus-within:border-primary-strong">
           <input
             id={valueId}
             autoFocus
@@ -107,30 +141,57 @@ export function MeasurementInput({
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             placeholder={kind === "sg" ? "1.050" : "0"}
-            className="tabular min-w-0 flex-1 bg-transparent text-display font-bold tracking-tight outline-none placeholder:text-muted/40"
+            className="tabular min-w-0 flex-1 bg-transparent px-1 text-display font-bold tracking-tight outline-none placeholder:text-muted/40"
           />
-          <span className="text-section font-semibold text-muted">{kind === "custom" ? customUnit : spec.unit}</span>
+          {kind === "custom" ? (
+            <span className="max-w-24 truncate text-section font-semibold text-muted">{customUnit}</span>
+          ) : (
+            <>
+              <label htmlFor={unitId} className="sr-only">Måleenhet</label>
+              <Select
+                id={unitId}
+                aria-label="Måleenhet"
+                className="w-24 shrink-0 px-2 text-small font-semibold"
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+              >
+                {measurementUnitOptions[kind].map((option) => <option key={option} value={option}>{option}</option>)}
+              </Select>
+            </>
+          )}
         </div>
         <div className="mt-2 flex min-h-7 flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted">
           {target && (
             <span className="tabular">
-              Mål <strong className="text-text">{formatTarget(kind, target)}</strong>
+              Mål <strong className="text-text">{formatTargetInUnit(kind, target, unit)}</strong>
             </span>
           )}
           {target && value !== undefined && inRange && <TargetStatusChip status={evaluate(kind, target, value)} />}
-          {kind === "brix" && value !== undefined && inRange && (
+          {kind !== "custom" && unit !== spec.unit && value !== undefined && inRange && (
+            <span className="tabular">{formatMeasurementInUnit(kind, enteredValue ?? value, unit)} {unit} = {formatMeasurement(kind, value)} {spec.unit}</span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && !fermentationStarted && (
+            <span className="tabular">≈ SG <strong className="text-text">{formatSg(brixEstimate ?? 0)}</strong>{wcf !== 1 && ` (WCF ${wcf})`}</span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && fermentationStarted && originalBrix !== undefined && (
             <span className="tabular">
-              ≈ SG <strong className="text-text">{formatSg(brixToSg(value, wcf))}</strong>
-              {wcf !== 1 && ` (WCF ${wcf})`}
+              FG-anslag <strong className="text-text">{formatSg(brixEstimate ?? 0)}</strong> · Terrill 2011 · WCF {wcf};
+              usikkerhet avhenger av WCF og målerens nøyaktighet
             </span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && fermentationStarted && originalBrix === undefined && (
+            <span>SG etter gjæring krever en målt Brix-verdi fra før gjæring.</span>
           )}
           {previous && (
             <button
               type="button"
               className="tabular min-h-7 underline decoration-dotted underline-offset-4"
-              onClick={() => setRaw(formatMeasurement(kind, previous.value))}
+              onClick={() => {
+                const previousValue = kind === "custom" ? previous.value : measurementFromCanonical(kind, previous.value, unit) ?? previous.value;
+                setRaw(formatMeasurementInUnit(kind, previousValue, unit));
+              }}
             >
-              Forrige: {formatMeasurement(kind, previous.value)} ({formatLogTime(previous.occurredAt)})
+              Forrige: {formatMeasurementInUnit(kind, kind === "custom" ? previous.value : measurementFromCanonical(kind, previous.value, unit) ?? previous.value, unit)} {unit} ({formatLogTime(previous.occurredAt)})
             </button>
           )}
         </div>

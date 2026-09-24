@@ -184,6 +184,8 @@ export interface MeasurementsTable {
   label: string | null;
   value: number;
   unit: string;
+  entered_value: number | null;
+  entered_unit: string | null;
   stage: string | null;
   measured_at: number;
   sample_temp_c: number | null;

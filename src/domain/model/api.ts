@@ -302,6 +302,8 @@ export interface TimelineMeasurement {
   label: string | null;
   value: number;
   unit: string;
+  enteredValue: number;
+  enteredUnit: string;
   sampleTempC: number | null;
   instrument: string | null;
   comment: string | null;
