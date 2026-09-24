@@ -23,7 +23,7 @@ function MobileBottomNav() {
   return (
     <nav
       aria-label="Hovedmeny"
-      className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden"
+      className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden print:hidden"
     >
       <ul className="grid grid-cols-4">
         {navItems.map((item) => (
@@ -52,7 +52,7 @@ function DesktopSidebar() {
   const { breweryName } = useBrewery();
   const isActive = useActiveNav();
   return (
-    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface px-3 py-5 md:flex">
+    <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-surface px-3 py-5 md:flex print:hidden">
       <div className="px-3 pb-6">
         <Wordmark className="text-xl text-primary-strong" />
         <div className="mt-1 truncate text-small text-muted">{breweryName}</div>
@@ -84,8 +84,8 @@ export function AppShell() {
   return (
     <div className="flex min-h-dvh">
       <DesktopSidebar />
-      <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:px-8 md:pt-8 md:pb-12">
-        <div className="mx-auto max-w-3xl">
+      <main className="min-w-0 flex-1 px-4 pt-4 pb-28 md:px-8 md:pt-8 md:pb-12 print:p-0">
+        <div className="mx-auto max-w-3xl print:max-w-none">
           <Outlet />
         </div>
       </main>

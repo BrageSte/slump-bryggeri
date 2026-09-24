@@ -112,14 +112,18 @@ kilde, «skrevet inn» når det endres), `PUT …/outcomes` med konfliktkontroll
 (fordampning og brygghuseffektivitet fra egne volum-målinger, `src/domain/brew-day/outcome.ts`). Historikken
 viser faktisk ABV og karakter. Resultater kan legges inn før batchen avsluttes, f.eks. når Tropical er boksa.
 
-### Steg 4 — Rapport (tidl. M8, forenklet)
+### Steg 4 — Rapport (tidl. M8, forenklet) ✅
 
-- [ ] `/batcher/:id/rapport`: pen på skjerm og på A4 (`@media print`, `@page`); «Lagre som PDF» er
+- [x] `/batcher/:id/rapport`: pen på skjerm og på A4 (`@media print`, `@page`); «Lagre som PDF» er
       nettleserens utskrift. Innhold: hode, plan mot faktisk (OG, FG, ABV, volumer), malt/humle/gjær
       faktisk brukt, bryggedagsmålinger, varianter, gjæringsgraf, resultater og smaksnotater, notater og
       usikkerheter — «ikke målt» der data mangler.
 
 **Akseptanse:** Rapporten for Sunset IPA kan erstatte den håndlagde bryggeloggen i PDF.
+
+Gjort 2026-09-24. Rapporten lenkes fra batchmenyen («Rapport (PDF)») og fra ferdige batcher. Den er bygget
+bare fra loggen, snapshotet og resultatene; «Lagre som PDF» bruker nettleserens utskrift (A4, lys palett,
+uten appens menyer). Gjæringsgrafen tegnes i full papirbredde med tabellen åpen.
 
 ### Steg 5 — Bryggedag: timer og alarmer (tidl. M3-rest)
 

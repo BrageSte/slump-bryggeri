@@ -140,6 +140,13 @@ enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
 409 ved samtidige endringer; `updated_by/updated_at` viser hvem som endret sist. ABV, forgjæring, fordampning
 og brygghuseffektivitet regnes ut ved visning (`src/domain/brew-day/outcome.ts`), aldri lagret.
 
+### Bryggerapport
+
+`/batcher/:id/rapport` (`BatchReportPage`) setter sammen oppskriftssnapshot, logg og resultater til ett
+dokument: plan mot faktisk, malt, humle (plan mot registrert), gjær og fordeling, bryggedagsmålinger,
+gjæringsgraf med tabell, resultater, kommentarer og usikkerheter. Ingen server-PDF: `@page`/`@media print` i
+`tokens.css` gir A4 i lys palett, og appens navigasjon har `print:hidden`.
+
 ## Bryggeri-eksport
 
 Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker

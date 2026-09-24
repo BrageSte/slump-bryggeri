@@ -37,6 +37,7 @@ const equipment = async () => ({ Component: (await import("../features/equipment
 const calibration = async () => ({ Component: (await import("../features/calibration/CalibrationPage.tsx")).CalibrationPage });
 const settings = async () => ({ Component: (await import("./SettingsPage.tsx")).SettingsPage });
 const batchResult = async () => ({ Component: (await import("../features/batches/BatchResultPage.tsx")).BatchResultPage });
+const batchReport = async () => ({ Component: (await import("../features/batches/BatchReportPage.tsx")).BatchReportPage });
 
 export const router = createBrowserRouter([
   { path: "/logg-inn", element: <LoginPage /> },
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
           { path: "brygg", element: <BrewPage /> },
           { path: "batcher/:batchId", element: <BatchPage /> },
           { path: "batcher/:batchId/resultat", lazy: batchResult },
+          { path: "batcher/:batchId/rapport", lazy: batchReport },
           { path: "oppskrifter", element: <RecipesPage /> },
           { path: "oppskrifter/bibliotek/:libraryId", element: <LibraryRecipePage /> },
           { path: "oppskrifter/importer", element: <ImportRecipePage /> },

@@ -14,6 +14,8 @@ const DAY = 86_400_000;
 const MARGIN = { left: 46, right: 12, top: 10 };
 const PLOT_HEIGHT = 132;
 const AXIS_BAND = 26;
+/** Internal width of the printed chart; it is scaled to the paper width. */
+const PRINT_WIDTH = 680;
 
 interface ChartPoint {
   at: number;
@@ -31,7 +33,16 @@ interface ChartSeries {
 
 type Metric = "gravity" | "temperature";
 
-export function FermentationChart({ variants, until }: { variants: FermentationVariant[]; until: number }) {
+export function FermentationChart({
+  variants,
+  until,
+  printable = false,
+}: {
+  variants: FermentationVariant[];
+  until: number;
+  /** For the report: every variant, no filter, and the table always open. */
+  printable?: boolean;
+}) {
   // Colour follows the fermenter (its place in the batch), never the filter: max three validated slots.
   const all: ChartSeries[] = useMemo(
     () =>
@@ -80,10 +91,9 @@ export function FermentationChart({ variants, until }: { variants: FermentationV
     event.preventDefault();
   };
 
-  return (
-    <Section title="Gjæringsgraf">
-      <div className="space-y-3 rounded-card border border-border bg-surface p-3 md:p-4">
-        {all.length > 1 && (
+  const body = (
+      <div className="space-y-3 rounded-card border border-border bg-surface p-3 md:p-4 print:border-0 print:p-0">
+        {all.length > 1 && !printable && (
           <div role="group" aria-label="Vis variant" className="flex flex-wrap gap-2">
             {[{ key: "all", name: "Alle" }, ...all].map((option) => (
               <button
@@ -102,7 +112,9 @@ export function FermentationChart({ variants, until }: { variants: FermentationV
           </div>
         )}
 
-        <Readout series={shown} metrics={metrics} at={hoverAt} dayZero={dayZero} />
+        <div className={printable ? "print:hidden" : undefined}>
+          <Readout series={shown} metrics={metrics} at={hoverAt} dayZero={dayZero} />
+        </div>
 
         <div
           ref={ref}
@@ -112,9 +124,32 @@ export function FermentationChart({ variants, until }: { variants: FermentationV
           onKeyDown={onKey}
           className="rounded-md outline-none focus-visible:ring-2 focus-visible:ring-primary-strong/40"
         >
+          {printable && (
+            <div className="hidden break-inside-avoid print:block">
+              {metrics.map((metric, index) => (
+                <figure key={metric} className="m-0">
+                  <figcaption className="text-caption font-semibold text-muted">{metric === "gravity" ? "SG" : "Temperatur (°C)"}</figcaption>
+                  <Panel
+                    metric={metric}
+                    series={shown}
+                    width={PRINT_WIDTH}
+                    x={(at) => MARGIN.left + ((at - xMin) / (xMax - xMin)) * (PRINT_WIDTH - MARGIN.left - MARGIN.right)}
+                    xMin={xMin}
+                    xMax={xMax}
+                    dayZero={dayZero}
+                    showAxis={index === metrics.length - 1}
+                    hoverAt={null}
+                    onPointer={() => {}}
+                    onLeave={() => {}}
+                    fluid
+                  />
+                </figure>
+              ))}
+            </div>
+          )}
           {width > 0 &&
             metrics.map((metric, index) => (
-              <figure key={metric} className="m-0">
+              <figure key={metric} className={cx("m-0", printable && "print:hidden")}>
                 <figcaption className="text-caption font-semibold text-muted">{metric === "gravity" ? "SG" : "Temperatur (°C)"}</figcaption>
                 <Panel
                 metric={metric}
@@ -153,10 +188,10 @@ export function FermentationChart({ variants, until }: { variants: FermentationV
           </ul>
         ) : null}
 
-        <ReadingsTable series={shown} dayZero={dayZero} />
+        <ReadingsTable series={shown} dayZero={dayZero} open={printable} absolute={printable} />
       </div>
-    </Section>
   );
+  return printable ? body : <Section title="Gjæringsgraf">{body}</Section>;
 }
 
 function Panel({
@@ -171,6 +206,7 @@ function Panel({
   hoverAt,
   onPointer,
   onLeave,
+  fluid = false,
 }: {
   metric: Metric;
   series: ChartSeries[];
@@ -183,6 +219,8 @@ function Panel({
   hoverAt: number | null;
   onPointer: (event: PointerEvent<SVGRectElement>) => void;
   onLeave: () => void;
+  /** Scale to the container (print) instead of drawing at `width` pixels. */
+  fluid?: boolean;
 }) {
   const values = series.flatMap((s) => s[metric].map((p) => p.value));
   const { ticks, min, max } = niceScale(values, metric === "gravity" ? [0.002, 0.005, 0.01, 0.02] : [0.5, 1, 2, 5]);
@@ -197,7 +235,14 @@ function Panel({
   }
 
   return (
-    <svg width={width} height={height} role="img" aria-label={metric === "gravity" ? "SG over tid" : "Temperatur over tid"} className="block">
+    <svg
+      width={fluid ? "100%" : width}
+      height={fluid ? undefined : height}
+      viewBox={`0 0 ${width} ${height}`}
+      role="img"
+      aria-label={metric === "gravity" ? "SG over tid" : "Temperatur over tid"}
+      className="block"
+    >
       {ticks.map((tick) => (
         <g key={tick}>
           <line x1={MARGIN.left} x2={width - MARGIN.right} y1={y(tick)} y2={y(tick)} stroke="var(--border)" strokeWidth={1} />
@@ -285,7 +330,7 @@ function Readout({ series, metrics, at, dayZero }: { series: ChartSeries[]; metr
   );
 }
 
-function ReadingsTable({ series, dayZero }: { series: ChartSeries[]; dayZero: number }) {
+function ReadingsTable({ series, dayZero, open, absolute }: { series: ChartSeries[]; dayZero: number; open: boolean; absolute: boolean }) {
   const rows = series
     .flatMap((s) => {
       const times = [...new Set([...s.gravity, ...s.temperature].map((p) => p.at))];
@@ -293,8 +338,8 @@ function ReadingsTable({ series, dayZero }: { series: ChartSeries[]; dayZero: nu
     })
     .sort((a, b) => a.at - b.at);
   return (
-    <details className="text-small">
-      <summary className="min-h-11 cursor-pointer py-2 font-semibold text-primary-strong">Vis som tabell ({rows.length})</summary>
+    <details className="text-small" open={open || undefined}>
+      <summary className="min-h-11 cursor-pointer py-2 font-semibold text-primary-strong print:hidden">Vis som tabell ({rows.length})</summary>
       <table className="w-full text-left">
         <thead className="text-caption text-muted uppercase">
           <tr>
@@ -308,7 +353,7 @@ function ReadingsTable({ series, dayZero }: { series: ChartSeries[]; dayZero: nu
           {rows.map((row) => (
             <tr key={`${row.name}-${row.at}`}>
               <td className="py-1.5 pr-2">
-                {dayLabel(row.at, dayZero)} · {formatLogTime(row.at)}
+                {dayLabel(row.at, dayZero)} · {absolute ? shortDateTime(row.at) : formatLogTime(row.at)}
               </td>
               {series.length > 1 && <td className="py-1.5 pr-2">{row.name}</td>}
               <td className="py-1.5 pr-2 text-right tabular-nums">
@@ -345,6 +390,13 @@ function niceScale(values: number[], steps: number[]): { ticks: number[]; min: n
   };
   const step = steps.find((candidate) => ticksFor(candidate).length <= 6) ?? steps.at(-1)!;
   return { ticks: ticksFor(step), min, max };
+}
+
+/** "23.09 11:05": for printed reports, where "i går" would go stale. */
+function shortDateTime(at: number): string {
+  const d = new Date(at);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(d.getDate())}.${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 /** "dag 2", or "før gjæring" for the OG taken before the yeast was pitched. */

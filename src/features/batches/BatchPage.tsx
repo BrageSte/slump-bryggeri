@@ -450,6 +450,9 @@ function CompletedCard({ batch }: { batch: BatchDetail }) {
           Registrer resultat
         </Link>
       )}
+      <Link to={`/batcher/${batch.id}/rapport`} className={buttonClasses("secondary", "md", true)}>
+        Se rapporten
+      </Link>
     </Card>
   );
 }
@@ -532,6 +535,10 @@ function BatchMenu({
             <Link to={`/oppskrifter/${batch.recipe.id}`} className={buttonClasses("secondary", "md", true)}>
               <Icon name="book" size={20} />
               Åpne oppskriften
+            </Link>
+            <Link to={`/batcher/${batch.id}/rapport`} className={buttonClasses("secondary", "md", true)}>
+              <Icon name="file" size={20} />
+              Rapport (PDF)
             </Link>
             {batch.status === "completed" ? (
               <Button
