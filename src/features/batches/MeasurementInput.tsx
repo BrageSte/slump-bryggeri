@@ -68,7 +68,7 @@ export function MeasurementInput({
   const [raw, setRaw] = useState("");
   const [unit, setUnit] = useState(() => defaultMeasurementUnit(kind));
   const [customUnit, setCustomUnit] = useState("");
-  const [phMode, setPhMode] = useState<"meter" | "strips">("meter");
+  const [phMode, setPhMode] = useState<"point" | "strips">("strips");
   const [stripMinRaw, setStripMinRaw] = useState("");
   const [stripMaxRaw, setStripMaxRaw] = useState("");
   const [selectedStripRange, setSelectedStripRange] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export function MeasurementInput({
       valueMax: isPhStrips ? intervalMax : undefined,
       unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
-      instrument: kind === "ph" ? isPhStrips ? "pH-strips" : "pH-meter" : undefined,
+      instrument: kind === "ph" && isPhStrips ? "pH-strips" : undefined,
       splitId,
       measuredAt: customTime ? new Date(customTime).getTime() : undefined,
       comment: comment.trim() || undefined,
@@ -147,8 +147,8 @@ export function MeasurementInput({
       )}
 
       {kind === "ph" && (
-        <div role="group" aria-label="pH-målemetode" className="grid grid-cols-2 gap-2">
-          {(["meter", "strips"] as const).map((mode) => (
+        <div role="group" aria-label="pH-registrering" className="grid grid-cols-2 gap-2">
+          {(["point", "strips"] as const).map((mode) => (
             <button
               key={mode}
               type="button"
@@ -162,7 +162,7 @@ export function MeasurementInput({
                 phMode === mode ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface",
               )}
             >
-              {mode === "meter" ? "pH-meter" : "pH-strips"}
+              {mode === "point" ? "Enkeltverdi" : "Intervall (strips)"}
             </button>
           ))}
         </div>

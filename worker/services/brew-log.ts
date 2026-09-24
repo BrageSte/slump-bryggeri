@@ -219,7 +219,7 @@ export async function logMeasurement(
       stage,
       measured_at: occurredAt,
       sample_temp_c: input.sampleTempC ?? null,
-      instrument: valueMin !== null ? "pH-strips" : input.instrument ?? (input.kind === "ph" ? "pH-meter" : null),
+      instrument: valueMin !== null ? "pH-strips" : input.instrument ?? null,
       comment: input.comment ?? null,
       created_by: user.id,
       created_at: now,
