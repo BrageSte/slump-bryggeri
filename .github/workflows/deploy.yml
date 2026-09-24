@@ -1,12 +1,16 @@
 name: Deploy
 
 # Deploys main to Cloudflare (https://slump-bryggeri.brage-steen.workers.dev).
-# Needs repository secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID; without them the
-# job only prints a notice (see docs/implementation-plan.md, M1.3).
+# Needs secrets CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID (repository or "production" environment);
+# without them the job only prints a notice (see docs/implementation-plan.md, M1.3).
+# The "production" environment lets you add required reviewers in GitHub → Settings → Environments.
 on:
   push:
     branches: [main]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: deploy-production
@@ -15,14 +19,14 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    environment: production
     steps:
       - name: Check Cloudflare credentials
         id: creds
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+          if [ "$HAS_TOKEN" != "true" ]; then
             echo "::notice::CLOUDFLARE_API_TOKEN/CLOUDFLARE_ACCOUNT_ID mangler – hopper over deploy (docs/implementation-plan.md, M1.3)."
             echo "ok=false" >> "$GITHUB_OUTPUT"
           else
@@ -35,6 +39,7 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # Install, typecheck and test run without Cloudflare credentials in their environment.
       - if: steps.creds.outputs.ok == 'true'
         run: npm ci
       - if: steps.creds.outputs.ok == 'true'
@@ -44,6 +49,12 @@ jobs:
       - name: Apply D1 migrations
         if: steps.creds.outputs.ok == 'true'
         run: npm run db:migrate:remote
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Deploy
         if: steps.creds.outputs.ok == 'true'
         run: npm run deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
