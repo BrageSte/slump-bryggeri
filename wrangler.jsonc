@@ -18,6 +18,7 @@
     }
   ],
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "slump-bryggeri-files" }],
+  "kv_namespaces": [{ "binding": "FILES_KV", "id": "b94ed9e975c54c28a59c1fa561fe29a8" }],
   "ratelimits": [
     { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
     { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
@@ -31,9 +32,7 @@
     "BREWERY_NAME": "Slump Bryggeri"
   },
   "env": {
-    // Deployed with `npm run deploy` (CLOUDFLARE_ENV=production). Same as the top level, but without
-    // the R2 binding until R2 is enabled on the account (Dashboard → R2). Photo uploads answer 503
-    // until then. When R2 is on: create the bucket and copy the r2_buckets block in here.
+    // Bindings are not inherited by named environments, so repeat both file stores here.
     "production": {
       "name": "slump-bryggeri",
       "d1_databases": [
@@ -44,6 +43,8 @@
           "migrations_dir": "db/migrations"
         }
       ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "slump-bryggeri-files" }],
+      "kv_namespaces": [{ "binding": "FILES_KV", "id": "b94ed9e975c54c28a59c1fa561fe29a8" }],
       "ratelimits": [
         { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
         { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }

@@ -1,7 +1,7 @@
 # Slump Bryggeri
 
 Mobil-først PWA for brygging: oppskrifter, bryggerikalibrering, felles bryggelogg og (senere)
-inventar og en bryggeassistent. Cloudflare Workers + D1 + R2, React + Vite + TypeScript.
+inventar og en bryggeassistent. Cloudflare Workers + D1 + R2 (KV fallback), React + Vite + TypeScript.
 
 **Source of truth:** [docs/implementation-package.md](docs/implementation-package.md) · **Neste steg:** [docs/implementation-plan.md](docs/implementation-plan.md)
 
@@ -23,7 +23,7 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 
 | Kommando | |
 |---|---|
-| `npm test` | Enhetstester (beregninger, bryggedag) + integrasjonstester i workerd med D1/R2 |
+| `npm test` | Enhetstester + workerd-integrasjonstester med D1/R2 og en separat kjøring uten R2 for KV-fallback |
 | `npm run typecheck` | TypeScript for app, worker, tester og config |
 | `npm run build` | Produksjonsbygg |
 | `npm run deploy` | Bygg og deploy til Cloudflare (se [docs/architecture.md](docs/architecture.md#deploy-cloudflare)) |
@@ -44,7 +44,7 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 
 ## Dokumentasjon
 
-- **[Implementeringsplan v0.2](docs/implementation-plan.md)** — neste milepæler (M1–M8)
+- **[Implementeringsplan v0.3](docs/implementation-plan.md)** — neste milepæler (M1–M9)
 - [Arkitektur og beslutninger](docs/architecture.md)
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)
