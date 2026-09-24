@@ -102,11 +102,10 @@ Bindingene og KV-id-en er lagt inn i `wrangler.jsonc` for lokal konfigurasjon og
 ### M1.3 Deploy fra GitHub Actions
 
 - [x] `deploy.yml` kjører ved push til `main` og manuelt, og hopper over med en melding når token mangler.
-- [ ] Når token er på plass: verifiser at en merge til `main` kjører tester → migrasjoner → deploy.
+- [x] Etter at produksjonshemmelighetene ble satt: verifiser at en merge til `main` kjører tester → migrasjoner → deploy.
 
-**Brage må:** Cloudflare-dashbord → *My Profile → API Tokens → Create Token* → malen «Edit Cloudflare Workers»,
-legg til **D1: Edit** (og **Workers KV Storage: Edit** for M1.2). Legg inn som GitHub-secrets i repoet:
-`CLOUDFLARE_API_TOKEN` og `CLOUDFLARE_ACCOUNT_ID` (`12e5fd15eb499d3af63d742451c5d185`).
+Gjort 2026-09-24. GitHub Actions kjørte typecheck, tester, D1-migrasjoner og Cloudflare-deploy etter
+merge til `main`. Produksjonshemmelighetene ligger i GitHub Secrets og lagres ikke i repoet.
 
 ### M1.4 JSON-backup av hele bryggeriet
 
