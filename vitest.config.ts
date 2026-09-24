@@ -33,6 +33,7 @@ export default defineConfig(async () => {
           test: {
             name: "integration",
             include: ["tests/integration/**/*.test.ts"],
+            exclude: ["tests/integration/attachments-kv.test.ts"],
             setupFiles: ["./tests/integration/setup.ts"],
           },
         },

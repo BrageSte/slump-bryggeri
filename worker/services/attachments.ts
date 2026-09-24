@@ -1,7 +1,8 @@
 import type { BrewStage } from "../../src/domain/model/brewing.ts";
 import type { SessionUser } from "../lib/context.ts";
 import { atomic, newId, type DB } from "../lib/db.ts";
-import { badRequest, HttpError, notFound } from "../lib/errors.ts";
+import { badRequest, notFound } from "../lib/errors.ts";
+import { getFileStore } from "../lib/file-store.ts";
 import { findBatch } from "./batches.ts";
 
 export const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
@@ -16,14 +17,7 @@ export const ALLOWED_ATTACHMENT_TYPES = new Set([
   "application/pdf",
 ]);
 
-/** R2 is optional until it is enabled on the Cloudflare account (see wrangler.jsonc). */
-function filesBucket(env: Env): R2Bucket {
-  const bucket = (env as Partial<Pick<Env, "FILES">>).FILES;
-  if (!bucket) throw new HttpError(503, "files_disabled", "Bildeopplasting er ikke slått på ennå.");
-  return bucket;
-}
-
-/** Uploads a photo/document to R2 under the brewery/batch prefix and adds it to the brew log. */
+/** Uploads a photo/document under the brewery/batch prefix and adds it to the brew log. */
 export async function addBatchAttachment(
   env: Env,
   db: DB,
@@ -33,7 +27,7 @@ export async function addBatchAttachment(
   input: { file: File; caption: string | null; stage: BrewStage | null | undefined; occurredAt: number | undefined },
 ): Promise<{ eventId: string; attachmentId: string }> {
   const batch = await findBatch(db, breweryId, batchId);
-  const files = filesBucket(env);
+  const files = getFileStore(env);
   if (!ALLOWED_ATTACHMENT_TYPES.has(input.file.type)) throw badRequest("Filtypen støttes ikke. Bruk JPEG, PNG, WebP, HEIC eller PDF.");
   if (input.file.size === 0) throw badRequest("Filen er tom.");
   if (input.file.size > MAX_ATTACHMENT_BYTES) throw badRequest("Filen er større enn 15 MB.");
@@ -44,8 +38,11 @@ export async function addBatchAttachment(
   const filename = input.file.name.slice(0, 200) || "bilde";
 
   await files.put(key, input.file.stream(), {
-    httpMetadata: { contentType: input.file.type },
-    customMetadata: { breweryId, batchId, uploadedBy: user.id },
+    contentType: input.file.type,
+    size: input.file.size,
+    breweryId,
+    batchId,
+    uploadedBy: user.id,
   });
 
   const now = Date.now();
@@ -95,7 +92,7 @@ export async function getAttachmentObject(env: Env, db: DB, breweryId: string, a
     .where("deleted_at", "is", null)
     .executeTakeFirst();
   if (!attachment) throw notFound("Vedlegget");
-  const object = await filesBucket(env).get(attachment.r2_key);
+  const object = await getFileStore(env).get(attachment.r2_key);
   if (!object) throw notFound("Vedlegget");
   return { object, contentType: attachment.content_type, filename: attachment.filename };
 }

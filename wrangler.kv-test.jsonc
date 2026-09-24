@@ -1,0 +1,26 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "slump-bryggeri-kv-test",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slump-bryggeri",
+      "database_id": "a0ec5d51-4e8d-4225-bbfc-df649829ecb2",
+      "migrations_dir": "db/migrations"
+    }
+  ],
+  "kv_namespaces": [{ "binding": "FILES_KV", "id": "b94ed9e975c54c28a59c1fa561fe29a8" }],
+  "ratelimits": [
+    { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
+    { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+  ],
+  "vars": {
+    "APP_URL": "",
+    "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
+    "BREWERY_MODE": "on",
+    "BREWERY_NAME": "Slump Bryggeri"
+  }
+}

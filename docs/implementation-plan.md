@@ -55,7 +55,7 @@ historiske målinger. «Measured Mash pH 5.80» i bildet er et eksempelinput, ik
 
 | Milepæl | Innhold | Størrelse | Avhenger av | Brage må |
 |---|---|---|---|---|
-| **M1** | Stabil drift, bildelagring og JSON-backup av hele bryggeriet | S–M | — | API-token, KV-ID eller R2-aktivering |
+| **M1** | Stabil drift, bildelagring og JSON-backup av hele bryggeriet | S–M | — | API-token for produksjonsdeploy |
 | **M2** | Enheter, pH-strips og trygg korrigering av feilregistreringer | M | — | — |
 | **M3** | Bryggedagsmodus: steg, Wake Lock, timere, alarmer og raske handlinger | M | M2.1 for enhetsvisning; ellers uavhengig | — |
 | **M4** | Avslutt batch og samle faktiske resultater | M | M2.1 for enhetsvisning; ellers uavhengig | — |
@@ -87,15 +87,17 @@ Gjort 2026-09-24. Appen er Slump Bryggeris egen: ingen kontoer, ingen e-post.
 
 ### M1.2 Bildelagring
 
-- [ ] `worker/lib/file-store.ts`: grensesnitt `FileStore { put, get, delete }` med `R2FileStore` og `KvFileStore`.
+- [x] `worker/lib/file-store.ts`: grensesnitt `FileStore { put, get, delete }` med `R2FileStore` og `KvFileStore`.
       Velg R2 hvis `FILES` er bundet, ellers KV (`FILES_KV`), ellers 503 som i dag.
-- [ ] KV: nøkkel = samme som R2-nøkkelen; innholdstype og størrelse i metadata. Behold dagens filgrense på 15 MB.
-- [ ] `wrangler.jsonc`: `kv_namespaces` med `FILES_KV` i toppnivå (dev/test) og `env.production`.
-- [ ] Tester: opplasting og nedlasting med KV-binding (vitest-miniflare-konfig uten R2); isolasjonstest for vedlegg beholdes.
-- [ ] Docs: hvordan bytte til R2 senere (ingen datamigrering nødvendig for nye bilder; gamle kan flyttes med et skript).
+- [x] KV: nøkkel = samme som R2-nøkkelen; innholdstype og størrelse i metadata. Behold dagens filgrense på 15 MB.
+- [x] `wrangler.jsonc`: `kv_namespaces` med `FILES_KV` i toppnivå (dev/test) og `env.production`.
+- [x] Tester: opplasting og nedlasting med KV-binding (vitest-miniflare-konfig uten R2); isolasjonstest for vedlegg beholdes.
+- [x] Docs: hvordan bytte til R2 senere (ingen datamigrering nødvendig for nye bilder; gamle kan flyttes med et skript).
 
-**Brage må (eller agent med wrangler-tilgang):** `npx wrangler kv namespace create slump-files` og lime id inn i `wrangler.jsonc`.
-Alternativt: aktiver R2 i dashbordet (krever kort) og bruk R2 direkte.
+Gjort 2026-09-24. Opprettet R2-bøtta `slump-bryggeri-files` og KV-namespace `slump-files`.
+Produksjon bruker R2; KV er fallback når R2-bindingen mangler.
+
+Bindingene og KV-id-en er lagt inn i `wrangler.jsonc` for lokal konfigurasjon og produksjon.
 
 ### M1.3 Deploy fra GitHub Actions
 

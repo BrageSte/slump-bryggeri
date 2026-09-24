@@ -12,7 +12,8 @@ Telefon / desktop (PWA, React SPA)
 Cloudflare Worker (Hono)  ──  Better Auth (e-post-OTP)
         │                      │
         ├── D1 (SQLite)  ◄─────┘  strukturerte data
-        └── R2                     bilder / PDF
+        ├── R2                     bilder / PDF (primærlager)
+        └── KV                     fallback når R2-bindingen mangler
 ```
 
 Én Worker serverer både SPA-en (static assets, SPA-fallback) og API-et. `run_worker_first: ["/api/*"]`
@@ -23,10 +24,10 @@ sender bare API-kall til Worker-koden; alt annet er statiske filer.
 | Frontend | React 19, Vite 8, TypeScript, React Router 8, TanStack Query, React Hook Form, Zod, Tailwind 4 | Spesifisert (§21–22). Serverdata ligger i TanStack Query, ingen global state. |
 | Backend | Cloudflare Worker + Hono | Liten router med middleware-kjede for `user → membership → permission`. |
 | Database | D1 via Kysely (`kysely-d1`) | Typede spørringer uten ORM-magi. Tabelltyper i `db/schema/database.ts`. |
-| Filer | R2 | Nøkkel `breweries/{breweryId}/batches/{batchId}/{attachmentId}`. |
+| Filer | R2, med KV-fallback | Nøkkel `breweries/{breweryId}/batches/{batchId}/{attachmentId}` i begge lagre. |
 | Auth | Better Auth 1.7 + email OTP, D1 direkte | Better Auth støtter D1-bindingen nativt; ingen egen dialekt nødvendig. |
 | E-post | Cloudflare Email Service (`send_email`) eller Resend | Uten leverandør logges koder til dev-loggen — **kun på localhost**. |
-| Tester | Vitest 4, `@cloudflare/vitest-pool-workers` | Integrasjonstester kjører i workerd med ekte D1/R2. |
+| Tester | Vitest 4, `@cloudflare/vitest-pool-workers` | Integrasjonstester kjører i workerd med D1/R2; en separat konfigurasjon tester KV uten R2. |
 
 ## Mappestruktur
 
@@ -160,10 +161,15 @@ npm run dev                      # http://localhost:5173 — innloggingskoder sk
 Produksjon: **https://slump-bryggeri.brage-steen.workers.dev** (konto brage.steen@gmail.com, D1 `slump-bryggeri` i EEUR).
 
 `npm run deploy` bygger med `CLOUDFLARE_ENV=production` og bruker `env.production` i `wrangler.jsonc`.
-Den er lik toppnivået, men **uten R2** fordi R2 ikke er aktivert på kontoen ennå — bildeopplasting
-svarer 503 til da. For å slå på bilder: aktiver R2 i Cloudflare-dashboardet, kjør
-`npx wrangler r2 bucket create slump-bryggeri-files`, kopier `r2_buckets`-blokken inn i
-`env.production` og deploy på nytt.
+Cloudflare Worker-environments arver ikke bindings, derfor er både `FILES` (R2) og `FILES_KV` oppført
+både på toppnivå og under produksjon. R2-bøtta `slump-bryggeri-files` er primærlageret; KV-namespace
+`slump-files` brukes bare når Worker-en mangler R2-bindingen. Begge bruker samme objektstier som
+vedleggstabellen, så backendbytte krever ingen DB-migrasjon. Før KV-objekter flyttes til R2, må bytes
+kopieres med samme nøkkel og `contentType` fra KV-metadata; ellers peker eksisterende loggposter
+fortsatt på objekter som ikke finnes i R2. Nye opplastinger i produksjon går direkte til R2.
+
+Bindings og namespace-id-er står i `wrangler.jsonc`. Lokal dev og Vitest bruker lokale bindings;
+`vitest.kv.config.ts` peker på `wrangler.kv-test.jsonc`, som bevisst ikke har R2-bindingen.
 
 ```bash
 npm run db:migrate:remote        # nye migrasjoner
