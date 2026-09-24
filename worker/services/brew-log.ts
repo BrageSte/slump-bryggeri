@@ -52,6 +52,8 @@ export async function getTimeline(db: DB, breweryId: string, batchId: string): P
       "m.unit as m_unit",
       "m.entered_value as m_entered_value",
       "m.entered_unit as m_entered_unit",
+      "m.value_min as m_value_min",
+      "m.value_max as m_value_max",
       "m.sample_temp_c as m_sample_temp_c",
       "m.instrument as m_instrument",
       "m.comment as m_comment",
@@ -92,6 +94,8 @@ export async function getTimeline(db: DB, breweryId: string, batchId: string): P
             unit: r.m_unit as string,
             enteredValue: r.m_entered_value ?? (r.m_value as number),
             enteredUnit: r.m_entered_unit ?? (r.m_unit as string),
+            valueMin: r.m_value_min,
+            valueMax: r.m_value_max,
             sampleTempC: r.m_sample_temp_c,
             instrument: r.m_instrument,
             comment: r.m_comment,
@@ -161,9 +165,16 @@ export async function logMeasurement(
   if (!enteredUnit || !isSupportedMeasurementUnit(input.kind, enteredUnit)) {
     throw badRequest(`Enheten støttes ikke for ${spec.label}.`);
   }
-  const value = spec.unit === null ? input.value : measurementToCanonical(input.kind, input.value, enteredUnit);
-  if (value === null || value === undefined) throw badRequest(`Enheten støttes ikke for ${spec.label}.`);
-  if (value < spec.min || value > spec.max) {
+  const convertedValue = spec.unit === null ? input.value : measurementToCanonical(input.kind, input.value, enteredUnit);
+  if (convertedValue === null || convertedValue === undefined) throw badRequest(`Enheten støttes ikke for ${spec.label}.`);
+  const valueMin = input.valueMin ?? null;
+  const valueMax = input.valueMax ?? null;
+  if (valueMin !== null && input.instrument && input.instrument !== "pH-strips") {
+    throw badRequest("Et pH-intervall krever instrumentet pH-strips.");
+  }
+  const value = valueMin !== null && valueMax !== null ? (valueMin + valueMax) / 2 : convertedValue;
+  const bounds = [value, ...(valueMin === null ? [] : [valueMin]), ...(valueMax === null ? [] : [valueMax])];
+  if (bounds.some((candidate) => candidate < spec.min || candidate > spec.max)) {
     const min = spec.unit === null ? spec.min : measurementFromCanonical(input.kind, spec.min, enteredUnit) ?? spec.min;
     const max = spec.unit === null ? spec.max : measurementFromCanonical(input.kind, spec.max, enteredUnit) ?? spec.max;
     throw new HttpError(400, "validation_failed", "Verdien er utenfor gyldig område.", [
@@ -201,12 +212,14 @@ export async function logMeasurement(
       label: input.label ?? null,
       value,
       unit,
-      entered_value: input.value,
+      entered_value: valueMin !== null ? value : input.value,
       entered_unit: enteredUnit,
+      value_min: valueMin,
+      value_max: valueMax,
       stage,
       measured_at: occurredAt,
       sample_temp_c: input.sampleTempC ?? null,
-      instrument: input.instrument ?? null,
+      instrument: valueMin !== null ? "pH-strips" : input.instrument ?? null,
       comment: input.comment ?? null,
       created_by: user.id,
       created_at: now,
