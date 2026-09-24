@@ -25,6 +25,13 @@ Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skj
 | `calculateTemperatureOffset`, `summarizeCalibrationObservations` | ΔT per observasjon; snitt, standardavvik og forslag (≥ 3 observasjoner). Foreslår bare — admin må godkjenne |
 | `calculateRecipeScaling` | Humle/gjær/tilsetninger skaleres med volum; meskede råvarer også med effektivitetsforhold så OG bevares; gjær i hele pakker rundes opp |
 | `calculateRecipeMetrics`, `expectedGravities` | Samlet OG/FG/ABV/IBU/farge for en oppskrift |
+| `measurementToCanonical`, `measurementFromCanonical` | Målinger normaliseres til °C, L, g, bar, SG og andre lagringsenheter; original enhet beholdes separat |
+| `convertUnitValue` | Brew-day-omregner for volum, temperatur, vekt, trykk, SG/°P og Brix/SG med WCF; gjæret Brix krever original Brix |
+
+En måling lagrer både kanonisk verdi/enhet og hva bryggeren skrev. Konvertering er en ren funksjon; API-et
+validerer område etter konvertering. Brix etter at gjæringen har startet gir ikke direkte SG. Terrill-estimatet
+krever målt Brix før gjæring og WCF fra batchens utstyrsprofil, og vises som estimat med usikkerhet som avhenger
+av målerens nøyaktighet og WCF-kalibrering.
 
 ## Forenklinger (dokumentert, bevisste)
 

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
+import { plannedStepsForStage, type PlannedBrewStep } from "../../domain/brew-day/planned-steps.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
-import { brewStageLabels, brewStages, type BrewStage } from "../../domain/model/brewing.ts";
+import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import {
   BottomSheet,
   Button,
@@ -32,8 +33,9 @@ import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
 import { BrewLog } from "./BrewLog.tsx";
-import { formatMeasurement, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
+import { useScreenWakeLock } from "./useScreenWakeLock.ts";
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -83,6 +85,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [screenOn, setScreenOn] = useState(true);
+  useScreenWakeLock(batch.status === "brewing" && screenOn);
 
   const hasTimer = batch.currentStage !== null && ["mash", "boil", "whirlpool"].includes(batch.currentStage);
   const now = useNow(hasTimer ? 1000 : 30_000);
@@ -102,6 +106,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
 
   const user = me.data?.user ?? { id: "", name: "" };
   const pendingAdditions = state.additions.filter((a) => a.status !== "done");
+  const originalBrix = timeline.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
   function addIngredient(addition: PlannedAddition) {
     logEvent.mutate(
@@ -149,7 +154,21 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         }
         title={batch.name}
         subtitle={`#${batch.number} · ${batch.recipe.name} v${batch.recipeVersion.version}`}
-        actions={<IconButton icon="dots" label="Flere valg" onClick={() => setMenuOpen(true)} />}
+        actions={
+          <div className="flex items-center gap-1">
+            {batch.status === "brewing" && (
+              <Button
+                variant={screenOn ? "secondary" : "ghost"}
+                icon={screenOn ? "sun" : "moon"}
+                aria-pressed={screenOn}
+                onClick={() => setScreenOn((value) => !value)}
+              >
+                {screenOn ? "Skjerm på" : "Skjerm av"}
+              </Button>
+            )}
+            <IconButton icon="dots" label="Flere valg" onClick={() => setMenuOpen(true)} />
+          </div>
+        }
       />
 
       {batch.status === "completed" ? (
@@ -169,6 +188,10 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
             />
           )}
         </>
+      )}
+
+      {batch.status !== "completed" && (
+        <PlannedStepsCard recipe={batch.recipeSnapshot} stage={batch.currentStage ?? "mash"} />
       )}
 
       {state.nextAction && batch.currentStage !== null && (
@@ -227,6 +250,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       <LogSheet
         batch={batch}
         stage={batch.currentStage}
+        originalBrix={originalBrix}
         intent={intent}
         onIntent={setIntent}
         onClose={() => setIntent(null)}
@@ -254,6 +278,53 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       >
         Batchen flyttes til historikken. Du kan fortsatt legge til smaksnotater, og den kan gjenåpnes.
       </ConfirmDialog>
+    </div>
+  );
+}
+
+function PlannedStepsCard({ recipe, stage }: { recipe: BatchDetail["recipeSnapshot"]; stage: BrewStage }) {
+  const steps = plannedStepsForStage(recipe, stage);
+  if (steps.length === 0) {
+    return (
+      <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
+        <EmptyState icon="book" title="Ingen planlagte steg">
+          Oppskriften har ingen steg for dette bryggesteget.
+        </EmptyState>
+      </Section>
+    );
+  }
+
+  return (
+    <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
+      <Card className="space-y-3">
+        {steps.map((step) => <PlannedStepRow key={step.id} step={step} />)}
+      </Card>
+    </Section>
+  );
+}
+
+function PlannedStepRow({ step }: { step: PlannedBrewStep }) {
+  const details = [
+    step.targetC !== undefined ? `Mål ${formatNumber(step.targetC, 1)} °C` : null,
+    step.durationMin !== undefined ? `${formatNumber(step.durationMin, 0)} min` : null,
+    step.durationDays !== undefined ? `${formatNumber(step.durationDays, 0)} dager` : null,
+    step.offsetMin !== undefined ? `${formatNumber(step.offsetMin, 0)} min før kokeslutt` : null,
+    step.fermentationDay !== undefined ? `Gjæringsdag ${formatNumber(step.fermentationDay, 0)}` : null,
+    step.amount ? `${formatNumber(step.amount.value, 1)} ${step.amount.unit}` : null,
+    step.variant ?? null,
+  ].filter(Boolean);
+  const actionLabel: Record<PlannedBrewStep["action"], string> = {
+    measure_temperature: "Neste handling: Logg temperatur",
+    start_boil: "Neste handling: Start kok",
+    add_ingredient: "Neste handling: Registrer tilsatt",
+    follow_fermentation: "Neste handling: Følg gjæringsplanen",
+  };
+
+  return (
+    <div className="border-b border-border pb-3 last:border-0 last:pb-0">
+      <h3 className="font-semibold">{step.title}</h3>
+      {details.length > 0 && <p className="text-small text-muted">{details.join(" · ")}</p>}
+      <p className="mt-1 text-caption font-semibold text-primary-strong">{actionLabel[step.action]}</p>
     </div>
   );
 }
@@ -325,7 +396,11 @@ function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (in
               label={target.label}
               unit={target.unit}
               target={formatTarget(target.measurementKind, target.target)}
-              actual={target.actual ? formatMeasurement(target.measurementKind, target.actual.value) : null}
+              actual={target.actual
+                ? target.actual.valueMin !== undefined && target.actual.valueMax !== undefined
+                  ? formatMeasurementRange(target.measurementKind, target.actual.valueMin, target.actual.valueMax, target.unit)
+                  : formatMeasurement(target.measurementKind, target.actual.value)
+                : null}
               status={target.status}
               detail={target.actual?.derivedFrom === "brix" ? "fra Brix" : undefined}
               action={
@@ -480,10 +555,17 @@ function BatchMenu({
   const updateBatch = useUpdateBatch(batch.id);
   const createSplit = useCreateSplit(batch.id);
   const deleteBatch = useDeleteBatch();
-  const [view, setView] = useState<"menu" | "stage" | "split" | "delete">("menu");
+  const [view, setView] = useState<"menu" | "stage" | "split" | "details" | "delete">("menu");
   const [splitName, setSplitName] = useState("");
   const [splitVessel, setSplitVessel] = useState("");
   const [splitVolume, setSplitVolume] = useState("");
+  const [batchName, setBatchName] = useState(batch.name);
+  const [brewDate, setBrewDate] = useState(batch.brewDate ?? "");
+
+  useEffect(() => {
+    setBatchName(batch.name);
+    setBrewDate(batch.brewDate ?? "");
+  }, [batch.name, batch.brewDate, open]);
 
   const close = () => {
     setView("menu");
@@ -492,9 +574,16 @@ function BatchMenu({
 
   return (
     <>
-      <BottomSheet open={open && view !== "delete"} onClose={close} title={view === "stage" ? "Gå til steg" : view === "split" ? "Ny variant" : "Batch"}>
+      <BottomSheet
+        open={open && view !== "delete"}
+        onClose={close}
+        title={view === "stage" ? "Gå til steg" : view === "split" ? "Ny variant" : view === "details" ? "Batchdetaljer" : "Batch"}
+      >
         {view === "menu" && (
           <div className="grid gap-2">
+            <Button block icon="edit" onClick={() => setView("details")}>
+              Rediger navn og dato
+            </Button>
             {batch.status !== "completed" && (
               <Button block icon="play" onClick={() => setView("stage")}>
                 Gå til steg …
@@ -547,6 +636,30 @@ function BatchMenu({
             ))}
           </div>
         )}
+        {view === "details" && (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateBatch.mutate(
+                { name: batchName.trim(), brewDate: brewDate || null },
+                { onSuccess: () => (toast("Batchdetaljer oppdatert"), close()) },
+              );
+            }}
+          >
+            <Field label="Batchnavn">
+              {(props) => <TextInput {...props} required maxLength={120} value={batchName} onChange={(event) => setBatchName(event.target.value)} />}
+            </Field>
+            <Field label="Bryggedato">
+              {(props) => <TextInput {...props} type="date" value={brewDate} onChange={(event) => setBrewDate(event.target.value)} />}
+            </Field>
+            {updateBatch.error && <InlineError>{updateBatch.error.message}</InlineError>}
+            <div className="flex gap-2">
+              <Button type="submit" variant="primary" loading={updateBatch.isPending}>Lagre</Button>
+              <Button variant="ghost" onClick={() => setView("menu")}>Avbryt</Button>
+            </div>
+          </form>
+        )}
         {view === "split" && (
           <form
             className="space-y-4"
@@ -596,4 +709,3 @@ function BatchMenu({
     </>
   );
 }
-

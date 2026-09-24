@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BatchDetail, BatchSummary, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
+import type { BatchDetail, BatchSummary, CorrectLogEntryInput, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
+import { measurementToCanonical } from "../../domain/brewing-calculations/measurement-units.ts";
 import type { BatchStatus, BrewStage, MeasurementKind } from "../../domain/model/brewing.ts";
+import { measurementKindSpecs } from "../../domain/model/brewing.ts";
 import { api } from "../../lib/api.ts";
 import { breweryKey } from "../breweries/api.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
@@ -73,8 +75,11 @@ function useBatchMutation<TInput, TResult = unknown>(
 export interface MeasurementInput {
   kind: MeasurementKind;
   value: number;
+  valueMin?: number;
+  valueMax?: number;
   unit?: string;
   label?: string;
+  instrument?: string | null;
   stage?: BrewStage | null;
   splitId?: string | null;
   measuredAt?: number;
@@ -83,28 +88,37 @@ export interface MeasurementInput {
 
 export function useLogMeasurement(batchId: string, currentUser: { id: string; name: string }) {
   return useBatchMutation(batchId, (base, input: MeasurementInput) => api.post<CreatedResponse>(`${base}/measurements`, input), {
-    optimistic: (input) => ({
-      id: `optimistic-${Date.now()}`,
-      type: "measurement",
-      stage: input.stage ?? null,
-      splitId: input.splitId ?? null,
-      occurredAt: input.measuredAt ?? Date.now(),
-      createdAt: Date.now(),
-      createdBy: currentUser,
-      data: null,
-      measurement: {
-        id: "optimistic",
-        kind: input.kind,
-        label: input.label ?? null,
-        value: input.value,
-        unit: input.unit ?? "",
-        sampleTempC: null,
-        instrument: null,
-        comment: input.comment ?? null,
-      },
-      comment: null,
-      attachment: null,
-    }),
+    optimistic: (input) => {
+      const spec = measurementKindSpecs[input.kind];
+      const enteredUnit = input.unit ?? spec.unit ?? "";
+      const canonicalValue = spec.unit === null ? input.value : measurementToCanonical(input.kind, input.value, enteredUnit) ?? input.value;
+      return {
+        id: `optimistic-${Date.now()}`,
+        type: "measurement",
+        stage: input.stage ?? null,
+        splitId: input.splitId ?? null,
+        occurredAt: input.measuredAt ?? Date.now(),
+        createdAt: Date.now(),
+        createdBy: currentUser,
+        data: null,
+        measurement: {
+          id: "optimistic",
+          kind: input.kind,
+          label: input.label ?? null,
+          value: canonicalValue,
+          unit: spec.unit ?? enteredUnit,
+          enteredValue: input.value,
+          enteredUnit,
+          valueMin: input.valueMin ?? null,
+          valueMax: input.valueMax ?? null,
+          sampleTempC: null,
+          instrument: input.instrument ?? null,
+          comment: input.comment ?? null,
+        },
+        comment: null,
+        attachment: null,
+      };
+    },
   });
 }
 
@@ -117,6 +131,12 @@ export const useEditComment = (batchId: string) =>
   useBatchMutation(batchId, (base, input: { commentId: string; body: string }) =>
     api.patch(`${base}/comments/${input.commentId}`, { body: input.body }),
   );
+
+export const useCorrectLogEntry = (batchId: string) =>
+  useBatchMutation(batchId, (base, input: CorrectLogEntryInput & { eventId: string }) => {
+    const { eventId, ...correction } = input;
+    return api.patch<CreatedResponse>(`${base}/events/${eventId}/correction`, correction);
+  });
 
 export const useLogEvent = (batchId: string) =>
   useBatchMutation(

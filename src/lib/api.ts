@@ -39,6 +39,26 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 
 export const api = {
   get: <T>(path: string) => request<T>("GET", path),
+  download: async (path: string): Promise<{ blob: Blob; filename: string }> => {
+    let response: Response;
+    try {
+      response = await fetch(`/api${path}`, { credentials: "same-origin" });
+    } catch {
+      throw new ApiError(0, "network", "Ingen kontakt med serveren. Sjekk nettet og prøv igjen.");
+    }
+    if (!response.ok) {
+      const data = (await response.json().catch(() => null)) as Partial<ApiErrorBody> | null;
+      throw new ApiError(
+        response.status,
+        data?.error?.code ?? "unknown",
+        data?.error?.message ?? "Noe gikk galt. Prøv igjen.",
+        data?.error?.issues ?? [],
+      );
+    }
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const filename = /filename="([^\"]+)"/i.exec(disposition)?.[1] ?? "slump-bryggeri-backup.json";
+    return { blob: await response.blob(), filename };
+  },
   post: <T>(path: string, body: unknown = {}) => request<T>("POST", path, body),
   patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
   put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),

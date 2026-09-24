@@ -55,12 +55,13 @@ export function MetricCard({ label, value, unit, hint }: { label: string; value:
   );
 }
 
-export type TargetStatus = "ok" | "low" | "high" | "missing";
+export type TargetStatus = "ok" | "low" | "high" | "uncertain" | "missing";
 
 const statusPresentation: Record<TargetStatus, { tone: Tone; icon: IconName; label: string }> = {
   ok: { tone: "success", icon: "check", label: "OK" },
   low: { tone: "warning", icon: "arrowDown", label: "Lav" },
   high: { tone: "warning", icon: "arrowUp", label: "Høy" },
+  uncertain: { tone: "warning", icon: "alert", label: "Usikker" },
   missing: { tone: "neutral", icon: "clock", label: "Ikke målt" },
 };
 

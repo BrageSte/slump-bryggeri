@@ -65,7 +65,13 @@ export async function createBrewery(d1: D1Database, db: DB, user: SessionUser, n
   const values = Object.entries(defaultProfileValues());
 
   await atomic(d1, [
-    db.insertInto("breweries").values({ id: breweryId, name, created_by: user.id, created_at: now, updated_at: now }),
+    db.insertInto("breweries").values({
+      id: breweryId,
+      name,
+      created_by: user.id,
+      created_at: now,
+      updated_at: now,
+    }),
     db.insertInto("brewery_members").values({ brewery_id: breweryId, user_id: user.id, role: "admin", created_at: now }),
     db.insertInto("equipment_profiles").values({
       id: profileId,

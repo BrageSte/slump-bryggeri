@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { deriveBrewDayState, followingStage, type BrewDayLogEntry } from "../../src/domain/brew-day/state.ts";
 import { sunsetIpaBrewLog, sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
-import type { BrewStage } from "../../src/domain/model/brewing.ts";
+import { commonPhStripIntervals, type BrewStage } from "../../src/domain/model/brewing.ts";
 
 const MIN = 60_000;
 const DAY = 86_400_000;
@@ -53,6 +53,28 @@ describe("deriveBrewDayState", () => {
       now: t0 + 5 * MIN,
     });
     expect(state.targets.find((t) => t.key === "mash-ph")?.status).toBe("high");
+  });
+
+  it("classifies pH-strip intervals against the target", () => {
+    const stateFor = (valueMin: number, valueMax: number) =>
+      deriveBrewDayState({
+        recipe: sunsetIpaRecipe,
+        stage: "mash",
+        stageStartedAt: t0,
+        log: [entry({ stage: "mash", occurredAt: t0 + MIN, measurement: { kind: "ph", value: (valueMin + valueMax) / 2, valueMin, valueMax } })],
+        now: t0 + 5 * MIN,
+      }).targets.find((target) => target.key === "mash-ph")?.status;
+
+    expect(stateFor(5.25, 5.35)).toBe("ok");
+    expect(stateFor(5.3, 5.5)).toBe("uncertain");
+    expect(stateFor(5.6, 5.8)).toBe("high");
+    expect(stateFor(4.8, 5.1)).toBe("low");
+  });
+
+  it("offers pH-strip intervals from 5.0–5.2 through 6.0–6.2", () => {
+    expect(commonPhStripIntervals).toHaveLength(11);
+    expect(commonPhStripIntervals[0]).toEqual({ min: 5, max: 5.2 });
+    expect(commonPhStripIntervals.at(-1)).toEqual({ min: 6, max: 6.2 });
   });
 
   it("ignores readings from an earlier run of the same stage", () => {

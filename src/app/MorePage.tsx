@@ -9,7 +9,7 @@ export function MorePage() {
   const signOut = useSignOut();
   const leavePerson = useLeavePerson();
   const breweryMode = useMode().data?.breweryMode ?? false;
-  const { breweryName, memberships, switchBrewery, breweryId } = useBrewery();
+  const { breweryName, memberships, switchBrewery, breweryId, isAdmin } = useBrewery();
   const icon = (name: IconName) => <Icon name={name} className="shrink-0 text-primary-strong" />;
 
   return (
@@ -21,6 +21,8 @@ export function MorePage() {
           <ListLink to="/mer/utstyr" title="Utstyr" icon={icon("wrench")} />
           <ListLink to="/mer/kalibrering" title="Kalibrering" subtitle="Volumtap, effektivitet, temperaturer" icon={icon("sliders")} />
           <ListLink to="/mer/medlemmer" title="Medlemmer" icon={icon("users")} />
+          <ListLink to="/mer/omregner" title="Omregner" subtitle="Volum, temperatur, vekt og SG" icon={icon("sliders")} />
+          {isAdmin && <ListLink to="/mer/eksport" title="Eksport" subtitle="Last ned sikkerhetskopi" icon={icon("file")} />}
           <ListLink to="/assistent" title="Bryggeassistent" subtitle="Kommer i fase 6" icon={icon("sparkles")} />
         </ListCard>
       </Section>

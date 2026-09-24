@@ -52,6 +52,24 @@ export function refractometerFinalGravity(input: { originalBrix: number; finalBr
   );
 }
 
+/** Reverse the final-gravity refractometer formula when original Brix is known. */
+export function refractometerBrixFromFinalGravity(input: { originalBrix: number; finalSg: number; wcf?: number }): number | null {
+  const wcf = input.wcf ?? 1;
+  if (wcf <= 0) return null;
+  let low = 0;
+  let high = 40 * wcf;
+  const lowestGravity = refractometerFinalGravity({ originalBrix: input.originalBrix, finalBrix: low, wcf });
+  const highestGravity = refractometerFinalGravity({ originalBrix: input.originalBrix, finalBrix: high, wcf });
+  if (input.finalSg < lowestGravity || input.finalSg > highestGravity) return null;
+  for (let i = 0; i < 64; i += 1) {
+    const middle = (low + high) / 2;
+    const gravity = refractometerFinalGravity({ originalBrix: input.originalBrix, finalBrix: middle, wcf });
+    if (gravity < input.finalSg) low = middle;
+    else high = middle;
+  }
+  return (low + high) / 2;
+}
+
 /** Extract potential of sucrose, 46.214 ppg, expressed as gravity points · L / kg. */
 export const SUCROSE_POINTS_L_PER_KG = (46.214 * LITERS_PER_US_GALLON) / KG_PER_POUND;
 

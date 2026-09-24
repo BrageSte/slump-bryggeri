@@ -108,6 +108,31 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
 
+Loggkorrigering bruker en ny `brew_events`-rad med `data.corrections` som revisjonsspor. Originalhendelsen
+og eventuell målerad markeres slettet, men beholdes i databasen. `baseUpdatedAt` gir konfliktkontroll; batch
+og bryggeri filtreres fra verifisert medlemskap. Erstatningen beholder opprinnelig `created_by`, mens
+`data.corrections` angir hvem som korrigerte. Hendelser med type `*_started` avvises så
+`batches.stage_started_at` forblir konsistent. `ingredient_added` og `yeast_pitched` valideres med
+`ingredientAddedDataSchema`. Kommentarer beholder egen forfatterstyrt redigering.
+
+Målinger lagrer både kanonisk `value/unit` og `entered_value/entered_unit`, slik at API-et kan regne med
+liter/°C/g/bar/SG samtidig som loggen viser det bryggeren skrev. Måleinput starter alltid metrisk; en annen
+valgt enhet gjelder bare for den aktuelle inntastingen og lagres ikke som en preferanse. Brix fra gjæring får bare
+et avledet FG når batchloggen inneholder en Brix-måling før gjæring; resultatet merkes som estimat.
+Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggedagens målstatus sammenligner
+hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
+enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
+
+## Bryggeri-eksport
+
+Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker
+`c.var.membership.breweryId` etter `requireMember("admin")` og returnerer formatet
+`slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
+bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
+batcher/snapshots/splits og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og credentials er ikke
+med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger fortsatt i objektlageret.
+Resultattabellen er en tom liste fram til M4 legger til batchresultater. Gjenoppretting støttes ikke ennå.
+
 ## Oppskriftsbibliotek
 
 Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkbart bibliotek.

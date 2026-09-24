@@ -102,20 +102,22 @@ Bindingene og KV-id-en er lagt inn i `wrangler.jsonc` for lokal konfigurasjon og
 ### M1.3 Deploy fra GitHub Actions
 
 - [x] `deploy.yml` kjører ved push til `main` og manuelt, og hopper over med en melding når token mangler.
-- [ ] Når token er på plass: verifiser at en merge til `main` kjører tester → migrasjoner → deploy.
+- [x] Etter at produksjonshemmelighetene ble satt: verifiser at en merge til `main` kjører tester → migrasjoner → deploy.
 
-**Brage må:** Cloudflare-dashbord → *My Profile → API Tokens → Create Token* → malen «Edit Cloudflare Workers»,
-legg til **D1: Edit** (og **Workers KV Storage: Edit** for M1.2). Legg inn som GitHub-secrets i repoet:
-`CLOUDFLARE_API_TOKEN` og `CLOUDFLARE_ACCOUNT_ID` (`12e5fd15eb499d3af63d742451c5d185`).
+Gjort 2026-09-24. GitHub Actions kjørte typecheck, tester, D1-migrasjoner og Cloudflare-deploy etter
+merge til `main`. Produksjonshemmelighetene ligger i GitHub Secrets og lagres ikke i repoet.
 
 ### M1.4 JSON-backup av hele bryggeriet
 
-- [ ] Admin-eksport under Mer → Eksport: versjonert JSON med bryggeri/personer, utstyr og profilversjoner,
+- [x] Admin-eksport under Mer → Eksport: versjonert JSON med bryggeri/personer, utstyr og profilversjoner,
       oppskrifter/versjoner/kilder, batcher/snapshots/splits, logg/målinger, resultater og relasjoner/
       tidsstempler. Filvedlegg listes med metadata og kan lastes ned separat; merk tydelig at JSON
       alene ikke inneholder bildebytes. Gjenoppretting er en senere oppgave.
-- [ ] API-et bruker `c.var.membership.breweryId`, krever admin og avviser andre bryggerier med 404.
+- [x] API-et bruker `c.var.membership.breweryId`, krever admin og avviser andre bryggerier med 404.
       Test at relevante tabeller/referanser er med og at andre bryggeriers data ikke lekker.
+
+Gjort 2026-09-24. Eksportformat `slump-brewery-backup` v1 har en tom `batch_outcomes`-liste fram til M4
+oppretter resultattabellen. Auth-sesjoner og credentials eksporteres ikke.
 
 **Akseptanse:** bryggeriet kan tidlig ta ut en kontrollerbar kopi av egne strukturerte data.
 
@@ -123,44 +125,60 @@ legg til **D1: Edit** (og **Workers KV Storage: Edit** for M1.2). Legg inn som G
 
 ## M2 — Enheter, pH-strips og nødvendige rettelser
 
-### M2.1 Skriv inn i gallons, °F, oz … (B4)
+### M2.1 Metrisk standard med valgfrie inntastingsenheter (B4)
 
-- [ ] Enhetskatalog per målingstype og rene konverteringer i `brewing-calculations`: L ↔ US gal,
+- [x] Enhetskatalog per målingstype og rene konverteringer i `brewing-calculations`: L ↔ US gal,
       °C ↔ °F, g/kg ↔ oz/lb, bar ↔ psi, SG ↔ °Plato og Brix ↔ SG. For Brix etter gjærstart
       kreves original-Brix og WCF; merk avledet SG med metode og usikkerhet. Test kjente tall/rundtur.
-- [ ] Migrasjon `0005_measurement_units.sql`: `measurements.entered_value REAL`, `measurements.entered_unit TEXT`.
-- [ ] API: `createMeasurementSchema` tar `value` + `unit` i en hvilken som helst støttet enhet for typen.
+- [x] Migrasjon `0005_measurement_units.sql`: `measurements.entered_value REAL`, `measurements.entered_unit TEXT`.
+- [x] API: `createMeasurementSchema` tar `value` + `unit` i en hvilken som helst støttet enhet for typen.
       **Serveren** konverterer til kanonisk verdi (lagres i `value/unit`) og lagrer det som ble skrevet inn.
       Ukjent enhet → 400.
-- [ ] `MeasurementInput`: enhetsvalg ved siden av tallet (f.eks. «L | gal», «°C | °F»), norsk desimalkomma, live omregning
-      («20,0 gal = 75,7 L»). Sist brukte enhet huskes per type og enhet (lokalt).
-- [ ] Bryggeri-innstilling (admin, Mer → Innstillinger): standard visningsenheter for bryggeriet (metrisk / US volum / blandet).
-      Loggen viser det som ble skrevet inn, med omregning i parentes: «20,0 gal (75,7 L)».
-- [ ] «Omregner» (arket fra bryggedagen og Mer): gal↔L, °F↔°C, oz↔g, lb↔kg, psi↔bar, Brix↔SG (med WCF), °P↔SG.
-- [ ] Tester: domene (konvertering), integrasjon (gal inn → L lagret, begge returneres), UI-logikk.
+- [x] `MeasurementInput`: enhetsvalg ved siden av tallet starter alltid metrisk (f.eks. «L | US gal», «°C | °F»), norsk desimalkomma,
+      live omregning («21 US gal = 79,5 L»). Valgt enhet gjelder bare gjeldende inntasting og lagres ikke.
+- [x] Ingen bryggeri-preferanse for enheter; standarden er metrisk. Loggen viser det som ble skrevet inn,
+      med omregning i parentes: «21,0 US gal (79,5 L)».
+- [x] «Omregner» (arket fra bryggedagen og Mer): gal↔L, °F↔°C, oz↔g, lb↔kg, psi↔bar, Brix↔SG (med WCF), °P↔SG.
+- [x] Tester: domene (konvertering), integrasjon (gal inn → L lagret, begge returneres), UI-logikk.
+
+Gjort 2026-09-24. Målinger lagres metrisk, mens brukeren kan velge en inntastingsenhet for ett enkelt
+innslag. Det valget lagres ikke. Etter gjæringsstart vises Brix-avledet SG bare når en Brix-måling før
+gjæring finnes; resultatet merkes som estimat med Terrill-metode, WCF og en forklaring av usikkerheten.
 
 **Akseptanse:** På bryggedagen kan man logge «19,0 US gal», se kanoniske liter og fortsatt finne
 originaltallet. Avledet SG fra gjæret Brix fremstår ikke som direkte målt SG.
 
 ### M2.2 pH med strips (B9)
 
-- [ ] pH-måling kan registreres som **intervall** («5,8–6,0») med instrument «pH-strips», eller som enkeltverdi (pH-meter).
-- [ ] Migrasjon: `measurements.value_min`, `measurements.value_max` (NULL for enkeltverdier). `value` = midtpunkt.
-- [ ] Målsammenligning: intervall helt innenfor mål → OK; delvis overlapp → ny status «Usikker» (egen chip, ikke bare farge);
+- [x] pH-strips er standardregistrering som intervall («5,8–6,0») med instrument «pH-strips»; enkeltverdi
+      kan brukes ved behov og lagres uten instrument hvis det ikke er oppgitt. «pH-meter» settes ikke automatisk.
+- [x] Migrasjon: `measurements.value_min`, `measurements.value_max` (NULL for enkeltverdier). `value` = midtpunkt.
+- [x] Målsammenligning: intervall helt innenfor mål → OK; delvis overlapp → ny status «Usikker» (egen chip, ikke bare farge);
       utenfor → Høy/Lav. Oppdater `deriveBrewDayState` + tester.
-- [ ] Input: hurtigvalg for vanlige strip-intervaller (5,0–5,2 … 6,0–6,2) og fritt intervall.
+- [x] Input: hurtigvalg for vanlige strip-intervaller (5,0–5,2 … 6,0–6,2) og fritt intervall.
+
+Gjort 2026-09-24. Stripintervall er standard i pH-inputen. API-et lagrer `value` som midtpunkt og
+beholder intervallet og instrumentet i tidslinjen; enkeltverdier får ikke et oppdiktet instrument.
 
 ### M2.3 Trygg korrigering av feilregistreringer (B8)
 
 Alle medlemmer kan korrigere loggføringer i den lille fellesloggen; kommentarer kan bare endres av
 forfatteren. Behold hvem/når og forrige verdi. Dette er den minste sikre løsningen for feil på bryggedagen.
 
-- [ ] «Korriger» for målinger og hendelser: verdi/enhet, tidspunkt, steg/variant og notat. Behold
+- [x] «Korriger» for målinger og hendelser: verdi/enhet, tidspunkt, steg/variant og notat. Behold
       originalen via enkel append-only korreksjonspost eller erstatningshendelse; vis «korrigert».
-- [ ] Kommentarer kan redigeres av forfatteren; vis at de er redigert.
-- [ ] Skriv endring/spor atomisk med `requireMember`, batch-/bryggeri-scope og konfliktkontroll.
-      Test 404 for andre bryggerier og at korrigert tall brukes i mål-mot-faktisk-visning.
-- [ ] Lag UI for eksisterende API for batchnavn/bryggedato; rettelser av splits kan tas når de trengs.
+- [x] Kommentarer kan redigeres av forfatteren; vis at de er redigert.
+- [x] Skriv endring/spor atomisk med `requireMember`, batch-/bryggeri-scope og konfliktkontroll. Erstatningen
+      beholder opprinnelig `created_by`; `corrections` angir hvem som korrigerte. Startede steg kan ikke
+      korrigeres fordi batchens `stage_started_at` ellers blir feil. Valider ingrediensdata med samme schema
+      som ved ny logging. Test 404 for andre bryggerier og at korrigert tall brukes i mål-mot-faktisk-visning.
+- [x] Lag UI for eksisterende API for batchnavn/bryggedato; rettelser av splits kan tas når de trengs.
+
+Gjort 2026-09-24. Korrigering lager en ny logghendelse med forrige verdi, tidspunkt og forfatter i
+`data.corrections`, og skjuler originalhendelsen fra den aktive loggen. Gamle rader bevares i databasen.
+Erstatningen beholder opprinnelig `created_by`; korrigerende medlem står i `data.corrections`. Startede steg
+avvises. `ingredient_added` og `yeast_pitched` valideres med `ingredientAddedDataSchema`. Korrigering krever
+`baseUpdatedAt`; samtidige eller utdaterte endringer avvises.
 
 ### Senere: full revisjon og avanserte planendringer
 
@@ -175,10 +193,10 @@ tilsetning og notat.
 
 ## M3 — Bryggedagsmodus (B5)
 
-- [ ] **Planlagte steg:** vis neste meske-, skylle-, koke-, humle- og gjæringssteg fra batchens
+- [x] **Planlagte steg:** vis neste meske-, skylle-, koke-, humle- og gjæringssteg fra batchens
       oppskriftssnapshot; vis mål, tid og neste handling. Funger med manuelle oppskrifter og bruker
       importerte planer etter M5. Manglende plan gir tom tilstand, ikke oppdiktede steg.
-- [ ] **Skjermen på:** Screen Wake Lock (`navigator.wakeLock.request("screen")`) mens en batch i status «brygger nå» er åpen;
+- [x] **Skjermen på:** Screen Wake Lock (`navigator.wakeLock.request("screen")`) mens en batch i status «brygger nå» er åpen;
       hentes på nytt ved `visibilitychange`. Bryter i batch-headeren («Skjerm på»), standard på. Faller stille tilbake der API-et mangler.
 - [ ] **Delte timere:** hendelsestyper `timer_started` `{ label, durationMin, dueAt }` og `timer_cancelled`. Alle i bryggeriet ser
       samme nedtelling (polling finnes). Kort «Timere» på bryggedagen med hurtigvalg (5/10/15/20/30/60 min + egendefinert).
@@ -193,6 +211,10 @@ tilsetning og notat.
       varmekapasitet. Resultat er forslag; logg først ved brukertrykk. BeerSmith Mash Adjust-bildet
       (67,8 °C mål, 65,6 °C nå, 18,93 L, 4,54 kg, 100 °C tilsetningsvann → 1,41 L) er
       referansescenario med dokumentert toleranse/modellavvik, ikke en historisk bryggmåling.
+
+Gjort 2026-09-24. Batchens aktive steg viser bare planlagte punkter fra det uforanderlige
+oppskriftssnapshotet, med en kort foreslått handling og en tom tilstand uten plan. Skjermlås er på som
+standard mens et brygg pågår, kan slås av i batch-headeren og gjenopptas når fanen blir synlig igjen.
 
 Varsler når appen er lukket (Web Push) er en senere utvidelse, ikke en blokkering for bryggedagsmodus.
 

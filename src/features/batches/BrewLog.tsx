@@ -1,11 +1,56 @@
 import { useState } from "react";
-import { brixToSg } from "../../domain/brewing-calculations/index.ts";
+import { brixToSg, refractometerFinalGravity } from "../../domain/brewing-calculations/index.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
-import { batchStatusLabels, brewStageLabels, eventTypeLabels, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
+import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasStarted, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
 import { formatAmount, formatLogTime, formatSg } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
-import { formatMeasurement } from "./helpers.ts";
+import { CorrectionForm } from "./CorrectionForm.tsx";
+import { formatMeasurement, formatMeasurementInUnit, formatMeasurementRange } from "./helpers.ts";
+
+function latestCorrection(item: TimelineItem): Record<string, unknown> | null {
+  const history = item.data?.corrections;
+  if (!Array.isArray(history)) return null;
+  const latest = history.at(-1);
+  return latest && typeof latest === "object" ? latest as Record<string, unknown> : null;
+}
+
+function correctionSummary(item: TimelineItem): string | null {
+  const correction = latestCorrection(item);
+  if (!correction) return null;
+  const previous = correction.previousMeasurement;
+  let previousValue = "";
+  let unit = "";
+  if (previous && typeof previous === "object") {
+    const measurement = previous as Record<string, unknown>;
+    const kind = measurement.kind;
+    const enteredValue = measurement.enteredValue;
+    const enteredUnit = measurement.enteredUnit;
+    if (typeof kind === "string" && kind in measurementKindSpecs && typeof enteredValue === "number" && typeof enteredUnit === "string") {
+      const measurementKind = kind as keyof typeof measurementKindSpecs;
+      const min = measurement.valueMin;
+      const max = measurement.valueMax;
+      previousValue = typeof min === "number" && typeof max === "number"
+        ? formatMeasurementRange(measurementKind, min, max, enteredUnit)
+        : formatMeasurementInUnit(measurementKind, enteredValue, enteredUnit);
+      unit = enteredUnit;
+    }
+  }
+  if (!previousValue && correction.previousData && typeof correction.previousData === "object") {
+    const data = correction.previousData as Record<string, unknown>;
+    const value = typeof data.amount === "number" ? data.amount : typeof data.value === "number" ? data.value : null;
+    if (value !== null) {
+      previousValue = value.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
+      unit = typeof data.unit === "string" ? data.unit : "";
+    }
+  }
+  const details = [
+    previousValue ? `Før: ${previousValue}${unit ? ` ${unit}` : ""}` : null,
+    typeof correction.previousCreatedByName === "string" ? `registrert av ${correction.previousCreatedByName}` : null,
+    typeof correction.previousOccurredAt === "number" ? new Date(correction.previousOccurredAt).toLocaleString("nb-NO") : null,
+  ].filter(Boolean);
+  return details.join(" · ") || "Loggføringen er korrigert.";
+}
 
 function iconFor(item: TimelineItem): IconName {
   if (item.measurement) {
@@ -20,16 +65,27 @@ function iconFor(item: TimelineItem): IconName {
   return "flag";
 }
 
-function describe(item: TimelineItem, wcf = 1): { title: string; value?: string; unit?: string; detail?: string } {
+function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: string; value?: string; unit?: string; detail?: string } {
   if (item.measurement) {
     const m = item.measurement;
     const kindLabel = m.kind === "custom" ? (m.label ?? "Måling") : measurementKindSpecs[m.kind].label;
+    const fermented = fermentationHasStarted(item.stage);
+    const canonicalDetail = m.enteredUnit !== m.unit ? `(${formatMeasurement(m.kind, m.value)} ${m.unit})` : null;
+    const brixDetail = m.kind !== "brix"
+      ? null
+      : fermented
+        ? originalBrix === undefined
+          ? "SG etter gjæring kan ikke beregnes uten opprinnelig Brix."
+          : `FG-anslag SG ${formatSg(refractometerFinalGravity({ originalBrix, finalBrix: m.value, wcf }))} · Terrill 2011 · WCF ${wcf}; usikkerhet avhenger av WCF og målerens nøyaktighet`
+        : `≈ SG ${formatSg(brixToSg(m.value, wcf))} · WCF ${wcf}`;
     return {
       title: m.kind === "custom" ? kindLabel : m.label ? `${kindLabel} · ${m.label}` : kindLabel,
-      value: formatMeasurement(m.kind, m.value),
+      value: m.valueMin !== null && m.valueMin !== undefined && m.valueMax !== null && m.valueMax !== undefined
+        ? formatMeasurementRange(m.kind, m.valueMin, m.valueMax, m.enteredUnit)
+        : formatMeasurementInUnit(m.kind, m.enteredValue, m.enteredUnit),
       // Don't repeat the unit when it is also the label ("5,34 pH pH").
-      unit: m.kind === "sg" || m.unit === kindLabel ? undefined : m.unit,
-      detail: [m.kind === "brix" ? `≈ SG ${formatSg(brixToSg(m.value, wcf))}` : null, m.comment].filter(Boolean).join(" · ") || undefined,
+      unit: m.enteredUnit === kindLabel ? undefined : m.enteredUnit,
+      detail: [canonicalDetail, brixDetail, m.instrument ? `Instrument: ${m.instrument}` : null, m.comment].filter(Boolean).join(" · ") || undefined,
     };
   }
   if (item.comment) return { title: item.comment.body };
@@ -67,13 +123,15 @@ export function BrewLog({
   const visible = limit ? newestFirst.slice(0, limit) : newestFirst;
   const splitName = (id: string | null) => batch.splits.find((s) => s.id === id)?.name;
   const wcf = batch.equipmentSnapshot.values.refractometer_wcf ?? 1;
+  const originalBrix = items.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
   return (
     <>
       <ol className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
         {visible.map((item) => {
-          const d = describe(item, wcf);
+          const d = describe(item, wcf, originalBrix);
           const pending = item.id.startsWith("optimistic-");
+          const corrected = latestCorrection(item) !== null;
           return (
             <li key={item.id}>
               <button
@@ -103,6 +161,7 @@ export function BrewLog({
                     {item.stage && <span>· {brewStageLabels[item.stage]}</span>}
                     {splitName(item.splitId) && <StatusChip tone="info">{splitName(item.splitId)}</StatusChip>}
                     {item.comment?.editedAt && <span>· redigert</span>}
+                    {corrected && <StatusChip tone="warning">Korrigert</StatusChip>}
                   </span>
                 </span>
               </button>
@@ -113,6 +172,7 @@ export function BrewLog({
       <EntrySheet
         batch={batch}
         item={selected}
+        originalBrix={originalBrix}
         canEdit={selected?.createdBy.id === currentUserId}
         canDelete={selected?.createdBy.id === currentUserId || isAdmin}
         onClose={() => setSelected(null)}
@@ -124,12 +184,14 @@ export function BrewLog({
 function EntrySheet({
   batch,
   item,
+  originalBrix,
   canEdit,
   canDelete,
   onClose,
 }: {
   batch: BatchDetail;
   item: TimelineItem | null;
+  originalBrix?: number;
   canEdit: boolean;
   canDelete: boolean;
   onClose: () => void;
@@ -139,9 +201,12 @@ function EntrySheet({
   const editComment = useEditComment(batch.id);
   const [confirming, setConfirming] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
 
   if (!item) return null;
-  const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1);
+  const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1, originalBrix);
+  const correction = correctionSummary(item);
+  const canCorrect = item.measurement !== null || (!item.comment && !item.attachment && item.type !== "status_changed" && !item.type.endsWith("_started"));
   const close = () => {
     setDraft(null);
     onClose();
@@ -149,8 +214,16 @@ function EntrySheet({
 
   return (
     <>
-      <BottomSheet open={!confirming} onClose={close} title={item.measurement ? d.title : (eventTypeLabels[item.type] ?? "Loggføring")}>
-        <div className="space-y-4">
+      <BottomSheet open={!confirming} onClose={close} title={correcting ? "Korriger loggføring" : item.measurement ? d.title : (eventTypeLabels[item.type] ?? "Loggføring")}>
+        {correcting ? (
+          <CorrectionForm
+            batch={batch}
+            item={item}
+            originalBrix={originalBrix}
+            onCancel={() => setCorrecting(false)}
+            onSaved={close}
+          />
+        ) : <div className="space-y-4">
           {d.value && (
             <p className="tabular text-display font-bold">
               {d.value}
@@ -172,6 +245,7 @@ function EntrySheet({
             </a>
           )}
           {d.detail && <p className="text-muted">{d.detail}</p>}
+          {correction && <p className="rounded-md bg-warning-soft p-3 text-small text-warning">Korrigert · {correction}</p>}
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-small">
             <dt className="text-muted">Tidspunkt</dt>
             <dd>{new Date(item.occurredAt).toLocaleString("nb-NO")}</dd>
@@ -186,6 +260,7 @@ function EntrySheet({
           </dl>
           {(editComment.error || deleteEvent.error) && <InlineError>{(editComment.error ?? deleteEvent.error)?.message}</InlineError>}
           <div className="flex flex-wrap gap-2">
+            {canCorrect && <Button icon="edit" onClick={() => setCorrecting(true)}>Korriger</Button>}
             {item.comment && canEdit && draft === null && (
               <Button icon="edit" onClick={() => setDraft(item.comment?.body ?? "")}>
                 Rediger
@@ -212,7 +287,7 @@ function EntrySheet({
               </Button>
             )}
           </div>
-        </div>
+        </div>}
       </BottomSheet>
       <ConfirmDialog
         open={confirming}

@@ -8,7 +8,7 @@ Implementert i `src/design-system/`. Bygger på §23–33 i implementasjonspakke
 - Interaktive flater er minst 44 px høye (`min-h-11`); primærknapper på bryggedagen er 56 px (`size="lg"`).
 - Viktige tall er store og bruker `tabular` (tabular-nums) så de ikke hopper.
 - Én primær handling per område. Avanserte detaljer bak «Hvorfor?» / «Se beregninger» (progressive disclosure).
-- Farge brukes aldri alene: statuschips har alltid tekst og ikon (✓ OK, ↑ Høy, ↓ Lav, ⏱ Ikke målt).
+- Farge brukes aldri alene: statuschips har alltid tekst og ikon (✓ OK, ↑ Høy, ↓ Lav, ⚠ Usikker, ⏱ Ikke målt).
 
 ## Tokens
 
@@ -53,8 +53,9 @@ Form (§30): `rounded-sm` 8, `rounded-md` 12, `rounded-card` 16, `rounded-full` 
 ## Tall og enheter
 
 - `parseDecimal` godtar norsk desimalkomma («66,5»).
+- `MeasurementInput` lar bryggeren velge enhet ved siden av tallet og viser samtidig lagret kanonisk verdi.
 - SG skrives med punktum (1.061); «1061» eller «61» tolkes som 1.061 i måleinput.
-- Brix viser live «≈ SG» med bryggeriets refraktometer-WCF.
+- Brix før gjæring viser live «≈ SG» med bryggeriets refraktometer-WCF; etter gjæring kreves opprinnelig Brix og resultatet merkes som beregnet.
 
 ## Tilgjengelighet
 

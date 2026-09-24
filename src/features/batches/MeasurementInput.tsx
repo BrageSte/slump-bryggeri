@@ -1,26 +1,35 @@
 import { useId, useState, type FormEvent } from "react";
-import { brixToSg } from "../../domain/brewing-calculations/index.ts";
-import type { TargetValue } from "../../domain/brew-day/state.ts";
+import {
+  brixToSg,
+  defaultMeasurementUnit,
+  measurementFromCanonical,
+  measurementToCanonical,
+  measurementUnitOptions,
+  refractometerFinalGravity,
+} from "../../domain/brewing-calculations/index.ts";
+import { compareMeasurementToTarget, type TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchSplit } from "../../domain/model/api.ts";
-import { measurementKindSpecs, type MeasurementKind } from "../../domain/model/brewing.ts";
-import { Button, cx, Field, InlineError, parseDecimal, TargetStatusChip, TextInput } from "../../design-system/index.ts";
+import { commonPhStripIntervals, fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
+import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
-import { formatMeasurement, formatTarget, normalizeMeasurementValue } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
 
 export interface MeasurementSubmit {
   kind: MeasurementKind;
   value: number;
+  valueMin?: number;
+  valueMax?: number;
   unit?: string;
   label?: string;
+  instrument?: string | null;
+  stage: BrewStage | null;
   splitId: string | null;
   measuredAt?: number;
   comment?: string;
 }
 
-function evaluate(kind: MeasurementKind, target: TargetValue, value: number) {
-  if (target.kind === "range") return value < target.min ? "low" : value > target.max ? "high" : "ok";
-  const tolerance = measurementKindSpecs[kind].tolerance;
-  return value < target.value - tolerance ? "low" : value > target.value + tolerance ? "high" : "ok";
+function formatPh(value: number): string {
+  return value.toLocaleString("nb-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 /**
@@ -29,6 +38,8 @@ function evaluate(kind: MeasurementKind, target: TargetValue, value: number) {
  */
 export function MeasurementInput({
   kind,
+  stage,
+  originalBrix,
   label: presetLabel,
   target,
   previous,
@@ -37,45 +48,112 @@ export function MeasurementInput({
   defaultSplitId = null,
   submitting,
   error,
+  submitLabel,
+  initial,
   onSubmit,
 }: {
   kind: MeasurementKind;
+  stage: BrewStage | null;
   label?: string;
   target?: TargetValue;
   previous?: { value: number; occurredAt: number } | null;
   wcf?: number;
+  originalBrix?: number;
   splits?: BatchSplit[];
   defaultSplitId?: string | null;
   submitting?: boolean;
   error?: string | null;
+  submitLabel?: string;
+  initial?: {
+    value: number;
+    enteredValue: number;
+    enteredUnit: string;
+    valueMin: number | null;
+    valueMax: number | null;
+    occurredAt: number;
+    splitId: string | null;
+    label: string | null;
+    comment: string | null;
+    instrument: string | null;
+  };
   onSubmit: (value: MeasurementSubmit) => void;
 }) {
   const spec = measurementKindSpecs[kind];
   const valueId = useId();
-  const [raw, setRaw] = useState("");
-  const [customUnit, setCustomUnit] = useState("");
-  const [label, setLabel] = useState(presetLabel ?? "");
-  const [comment, setComment] = useState("");
-  const [showMore, setShowMore] = useState(false);
-  const [customTime, setCustomTime] = useState<string | null>(null);
-  const [splitId, setSplitId] = useState<string | null>(defaultSplitId);
+  const unitId = useId();
+  const [raw, setRaw] = useState(() => initial ? String(initial.enteredValue) : "");
+  const [unit, setUnit] = useState(() => {
+    if (initial?.enteredUnit && measurementUnitOptions[kind].includes(initial.enteredUnit)) return initial.enteredUnit;
+    return defaultMeasurementUnit(kind);
+  });
+  const [customUnit, setCustomUnit] = useState(initial && kind === "custom" ? initial.enteredUnit : "");
+  const [phMode, setPhMode] = useState<"point" | "strips">(() =>
+    initial ? initial.valueMin !== null && initial.valueMax !== null ? "strips" : "point" : "strips",
+  );
+  const [stripMinRaw, setStripMinRaw] = useState(initial?.valueMin == null ? "" : String(initial.valueMin));
+  const [stripMaxRaw, setStripMaxRaw] = useState(initial?.valueMax == null ? "" : String(initial.valueMax));
+  const [selectedStripRange, setSelectedStripRange] = useState<string | null>(() => {
+    const range = commonPhStripIntervals.find((candidate) => candidate.min === initial?.valueMin && candidate.max === initial?.valueMax);
+    return range ? `${range.min.toFixed(1)}-${range.max.toFixed(1)}` : null;
+  });
+  const [label, setLabel] = useState(initial?.label ?? presetLabel ?? "");
+  const [comment, setComment] = useState(initial?.comment ?? "");
+  const [showMore, setShowMore] = useState(Boolean(initial?.comment));
+  const [customTime, setCustomTime] = useState<string | null>(initial ? toDateTimeLocal(initial.occurredAt) : null);
+  const [splitId, setSplitId] = useState<string | null>(initial?.splitId ?? defaultSplitId);
   const [validation, setValidation] = useState<string | null>(null);
 
   const parsed = parseDecimal(raw);
-  const value = parsed === undefined || Number.isNaN(parsed) ? undefined : normalizeMeasurementValue(kind, parsed);
-  const inRange = value !== undefined && value >= spec.min && value <= spec.max;
+  const isPhStrips = kind === "ph" && phMode === "strips";
+  const stripMin = parseDecimal(stripMinRaw);
+  const stripMax = parseDecimal(stripMaxRaw);
+  const hasPhRange = isPhStrips && stripMin !== undefined && stripMax !== undefined && !Number.isNaN(stripMin) && !Number.isNaN(stripMax);
+  const intervalMin = hasPhRange ? stripMin : undefined;
+  const intervalMax = hasPhRange ? stripMax : undefined;
+  const typedValue = isPhStrips ? hasPhRange ? (stripMin + stripMax) / 2 : undefined : parsed;
+  const enteredValue = typedValue === undefined || Number.isNaN(typedValue)
+    ? undefined
+    : kind === "sg" && unit === "SG"
+      ? normalizeMeasurementValue(kind, typedValue)
+      : typedValue;
+  const value = enteredValue === undefined
+    ? undefined
+    : kind === "custom"
+      ? enteredValue
+      : measurementToCanonical(kind, enteredValue, unit) ?? undefined;
+  const orderedPhRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin <= intervalMax);
+  const boundsInRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin >= spec.min && intervalMax <= spec.max);
+  const inRange = value !== undefined && value >= spec.min && value <= spec.max && orderedPhRange && boundsInRange;
+  const fermentationStarted = fermentationHasStarted(stage);
+  const brixEstimate = kind !== "brix" || value === undefined || !inRange
+    ? undefined
+    : fermentationStarted
+      ? originalBrix === undefined
+        ? undefined
+        : refractometerFinalGravity({ originalBrix, finalBrix: value, wcf })
+      : brixToSg(value, wcf);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    if (value === undefined) return setValidation("Skriv inn en verdi.");
-    if (!inRange) return setValidation(`Verdien må være mellom ${spec.min} og ${spec.max}.`);
+    if (isPhStrips && !hasPhRange) return setValidation("Velg eller skriv inn et pH-intervall.");
+    if (isPhStrips && !orderedPhRange) return setValidation("Fra-verdien må være lik eller lavere enn til-verdien.");
+    if (enteredValue === undefined) return setValidation("Skriv inn en verdi.");
+    if (!inRange) {
+      const min = kind === "custom" ? spec.min : measurementFromCanonical(kind, spec.min, unit) ?? spec.min;
+      const max = kind === "custom" ? spec.max : measurementFromCanonical(kind, spec.max, unit) ?? spec.max;
+      return setValidation(`Verdien må være mellom ${formatMeasurementInUnit(kind, min, unit)} og ${formatMeasurementInUnit(kind, max, unit)} ${unit}.`);
+    }
     if (kind === "custom" && (!customUnit.trim() || !label.trim())) return setValidation("Egendefinerte målinger trenger navn og enhet.");
     setValidation(null);
     onSubmit({
       kind,
-      value,
-      unit: kind === "custom" ? customUnit.trim() : undefined,
+      value: enteredValue,
+      valueMin: isPhStrips ? intervalMin : undefined,
+      valueMax: isPhStrips ? intervalMax : undefined,
+      unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
+      instrument: isPhStrips ? "pH-strips" : initial?.instrument ?? null,
+      stage,
       splitId,
       measuredAt: customTime ? new Date(customTime).getTime() : undefined,
       comment: comment.trim() || undefined,
@@ -93,11 +171,72 @@ export function MeasurementInput({
         </div>
       )}
 
-      <div>
+      {kind === "ph" && (
+        <div role="group" aria-label="pH-registrering" className="grid grid-cols-2 gap-2">
+          {(["point", "strips"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={phMode === mode}
+              onClick={() => {
+                setPhMode(mode);
+                setValidation(null);
+              }}
+              className={cx(
+                "min-h-11 rounded-md border px-3 text-small font-semibold",
+                phMode === mode ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface",
+              )}
+            >
+              {mode === "point" ? "Enkeltverdi" : "Intervall (strips)"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isPhStrips && (
+        <fieldset className="space-y-3">
+          <legend className="mb-2 text-small font-semibold">Intervall fra pH-strips</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {commonPhStripIntervals.map((range) => {
+              const key = `${range.min.toFixed(1)}-${range.max.toFixed(1)}`;
+              const selected = selectedStripRange === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => {
+                    setStripMinRaw(range.min.toFixed(1));
+                    setStripMaxRaw(range.max.toFixed(1));
+                    setSelectedStripRange(key);
+                    setValidation(null);
+                  }}
+                  className={cx(
+                    "min-h-11 rounded-md border px-2 text-small font-semibold tabular",
+                    selected ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface",
+                  )}
+                >
+                  {formatPh(range.min)}–{formatPh(range.max)}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Fra pH">
+              {(p) => <TextInput {...p} inputMode="decimal" value={stripMinRaw} onChange={(event) => { setStripMinRaw(event.target.value); setSelectedStripRange(null); }} placeholder="5,8" />}
+            </Field>
+            <Field label="Til pH">
+              {(p) => <TextInput {...p} inputMode="decimal" value={stripMaxRaw} onChange={(event) => { setStripMaxRaw(event.target.value); setSelectedStripRange(null); }} placeholder="6,0" />}
+            </Field>
+          </div>
+        </fieldset>
+      )}
+
+      {!isPhStrips && <div>
         <label htmlFor={valueId} className="sr-only">
           {spec.label}
         </label>
-        <div className="flex items-baseline gap-2 rounded-card border-2 border-border bg-surface px-4 py-2 focus-within:border-primary-strong">
+        <div className="flex items-center gap-2 rounded-card border-2 border-border bg-surface px-3 py-2 focus-within:border-primary-strong">
           <input
             id={valueId}
             autoFocus
@@ -107,34 +246,64 @@ export function MeasurementInput({
             value={raw}
             onChange={(e) => setRaw(e.target.value)}
             placeholder={kind === "sg" ? "1.050" : "0"}
-            className="tabular min-w-0 flex-1 bg-transparent text-display font-bold tracking-tight outline-none placeholder:text-muted/40"
+            className="tabular min-w-0 flex-1 bg-transparent px-1 text-display font-bold tracking-tight outline-none placeholder:text-muted/40"
           />
-          <span className="text-section font-semibold text-muted">{kind === "custom" ? customUnit : spec.unit}</span>
+          {kind === "custom" ? (
+            <span className="max-w-24 truncate text-section font-semibold text-muted">{customUnit}</span>
+          ) : measurementUnitOptions[kind].length === 1 ? (
+            <span className="shrink-0 text-section font-semibold text-muted">{unit}</span>
+          ) : (
+            <>
+              <label htmlFor={unitId} className="sr-only">Måleenhet</label>
+              <Select
+                id={unitId}
+                aria-label="Måleenhet"
+                className="w-24 shrink-0 px-2 text-small font-semibold"
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+              >
+                {measurementUnitOptions[kind].map((option) => <option key={option} value={option}>{option}</option>)}
+              </Select>
+            </>
+          )}
         </div>
         <div className="mt-2 flex min-h-7 flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted">
           {target && (
             <span className="tabular">
-              Mål <strong className="text-text">{formatTarget(kind, target)}</strong>
+              Mål <strong className="text-text">{formatTargetInUnit(kind, target, unit)}</strong>
             </span>
           )}
-          {target && value !== undefined && inRange && <TargetStatusChip status={evaluate(kind, target, value)} />}
-          {kind === "brix" && value !== undefined && inRange && (
+          {target && value !== undefined && inRange && <TargetStatusChip status={compareMeasurementToTarget(kind, target, { value, valueMin: intervalMin, valueMax: intervalMax })} />}
+          {kind !== "custom" && unit !== spec.unit && value !== undefined && inRange && (
+            <span className="tabular">{formatMeasurementInUnit(kind, enteredValue ?? value, unit)} {unit} = {formatMeasurement(kind, value)} {spec.unit}</span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && !fermentationStarted && (
+            <span className="tabular">≈ SG <strong className="text-text">{formatSg(brixEstimate ?? 0)}</strong>{wcf !== 1 && ` (WCF ${wcf})`}</span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && fermentationStarted && originalBrix !== undefined && (
             <span className="tabular">
-              ≈ SG <strong className="text-text">{formatSg(brixToSg(value, wcf))}</strong>
-              {wcf !== 1 && ` (WCF ${wcf})`}
+              FG-anslag <strong className="text-text">{formatSg(brixEstimate ?? 0)}</strong> · Terrill 2011 · WCF {wcf};
+              usikkerhet avhenger av WCF og målerens nøyaktighet
             </span>
+          )}
+          {kind === "brix" && value !== undefined && inRange && fermentationStarted && originalBrix === undefined && (
+            <span>SG etter gjæring krever en målt Brix-verdi fra før gjæring.</span>
           )}
           {previous && (
             <button
               type="button"
               className="tabular min-h-7 underline decoration-dotted underline-offset-4"
-              onClick={() => setRaw(formatMeasurement(kind, previous.value))}
+              onClick={() => {
+                const previousValue = kind === "custom" ? previous.value : measurementFromCanonical(kind, previous.value, unit) ?? previous.value;
+                setRaw(formatMeasurementInUnit(kind, previousValue, unit));
+              }}
             >
-              Forrige: {formatMeasurement(kind, previous.value)} ({formatLogTime(previous.occurredAt)})
+              Forrige: {formatMeasurementInUnit(kind, kind === "custom" ? previous.value : measurementFromCanonical(kind, previous.value, unit) ?? previous.value, unit)} {unit} ({formatLogTime(previous.occurredAt)})
             </button>
           )}
         </div>
       </div>
+      }
 
       {splits.length > 0 && (
         <fieldset>
@@ -189,7 +358,7 @@ export function MeasurementInput({
 
       {(validation || error) && <InlineError>{validation ?? error}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={submitting}>
-        Logg {spec.label.toLowerCase()}
+        {submitLabel ?? `Logg ${spec.label.toLowerCase()}`}
       </Button>
     </form>
   );
