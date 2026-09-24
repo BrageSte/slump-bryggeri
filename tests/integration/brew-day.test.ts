@@ -143,7 +143,7 @@ describe("collaborative brew day", () => {
     });
     expect(timeline.body.find((event) => event.id === gallons.body.id)?.measurement).toMatchObject({
       kind: "volume",
-      value: expect.closeTo(79.4948, 3),
+      value: expect.closeTo(79.4936, 3),
       unit: "L",
       enteredValue: 21,
       enteredUnit: "US gal",
