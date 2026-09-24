@@ -11,6 +11,7 @@ import { inviteEmail, sendEmail } from "../auth/email.ts";
 import type { AppEnv } from "../lib/context.ts";
 import { requireMember } from "../lib/middleware.ts";
 import { parseJsonBody } from "../lib/validate.ts";
+import { exportBrewery } from "../services/brewery-export.ts";
 import { attachmentRoutes } from "./attachments.ts";
 import { batchRoutes } from "./batches.ts";
 import { recipeRoutes } from "./recipes.ts";
@@ -48,6 +49,13 @@ export const breweryRoutes = new Hono<AppEnv>()
     const { name } = await parseJsonBody(c, createBrewerySchema);
     await renameBrewery(c.var.db, c.var.membership, name);
     return c.body(null, 204);
+  })
+  .get("/:breweryId/export", admin, async (c) => {
+    const backup = await exportBrewery(c.var.db, c.var.membership.breweryId);
+    const date = new Date(backup.exportedAt).toISOString().slice(0, 10);
+    return c.json(backup, 200, {
+      "Content-Disposition": `attachment; filename="slump-bryggeri-backup-${date}.json"`,
+    });
   })
 
   // Members and invites (admin)

@@ -29,6 +29,9 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 | `npm run deploy` | Bygg og deploy til Cloudflare (se [docs/architecture.md](docs/architecture.md#deploy-cloudflare)) |
 | `npm run icons` | Generer PWA-ikoner på nytt |
 
+Administratorer kan laste ned en versjonert JSON-sikkerhetskopi under **Mer → Eksport**. Vedleggsmetadata og
+nedlastingslenker følger med; bilde- og PDF-bytes gjør det ikke, og gjenoppretting støttes ikke ennå.
+
 ## Status
 
 | Fase | Innhold | Status |

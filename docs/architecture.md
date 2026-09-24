@@ -108,6 +108,16 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
 
+## Bryggeri-eksport
+
+Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker
+`c.var.membership.breweryId` etter `requireMember("admin")` og returnerer formatet
+`slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
+bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
+batcher/snapshots/splits og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og credentials er ikke
+med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger fortsatt i objektlageret.
+Resultattabellen er en tom liste fram til M4 legger til batchresultater. Gjenoppretting støttes ikke ennå.
+
 ## Oppskriftsbibliotek
 
 Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkbart bibliotek.

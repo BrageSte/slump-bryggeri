@@ -7,6 +7,7 @@ import { BatchPage } from "../features/batches/BatchPage.tsx";
 import { BrewPage } from "../features/batches/BrewPage.tsx";
 import { BreweryModePage } from "../features/breweries/BreweryModePage.tsx";
 import { OnboardingPage } from "../features/breweries/OnboardingPage.tsx";
+import { ExportPage } from "../features/breweries/ExportPage.tsx";
 import { InventoryPage } from "../features/inventory/InventoryPage.tsx";
 import { ImportRecipePage } from "../features/recipes/ImportRecipePage.tsx";
 import { LibraryRecipePage } from "../features/recipes/LibraryRecipePage.tsx";
@@ -61,6 +62,7 @@ export const router = createBrowserRouter([
           { path: "assistent", element: <AssistantPage /> },
           { path: "mer", element: <MorePage /> },
           { path: "mer/medlemmer", lazy: members },
+          { path: "mer/eksport", element: <ExportPage /> },
           { path: "mer/utstyr", lazy: equipment },
           { path: "mer/kalibrering", lazy: calibration },
           { path: "mer/innstillinger", lazy: settings },
