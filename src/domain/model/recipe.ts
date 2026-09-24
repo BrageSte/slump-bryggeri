@@ -84,6 +84,10 @@ export const mashStepSchema = z.object({
   name,
   temperatureC: z.number().min(0).max(100),
   durationMin: z.number().min(0).max(600),
+  /** Planned water added in this step (strike or step infusion), when the source states it. */
+  infusionL: z.number().min(0).max(10_000).optional(),
+  /** Planned temperature of that infusion water, e.g. BeerSmith's strike temperature. */
+  infusionTemperatureC: z.number().min(0).max(100).optional(),
   notes: note,
 });
 
@@ -121,6 +125,8 @@ export const recipeDocumentSchema = z.object({
   /** Brewhouse efficiency the recipe was designed for. */
   efficiencyPct: z.number().min(1).max(100),
   spargeTemperatureC: z.number().min(0).max(100).optional(),
+  /** Planned carbonation in volumes of CO₂. */
+  carbonationVols: z.number().min(0).max(6).optional(),
   fermentables: z.array(fermentableSchema).max(50),
   hops: z.array(hopAdditionSchema).max(100),
   cultures: z.array(cultureSchema).max(20),
