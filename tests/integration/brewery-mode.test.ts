@@ -68,7 +68,7 @@ describe("brewery mode (no accounts)", () => {
     expect(me.status).toBe(200);
     expect(me.body.user).toMatchObject({ id: brageId, name: "Brage", email: "" });
     expect(me.body.memberships).toEqual([{
-      brewery: { id: expect.any(String), name: "Slump Bryggeri", unitPreference: "metric" },
+      brewery: { id: expect.any(String), name: "Slump Bryggeri" },
       role: "admin",
     }]);
   });

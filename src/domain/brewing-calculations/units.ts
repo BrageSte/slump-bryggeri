@@ -1,6 +1,7 @@
 export const LITERS_PER_US_GALLON = 3.785411784;
 export const GRAMS_PER_OUNCE = 28.349523125;
 export const KG_PER_POUND = 0.45359237;
+export const PSI_PER_BAR = 14.503773773;
 
 export function usGallonsToLiters(gallons: number): number {
   return gallons * LITERS_PER_US_GALLON;

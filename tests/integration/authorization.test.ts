@@ -141,7 +141,6 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.post(`/breweries/${breweryB}/batches/${batchA}/stage`, { stage: "boil" }),
       bob.delete(`/breweries/${breweryB}/batches/${batchA}/events/${eventA}`),
       bob.post(`/breweries/${breweryA}/invites`, { email: bob.email, role: "admin" }),
-      bob.patch(`/breweries/${breweryA}/settings`, { unitPreference: "us_volume" }),
       bob.post(`/breweries/${breweryA}/equipment-profile/versions`, { values: {} }),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
@@ -156,19 +155,6 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect(invite.status).toBe(201);
     expect((await bob.post(`/invites/${invite.body.id}/accept`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryA}`)).status).toBe(404);
-  });
-
-  it("lets admins set shared brewery measurement units", async () => {
-    expect((await alice.patch(`/breweries/${breweryA}/settings`, { unitPreference: "us_volume" })).status).toBe(204);
-    expect((await alice.get(`/breweries/${breweryA}`)).body.unitPreference).toBe("us_volume");
-    const me = await alice.get("/me");
-    expect(me.body.memberships.find((membership: { brewery: { id: string } }) => membership.brewery.id === breweryA).brewery.unitPreference).toBe("us_volume");
-
-    const member = await createUser("PreferenceMember");
-    await addMember(alice, breweryA, member);
-    expect((await member.get(`/breweries/${breweryA}`)).body.unitPreference).toBe("us_volume");
-    expect((await member.patch(`/breweries/${breweryA}/settings`, { unitPreference: "metric" })).status).toBe(403);
-    expect((await alice.patch(`/breweries/${breweryA}/settings`, { unitPreference: "imperial" })).status).toBe(400);
   });
 
   it("restricts admin actions to admins", async () => {

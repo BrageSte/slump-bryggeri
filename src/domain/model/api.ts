@@ -8,8 +8,6 @@ import {
   type BatchStatus,
   type BrewStage,
   type MeasurementKind,
-  type MeasurementUnitPreference,
-  measurementUnitPreferenceSchema,
 } from "./brewing.ts";
 import { equipmentKinds, type ProfileValues } from "./equipment-profile.ts";
 import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
@@ -34,7 +32,7 @@ export interface ApiError {
 // --- Me / breweries --------------------------------------------------------
 
 export interface Membership {
-  brewery: { id: string; name: string; unitPreference: MeasurementUnitPreference };
+  brewery: { id: string; name: string };
   role: Role;
 }
 
@@ -92,13 +90,10 @@ export interface BreweryDetail {
   id: string;
   name: string;
   myRole: Role;
-  unitPreference: MeasurementUnitPreference;
   members: BreweryMember[];
   /** Only included for admins. */
   invites: BreweryInvite[] | null;
 }
-
-export const updateBreweryUnitPreferenceSchema = z.object({ unitPreference: measurementUnitPreferenceSchema });
 
 export const createInviteSchema = z.object({
   email: z.email("Ugyldig e-postadresse").transform((e) => e.trim().toLowerCase()),

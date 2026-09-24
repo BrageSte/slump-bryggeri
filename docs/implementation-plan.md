@@ -126,7 +126,7 @@ oppretter resultattabellen. Auth-sesjoner og credentials eksporteres ikke.
 
 ## M2 — Enheter, pH-strips og nødvendige rettelser
 
-### M2.1 Skriv inn i gallons, °F, oz … (B4)
+### M2.1 Metrisk standard med valgfrie inntastingsenheter (B4)
 
 - [x] Enhetskatalog per målingstype og rene konverteringer i `brewing-calculations`: L ↔ US gal,
       °C ↔ °F, g/kg ↔ oz/lb, bar ↔ psi, SG ↔ °Plato og Brix ↔ SG. For Brix etter gjærstart
@@ -135,16 +135,16 @@ oppretter resultattabellen. Auth-sesjoner og credentials eksporteres ikke.
 - [x] API: `createMeasurementSchema` tar `value` + `unit` i en hvilken som helst støttet enhet for typen.
       **Serveren** konverterer til kanonisk verdi (lagres i `value/unit`) og lagrer det som ble skrevet inn.
       Ukjent enhet → 400.
-- [x] `MeasurementInput`: enhetsvalg ved siden av tallet (f.eks. «L | gal», «°C | °F»), norsk desimalkomma, live omregning
-      («20,0 gal = 75,7 L»). Sist brukte enhet huskes per type og enhet (lokalt).
-- [x] Bryggeri-innstilling (admin, Mer → Innstillinger): standard visningsenheter for bryggeriet (metrisk / US volum / blandet).
-      Loggen viser det som ble skrevet inn, med omregning i parentes: «20,0 gal (75,7 L)».
+- [x] `MeasurementInput`: enhetsvalg ved siden av tallet starter alltid metrisk (f.eks. «L | US gal», «°C | °F»), norsk desimalkomma,
+      live omregning («21 US gal = 79,5 L»). Valgt enhet gjelder bare gjeldende inntasting og lagres ikke.
+- [x] Ingen bryggeri-preferanse for enheter; standarden er metrisk. Loggen viser det som ble skrevet inn,
+      med omregning i parentes: «21,0 US gal (79,5 L)».
 - [x] «Omregner» (arket fra bryggedagen og Mer): gal↔L, °F↔°C, oz↔g, lb↔kg, psi↔bar, Brix↔SG (med WCF), °P↔SG.
 - [x] Tester: domene (konvertering), integrasjon (gal inn → L lagret, begge returneres), UI-logikk.
 
-Gjort 2026-09-24. Bryggeriet lagrer standardvalg `metric`, `us_volume` eller `mixed`.
-Etter gjæringsstart vises Brix-avledet SG bare når en Brix-måling før gjæring finnes; resultatet merkes
-som estimat med Terrill-metode, WCF og en forklaring av usikkerheten.
+Gjort 2026-09-24. Målinger lagres metrisk, mens brukeren kan velge en inntastingsenhet for ett enkelt
+innslag. Det valget lagres ikke. Etter gjæringsstart vises Brix-avledet SG bare når en Brix-måling før
+gjæring finnes; resultatet merkes som estimat med Terrill-metode, WCF og en forklaring av usikkerheten.
 
 **Akseptanse:** På bryggedagen kan man logge «19,0 US gal», se kanoniske liter og fortsatt finne
 originaltallet. Avledet SG fra gjæret Brix fremstår ikke som direkte målt SG.

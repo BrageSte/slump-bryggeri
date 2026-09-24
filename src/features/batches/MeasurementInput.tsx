@@ -12,8 +12,6 @@ import type { BatchSplit } from "../../domain/model/api.ts";
 import { fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
 import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
-import { storage } from "../../lib/storage.ts";
-import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
 
 export interface MeasurementSubmit {
@@ -64,15 +62,10 @@ export function MeasurementInput({
   onSubmit: (value: MeasurementSubmit) => void;
 }) {
   const spec = measurementKindSpecs[kind];
-  const { unitPreference } = useBrewery();
   const valueId = useId();
   const unitId = useId();
-  const unitStorageKey = `slump.measurementUnit.${kind}`;
   const [raw, setRaw] = useState("");
-  const [unit, setUnit] = useState(() => {
-    const saved = storage.get(unitStorageKey);
-    return saved && measurementUnitOptions[kind].includes(saved) ? saved : defaultMeasurementUnit(kind, unitPreference);
-  });
+  const [unit, setUnit] = useState(() => defaultMeasurementUnit(kind));
   const [customUnit, setCustomUnit] = useState("");
   const [label, setLabel] = useState(presetLabel ?? "");
   const [comment, setComment] = useState("");
@@ -160,10 +153,7 @@ export function MeasurementInput({
                 aria-label="Måleenhet"
                 className="w-24 shrink-0 px-2 text-small font-semibold"
                 value={unit}
-                onChange={(event) => {
-                  setUnit(event.target.value);
-                  storage.set(unitStorageKey, event.target.value);
-                }}
+                onChange={(event) => setUnit(event.target.value)}
               >
                 {measurementUnitOptions[kind].map((option) => <option key={option} value={option}>{option}</option>)}
               </Select>

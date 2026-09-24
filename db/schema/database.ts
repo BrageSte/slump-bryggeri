@@ -20,7 +20,6 @@ export interface BreweriesTable {
   created_at: number;
   updated_at: number;
   deleted_at: number | null;
-  unit_preference: "metric" | "us_volume" | "mixed";
 }
 
 export interface BreweryMembersTable {

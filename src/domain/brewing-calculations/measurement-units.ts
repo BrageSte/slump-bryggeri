@@ -1,4 +1,4 @@
-import type { MeasurementKind, MeasurementUnitPreference } from "../model/brewing.ts";
+import type { MeasurementKind } from "../model/brewing.ts";
 import {
   brixToSg,
   refractometerBrixFromFinalGravity,
@@ -7,7 +7,7 @@ import {
   sgToPlato,
   platoToSg,
 } from "./gravity.ts";
-import { celsiusToFahrenheit, fahrenheitToCelsius, kgToPounds, usGallonsToLiters, litersToUsGallons, ouncesToGrams, gramsToOunces, KG_PER_POUND } from "./units.ts";
+import { celsiusToFahrenheit, fahrenheitToCelsius, kgToPounds, usGallonsToLiters, litersToUsGallons, ouncesToGrams, gramsToOunces, KG_PER_POUND, PSI_PER_BAR } from "./units.ts";
 
 export const measurementUnitOptions: Record<MeasurementKind, readonly string[]> = {
   temperature: ["°C", "°F"],
@@ -21,18 +21,12 @@ export const measurementUnitOptions: Record<MeasurementKind, readonly string[]> 
   custom: [],
 };
 
-const defaultUnits: Record<MeasurementUnitPreference, Partial<Record<MeasurementKind, string>>> = {
-  metric: {},
-  us_volume: { temperature: "°F", volume: "US gal", pressure: "psi", weight: "lb" },
-  mixed: { volume: "US gal" },
-};
-
 export function isSupportedMeasurementUnit(kind: MeasurementKind, unit: string): boolean {
   return kind === "custom" ? unit.trim().length > 0 : measurementUnitOptions[kind].includes(unit);
 }
 
-export function defaultMeasurementUnit(kind: MeasurementKind, preference: MeasurementUnitPreference): string {
-  return defaultUnits[preference][kind] ?? measurementUnitOptions[kind][0] ?? "";
+export function defaultMeasurementUnit(kind: MeasurementKind): string {
+  return measurementUnitOptions[kind][0] ?? "";
 }
 
 /** Converts a user-entered measurement to the canonical unit stored in `measurements.value/unit`. */
@@ -49,7 +43,7 @@ export function measurementToCanonical(kind: MeasurementKind, value: number, uni
       if (unit === "lb") return value * KG_PER_POUND * 1000;
       return value;
     case "pressure":
-      return unit === "psi" ? value / 14.503773773 : value;
+      return unit === "psi" ? value / PSI_PER_BAR : value;
     case "sg":
       return unit === "°P" ? platoToSg(value) : value;
     default:
@@ -71,7 +65,7 @@ export function measurementFromCanonical(kind: MeasurementKind, value: number, u
       if (unit === "lb") return kgToPounds(value / 1000);
       return value;
     case "pressure":
-      return unit === "psi" ? value * 14.503773773 : value;
+      return unit === "psi" ? value * PSI_PER_BAR : value;
     case "sg":
       return unit === "°P" ? sgToPlato(value) : value;
     default:

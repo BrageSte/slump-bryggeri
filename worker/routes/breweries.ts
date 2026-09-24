@@ -4,7 +4,6 @@ import {
   createInviteSchema,
   createProfileVersionSchema,
   equipmentInputSchema,
-  updateBreweryUnitPreferenceSchema,
   updateMemberSchema,
 } from "../../src/domain/model/api.ts";
 import { appBaseUrl } from "../auth/auth.ts";
@@ -24,7 +23,6 @@ import {
   renameBrewery,
   revokeInvite,
   updateMemberRole,
-  updateBreweryUnitPreference,
 } from "../services/breweries.ts";
 import {
   createEquipment,
@@ -50,11 +48,6 @@ export const breweryRoutes = new Hono<AppEnv>()
   .patch("/:breweryId", admin, async (c) => {
     const { name } = await parseJsonBody(c, createBrewerySchema);
     await renameBrewery(c.var.db, c.var.membership, name);
-    return c.body(null, 204);
-  })
-  .patch("/:breweryId/settings", admin, async (c) => {
-    const { unitPreference } = await parseJsonBody(c, updateBreweryUnitPreferenceSchema);
-    await updateBreweryUnitPreference(c.var.db, c.var.membership, unitPreference);
     return c.body(null, 204);
   })
   .get("/:breweryId/export", admin, async (c) => {

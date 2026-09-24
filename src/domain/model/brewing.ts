@@ -111,10 +111,6 @@ export const measurementKinds = [
 export type MeasurementKind = (typeof measurementKinds)[number];
 export const measurementKindSchema = z.enum(measurementKinds);
 
-export const measurementUnitPreferences = ["metric", "us_volume", "mixed"] as const;
-export type MeasurementUnitPreference = (typeof measurementUnitPreferences)[number];
-export const measurementUnitPreferenceSchema = z.enum(measurementUnitPreferences);
-
 export interface MeasurementKindSpec {
   label: string;
   /** Canonical unit stored in the database. `null` means free text (custom). */

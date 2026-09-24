@@ -31,10 +31,11 @@ describe("measurement unit conversion", () => {
     expect(convertUnitValue(finalGravity as number, "SG", "°Bx", { fermentationStarted: true, originalBrix: 15, wcf: 1.04 })).toBeCloseTo(7.5, 6);
   });
 
-  it("rejects unsupported units and applies brewery defaults", () => {
+  it("rejects unsupported units and starts every input in metric", () => {
     expect(isSupportedMeasurementUnit("temperature", "°K")).toBe(false);
     expect(measurementToCanonical("volume", 10, "bar")).toBeNull();
-    expect(defaultMeasurementUnit("volume", "us_volume")).toBe("US gal");
-    expect(defaultMeasurementUnit("temperature", "mixed")).toBe("°C");
+    expect(defaultMeasurementUnit("volume")).toBe("L");
+    expect(defaultMeasurementUnit("temperature")).toBe("°C");
+    expect(defaultMeasurementUnit("weight")).toBe("g");
   });
 });
