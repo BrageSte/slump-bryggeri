@@ -7,9 +7,9 @@ import {
   measurementUnitOptions,
   refractometerFinalGravity,
 } from "../../domain/brewing-calculations/index.ts";
-import type { TargetValue } from "../../domain/brew-day/state.ts";
+import { compareMeasurementToTarget, type TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchSplit } from "../../domain/model/api.ts";
-import { fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
+import { commonPhStripIntervals, fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
 import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
 import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
@@ -17,17 +17,18 @@ import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normali
 export interface MeasurementSubmit {
   kind: MeasurementKind;
   value: number;
+  valueMin?: number;
+  valueMax?: number;
   unit?: string;
   label?: string;
+  instrument?: string | null;
   splitId: string | null;
   measuredAt?: number;
   comment?: string;
 }
 
-function evaluate(kind: MeasurementKind, target: TargetValue, value: number) {
-  if (target.kind === "range") return value < target.min ? "low" : value > target.max ? "high" : "ok";
-  const tolerance = measurementKindSpecs[kind].tolerance;
-  return value < target.value - tolerance ? "low" : value > target.value + tolerance ? "high" : "ok";
+function formatPh(value: number): string {
+  return value.toLocaleString("nb-NO", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 }
 
 /**
@@ -67,6 +68,10 @@ export function MeasurementInput({
   const [raw, setRaw] = useState("");
   const [unit, setUnit] = useState(() => defaultMeasurementUnit(kind));
   const [customUnit, setCustomUnit] = useState("");
+  const [phMode, setPhMode] = useState<"meter" | "strips">("meter");
+  const [stripMinRaw, setStripMinRaw] = useState("");
+  const [stripMaxRaw, setStripMaxRaw] = useState("");
+  const [selectedStripRange, setSelectedStripRange] = useState<string | null>(null);
   const [label, setLabel] = useState(presetLabel ?? "");
   const [comment, setComment] = useState("");
   const [showMore, setShowMore] = useState(false);
@@ -75,17 +80,26 @@ export function MeasurementInput({
   const [validation, setValidation] = useState<string | null>(null);
 
   const parsed = parseDecimal(raw);
-  const enteredValue = parsed === undefined || Number.isNaN(parsed)
+  const isPhStrips = kind === "ph" && phMode === "strips";
+  const stripMin = parseDecimal(stripMinRaw);
+  const stripMax = parseDecimal(stripMaxRaw);
+  const hasPhRange = isPhStrips && stripMin !== undefined && stripMax !== undefined && !Number.isNaN(stripMin) && !Number.isNaN(stripMax);
+  const intervalMin = hasPhRange ? stripMin : undefined;
+  const intervalMax = hasPhRange ? stripMax : undefined;
+  const typedValue = isPhStrips ? hasPhRange ? (stripMin + stripMax) / 2 : undefined : parsed;
+  const enteredValue = typedValue === undefined || Number.isNaN(typedValue)
     ? undefined
     : kind === "sg" && unit === "SG"
-      ? normalizeMeasurementValue(kind, parsed)
-      : parsed;
+      ? normalizeMeasurementValue(kind, typedValue)
+      : typedValue;
   const value = enteredValue === undefined
     ? undefined
     : kind === "custom"
       ? enteredValue
       : measurementToCanonical(kind, enteredValue, unit) ?? undefined;
-  const inRange = value !== undefined && value >= spec.min && value <= spec.max;
+  const orderedPhRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin <= intervalMax);
+  const boundsInRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin >= spec.min && intervalMax <= spec.max);
+  const inRange = value !== undefined && value >= spec.min && value <= spec.max && orderedPhRange && boundsInRange;
   const fermentationStarted = fermentationHasStarted(stage);
   const brixEstimate = kind !== "brix" || value === undefined || !inRange
     ? undefined
@@ -97,6 +111,8 @@ export function MeasurementInput({
 
   function submit(event: FormEvent) {
     event.preventDefault();
+    if (isPhStrips && !hasPhRange) return setValidation("Velg eller skriv inn et pH-intervall.");
+    if (isPhStrips && !orderedPhRange) return setValidation("Fra-verdien må være lik eller lavere enn til-verdien.");
     if (enteredValue === undefined) return setValidation("Skriv inn en verdi.");
     if (!inRange) {
       const min = kind === "custom" ? spec.min : measurementFromCanonical(kind, spec.min, unit) ?? spec.min;
@@ -108,8 +124,11 @@ export function MeasurementInput({
     onSubmit({
       kind,
       value: enteredValue,
+      valueMin: isPhStrips ? intervalMin : undefined,
+      valueMax: isPhStrips ? intervalMax : undefined,
       unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
+      instrument: kind === "ph" ? isPhStrips ? "pH-strips" : "pH-meter" : undefined,
       splitId,
       measuredAt: customTime ? new Date(customTime).getTime() : undefined,
       comment: comment.trim() || undefined,
@@ -127,7 +146,68 @@ export function MeasurementInput({
         </div>
       )}
 
-      <div>
+      {kind === "ph" && (
+        <div role="group" aria-label="pH-målemetode" className="grid grid-cols-2 gap-2">
+          {(["meter", "strips"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              aria-pressed={phMode === mode}
+              onClick={() => {
+                setPhMode(mode);
+                setValidation(null);
+              }}
+              className={cx(
+                "min-h-11 rounded-md border px-3 text-small font-semibold",
+                phMode === mode ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface",
+              )}
+            >
+              {mode === "meter" ? "pH-meter" : "pH-strips"}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {isPhStrips && (
+        <fieldset className="space-y-3">
+          <legend className="mb-2 text-small font-semibold">Intervall fra pH-strips</legend>
+          <div className="grid grid-cols-3 gap-2">
+            {commonPhStripIntervals.map((range) => {
+              const key = `${range.min.toFixed(1)}-${range.max.toFixed(1)}`;
+              const selected = selectedStripRange === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={selected}
+                  onClick={() => {
+                    setStripMinRaw(range.min.toFixed(1));
+                    setStripMaxRaw(range.max.toFixed(1));
+                    setSelectedStripRange(key);
+                    setValidation(null);
+                  }}
+                  className={cx(
+                    "min-h-11 rounded-md border px-2 text-small font-semibold tabular",
+                    selected ? "border-primary bg-primary-soft text-primary-strong" : "border-border bg-surface",
+                  )}
+                >
+                  {formatPh(range.min)}–{formatPh(range.max)}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Fra pH">
+              {(p) => <TextInput {...p} inputMode="decimal" value={stripMinRaw} onChange={(event) => { setStripMinRaw(event.target.value); setSelectedStripRange(null); }} placeholder="5,8" />}
+            </Field>
+            <Field label="Til pH">
+              {(p) => <TextInput {...p} inputMode="decimal" value={stripMaxRaw} onChange={(event) => { setStripMaxRaw(event.target.value); setSelectedStripRange(null); }} placeholder="6,0" />}
+            </Field>
+          </div>
+        </fieldset>
+      )}
+
+      {!isPhStrips && <div>
         <label htmlFor={valueId} className="sr-only">
           {spec.label}
         </label>
@@ -145,6 +225,8 @@ export function MeasurementInput({
           />
           {kind === "custom" ? (
             <span className="max-w-24 truncate text-section font-semibold text-muted">{customUnit}</span>
+          ) : measurementUnitOptions[kind].length === 1 ? (
+            <span className="shrink-0 text-section font-semibold text-muted">{unit}</span>
           ) : (
             <>
               <label htmlFor={unitId} className="sr-only">Måleenhet</label>
@@ -166,7 +248,7 @@ export function MeasurementInput({
               Mål <strong className="text-text">{formatTargetInUnit(kind, target, unit)}</strong>
             </span>
           )}
-          {target && value !== undefined && inRange && <TargetStatusChip status={evaluate(kind, target, value)} />}
+          {target && value !== undefined && inRange && <TargetStatusChip status={compareMeasurementToTarget(kind, target, { value, valueMin: intervalMin, valueMax: intervalMax })} />}
           {kind !== "custom" && unit !== spec.unit && value !== undefined && inRange && (
             <span className="tabular">{formatMeasurementInUnit(kind, enteredValue ?? value, unit)} {unit} = {formatMeasurement(kind, value)} {spec.unit}</span>
           )}
@@ -196,6 +278,7 @@ export function MeasurementInput({
           )}
         </div>
       </div>
+      }
 
       {splits.length > 0 && (
         <fieldset>

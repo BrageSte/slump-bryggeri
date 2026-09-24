@@ -11,7 +11,14 @@ export function toBrewDayLog(items: TimelineItem[]): BrewDayLogEntry[] {
     stage: item.stage,
     occurredAt: item.occurredAt,
     data: item.data,
-    measurement: item.measurement ? { kind: item.measurement.kind, value: item.measurement.value } : null,
+    measurement: item.measurement
+      ? {
+          kind: item.measurement.kind,
+          value: item.measurement.value,
+          valueMin: item.measurement.valueMin,
+          valueMax: item.measurement.valueMax,
+        }
+      : null,
   }));
 }
 
@@ -36,6 +43,11 @@ export function formatMeasurementInUnit(kind: MeasurementKind, value: number, un
   if (unit === "SG") return formatSg(value);
   const decimals = unit === "pH" ? 2 : ["°P", "°Bx", "°C", "°F", "US gal", "kg", "oz", "lb", "psi"].includes(unit) ? 1 : measurementKindSpecs[kind].decimals;
   return formatNumber(value, decimals);
+}
+
+export function formatMeasurementRange(kind: MeasurementKind, min: number, max: number, unit: string): string {
+  if (kind === "ph") return `${formatNumber(min, 1)}–${formatNumber(max, 1)}`;
+  return `${formatMeasurementInUnit(kind, min, unit)}–${formatMeasurementInUnit(kind, max, unit)}`;
 }
 
 export function formatTarget(kind: MeasurementKind, target: TargetValue): string {

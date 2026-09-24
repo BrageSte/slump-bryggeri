@@ -8,7 +8,7 @@ Implementert i `src/design-system/`. Bygger på §23–33 i implementasjonspakke
 - Interaktive flater er minst 44 px høye (`min-h-11`); primærknapper på bryggedagen er 56 px (`size="lg"`).
 - Viktige tall er store og bruker `tabular` (tabular-nums) så de ikke hopper.
 - Én primær handling per område. Avanserte detaljer bak «Hvorfor?» / «Se beregninger» (progressive disclosure).
-- Farge brukes aldri alene: statuschips har alltid tekst og ikon (✓ OK, ↑ Høy, ↓ Lav, ⏱ Ikke målt).
+- Farge brukes aldri alene: statuschips har alltid tekst og ikon (✓ OK, ↑ Høy, ↓ Lav, ⚠ Usikker, ⏱ Ikke målt).
 
 ## Tokens
 

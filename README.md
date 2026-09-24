@@ -33,8 +33,9 @@ Administratorer kan laste ned en versjonert JSON-sikkerhetskopi under **Mer → 
 nedlastingslenker følger med; bilde- og PDF-bytes gjør det ikke, og gjenoppretting støttes ikke ennå.
 
 Målinger lagres metrisk. Måleinput starter alltid med metriske enheter, men lar deg velge en annen enhet for
-den aktuelle inntastingen og viser omregningen med én gang. Valget huskes ikke. Omregneren er tilgjengelig
-fra **Mer** og målearket på bryggedagen.
+den aktuelle inntastingen og viser omregningen med én gang. Valget huskes ikke. pH-strips logges som intervall;
+delvis overlapp med målet vises som **Usikker**. Omregneren er tilgjengelig fra **Mer** og målearket på
+bryggedagen.
 
 ## Status
 

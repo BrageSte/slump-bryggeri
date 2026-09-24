@@ -5,7 +5,7 @@ import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasSta
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
 import { formatAmount, formatLogTime, formatSg } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
-import { formatMeasurement, formatMeasurementInUnit } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementInUnit, formatMeasurementRange } from "./helpers.ts";
 
 function iconFor(item: TimelineItem): IconName {
   if (item.measurement) {
@@ -35,10 +35,12 @@ function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: 
         : `≈ SG ${formatSg(brixToSg(m.value, wcf))} · WCF ${wcf}`;
     return {
       title: m.kind === "custom" ? kindLabel : m.label ? `${kindLabel} · ${m.label}` : kindLabel,
-      value: formatMeasurementInUnit(m.kind, m.enteredValue, m.enteredUnit),
+      value: m.valueMin !== null && m.valueMin !== undefined && m.valueMax !== null && m.valueMax !== undefined
+        ? formatMeasurementRange(m.kind, m.valueMin, m.valueMax, m.enteredUnit)
+        : formatMeasurementInUnit(m.kind, m.enteredValue, m.enteredUnit),
       // Don't repeat the unit when it is also the label ("5,34 pH pH").
       unit: m.enteredUnit === kindLabel ? undefined : m.enteredUnit,
-      detail: [canonicalDetail, brixDetail, m.comment].filter(Boolean).join(" · ") || undefined,
+      detail: [canonicalDetail, brixDetail, m.instrument ? `Instrument: ${m.instrument}` : null, m.comment].filter(Boolean).join(" · ") || undefined,
     };
   }
   if (item.comment) return { title: item.comment.body };

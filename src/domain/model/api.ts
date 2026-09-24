@@ -304,6 +304,8 @@ export interface TimelineMeasurement {
   unit: string;
   enteredValue: number;
   enteredUnit: string;
+  valueMin: number | null;
+  valueMax: number | null;
   sampleTempC: number | null;
   instrument: string | null;
   comment: string | null;
@@ -343,6 +345,8 @@ const optionalTimestamp = z.number().int().positive().optional();
 export const createMeasurementSchema = z.object({
   kind: measurementKindSchema,
   value: z.number().finite(),
+  valueMin: z.number().finite().optional(),
+  valueMax: z.number().finite().optional(),
   /** Required for `custom`; otherwise the canonical unit for the kind is used. */
   unit: z.string().trim().min(1).max(20).optional(),
   label: z.string().trim().max(80).optional(),
@@ -352,6 +356,18 @@ export const createMeasurementSchema = z.object({
   sampleTempC: z.number().min(-10).max(110).nullable().optional(),
   instrument: z.string().trim().max(80).nullable().optional(),
   comment: z.string().trim().max(1000).nullable().optional(),
+}).superRefine((input, ctx) => {
+  const hasMin = input.valueMin !== undefined;
+  const hasMax = input.valueMax !== undefined;
+  if (hasMin !== hasMax) {
+    ctx.addIssue({ code: "custom", path: [hasMin ? "valueMax" : "valueMin"], message: "Et pH-intervall må ha både fra- og tilverdi." });
+  }
+  if ((hasMin || hasMax) && input.kind !== "ph") {
+    ctx.addIssue({ code: "custom", path: ["valueMin"], message: "Intervall støttes bare for pH." });
+  }
+  if (hasMin && hasMax && input.valueMin! > input.valueMax!) {
+    ctx.addIssue({ code: "custom", path: ["valueMax"], message: "Tilverdien må være lik eller større enn fraverdien." });
+  }
 });
 
 export const createCommentSchema = z.object({

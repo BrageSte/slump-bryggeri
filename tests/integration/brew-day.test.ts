@@ -148,6 +148,19 @@ describe("collaborative brew day", () => {
       enteredValue: 21,
       enteredUnit: "US gal",
     });
+    const strips = await kari.post(path, { kind: "ph", value: 5.3, valueMin: 5.8, valueMax: 6.0, instrument: "pH-strips" });
+    expect(strips.status).toBe(201);
+    const withStrips = await kari.get<TimelineItem[]>(`${base}/batches/${batchId}/timeline`);
+    expect(withStrips.body.find((event) => event.id === strips.body.id)?.measurement).toMatchObject({
+      kind: "ph",
+      value: 5.9,
+      enteredValue: 5.9,
+      valueMin: 5.8,
+      valueMax: 6,
+      instrument: "pH-strips",
+    });
+    expect((await kari.post(path, { kind: "ph", value: 5.9, valueMin: 6.0, valueMax: 5.8, instrument: "pH-strips" })).status).toBe(400);
+    expect((await kari.post(path, { kind: "temperature", value: 66, valueMin: 65, valueMax: 67 })).status).toBe(400);
     expect((await kari.post(path, { kind: "volume", value: 10, unit: "imperial gallons" })).status).toBe(400);
     expect((await kari.post(path, { kind: "custom", value: 3 })).status).toBe(400);
     expect((await kari.post(path, { kind: "custom", value: 3, unit: "ppm", label: "Oppløst O2" })).status).toBe(201);

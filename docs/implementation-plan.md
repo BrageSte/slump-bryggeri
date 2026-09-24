@@ -151,11 +151,13 @@ originaltallet. Avledet SG fra gjæret Brix fremstår ikke som direkte målt SG.
 
 ### M2.2 pH med strips (B9)
 
-- [ ] pH-måling kan registreres som **intervall** («5,8–6,0») med instrument «pH-strips», eller som enkeltverdi (pH-meter).
-- [ ] Migrasjon: `measurements.value_min`, `measurements.value_max` (NULL for enkeltverdier). `value` = midtpunkt.
-- [ ] Målsammenligning: intervall helt innenfor mål → OK; delvis overlapp → ny status «Usikker» (egen chip, ikke bare farge);
+- [x] pH-måling kan registreres som **intervall** («5,8–6,0») med instrument «pH-strips», eller som enkeltverdi (pH-meter).
+- [x] Migrasjon: `measurements.value_min`, `measurements.value_max` (NULL for enkeltverdier). `value` = midtpunkt.
+- [x] Målsammenligning: intervall helt innenfor mål → OK; delvis overlapp → ny status «Usikker» (egen chip, ikke bare farge);
       utenfor → Høy/Lav. Oppdater `deriveBrewDayState` + tester.
-- [ ] Input: hurtigvalg for vanlige strip-intervaller (5,0–5,2 … 6,0–6,2) og fritt intervall.
+- [x] Input: hurtigvalg for vanlige strip-intervaller (5,0–5,2 … 6,0–6,2) og fritt intervall.
+
+Gjort 2026-09-24. API-et lagrer `value` som midtpunkt og beholder intervallet og instrumentet i tidslinjen.
 
 ### M2.3 Trygg korrigering av feilregistreringer (B8)
 

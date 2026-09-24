@@ -112,6 +112,8 @@ Målinger lagrer både kanonisk `value/unit` og `entered_value/entered_unit`, sl
 liter/°C/g/bar/SG samtidig som loggen viser det bryggeren skrev. Måleinput starter alltid metrisk; en annen
 valgt enhet gjelder bare for den aktuelle inntastingen og lagres ikke som en preferanse. Brix fra gjæring får bare
 et avledet FG når batchloggen inneholder en Brix-måling før gjæring; resultatet merkes som estimat.
+Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggedagens målstatus sammenligner
+hele intervallet og viser «Usikker» når det bare overlapper målet delvis.
 
 ## Bryggeri-eksport
 

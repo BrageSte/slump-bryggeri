@@ -75,8 +75,11 @@ function useBatchMutation<TInput, TResult = unknown>(
 export interface MeasurementInput {
   kind: MeasurementKind;
   value: number;
+  valueMin?: number;
+  valueMax?: number;
   unit?: string;
   label?: string;
+  instrument?: string | null;
   stage?: BrewStage | null;
   splitId?: string | null;
   measuredAt?: number;
@@ -106,8 +109,10 @@ export function useLogMeasurement(batchId: string, currentUser: { id: string; na
           unit: spec.unit ?? enteredUnit,
           enteredValue: input.value,
           enteredUnit,
+          valueMin: input.valueMin ?? null,
+          valueMax: input.valueMax ?? null,
           sampleTempC: null,
-          instrument: null,
+          instrument: input.instrument ?? null,
           comment: input.comment ?? null,
         },
         comment: null,

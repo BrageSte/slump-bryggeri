@@ -32,7 +32,7 @@ import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
 import { BrewLog } from "./BrewLog.tsx";
-import { formatMeasurement, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
+import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
 
 function useNow(intervalMs: number): number {
@@ -327,7 +327,11 @@ function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (in
               label={target.label}
               unit={target.unit}
               target={formatTarget(target.measurementKind, target.target)}
-              actual={target.actual ? formatMeasurement(target.measurementKind, target.actual.value) : null}
+              actual={target.actual
+                ? target.actual.valueMin !== undefined && target.actual.valueMax !== undefined
+                  ? formatMeasurementRange(target.measurementKind, target.actual.valueMin, target.actual.valueMax, target.unit)
+                  : formatMeasurement(target.measurementKind, target.actual.value)
+                : null}
               status={target.status}
               detail={target.actual?.derivedFrom === "brix" ? "fra Brix" : undefined}
               action={

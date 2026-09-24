@@ -23,11 +23,11 @@ export interface BrewDayLogEntry {
   stage: BrewStage | null;
   occurredAt: number;
   data: Record<string, unknown> | null;
-  measurement: { kind: MeasurementKind; value: number } | null;
+  measurement: { kind: MeasurementKind; value: number; valueMin?: number | null; valueMax?: number | null } | null;
 }
 
 export type TargetValue = { kind: "value"; value: number } | { kind: "range"; min: number; max: number };
-export type TargetStatus = "ok" | "low" | "high" | "missing";
+export type TargetStatus = "ok" | "low" | "high" | "uncertain" | "missing";
 
 export interface StageTarget {
   key: string;
@@ -35,7 +35,7 @@ export interface StageTarget {
   label: string;
   target: TargetValue;
   unit: string;
-  actual: { value: number; occurredAt: number; derivedFrom?: "brix" } | null;
+  actual: { value: number; occurredAt: number; valueMin?: number; valueMax?: number; derivedFrom?: "brix" } | null;
   status: TargetStatus;
 }
 
@@ -268,15 +268,27 @@ function plannedAdditions(
   return additions.sort((a, b) => a.dueAt - b.dueAt);
 }
 
-function evaluate(kind: MeasurementKind, target: TargetValue, value: number): TargetStatus {
+export function compareMeasurementToTarget(
+  kind: MeasurementKind,
+  target: TargetValue,
+  actual: { value: number; valueMin?: number | null; valueMax?: number | null },
+): TargetStatus {
+  const targetTolerance = target.kind === "value" ? measurementKindSpecs[kind].tolerance : 0;
+  const targetMin = target.kind === "range" ? target.min : target.value - targetTolerance;
+  const targetMax = target.kind === "range" ? target.max : target.value + targetTolerance;
+  if (actual.valueMin !== undefined && actual.valueMin !== null && actual.valueMax !== undefined && actual.valueMax !== null) {
+    if (actual.valueMin >= targetMin && actual.valueMax <= targetMax) return "ok";
+    if (actual.valueMax < targetMin) return "low";
+    if (actual.valueMin > targetMax) return "high";
+    return "uncertain";
+  }
   if (target.kind === "range") {
-    if (value < target.min) return "low";
-    if (value > target.max) return "high";
+    if (actual.value < target.min) return "low";
+    if (actual.value > target.max) return "high";
     return "ok";
   }
-  const tolerance = measurementKindSpecs[kind].tolerance;
-  if (value < target.value - tolerance) return "low";
-  if (value > target.value + tolerance) return "high";
+  if (actual.value < targetMin) return "low";
+  if (actual.value > targetMax) return "high";
   return "ok";
 }
 
@@ -315,11 +327,18 @@ function stageTargets(
       target,
       unit: measurementKindSpecs[measurementKind].unit ?? "",
       actual,
-      status: actual === null ? "missing" : evaluate(measurementKind, target, actual.value),
+      status: actual === null ? "missing" : compareMeasurementToTarget(measurementKind, target, actual),
     });
   };
   const actualOf = (entry: BrewDayLogEntry | undefined): StageTarget["actual"] =>
-    entry?.measurement ? { value: entry.measurement.value, occurredAt: entry.occurredAt } : null;
+    entry?.measurement
+      ? {
+          value: entry.measurement.value,
+          valueMin: entry.measurement.valueMin ?? undefined,
+          valueMax: entry.measurement.valueMax ?? undefined,
+          occurredAt: entry.occurredAt,
+        }
+      : null;
 
   switch (stage) {
     case "mash": {
