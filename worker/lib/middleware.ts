@@ -55,14 +55,19 @@ export function requireMember(minimumRole: "member" | "admin" = "member") {
     const membership = await c.var.db
       .selectFrom("brewery_members as m")
       .innerJoin("breweries as b", "b.id", "m.brewery_id")
-      .select(["m.role", "b.name"])
+      .select(["m.role", "b.name", "b.unit_preference"])
       .where("m.brewery_id", "=", breweryId)
       .where("m.user_id", "=", c.var.user.id)
       .where("b.deleted_at", "is", null)
       .executeTakeFirst();
     if (!membership) throw notFound("Bryggeriet");
     if (minimumRole === "admin" && membership.role !== "admin") throw forbidden("Dette krever administrator-tilgang.");
-    c.set("membership", { breweryId, breweryName: membership.name, role: membership.role });
+    c.set("membership", {
+      breweryId,
+      breweryName: membership.name,
+      role: membership.role,
+      unitPreference: membership.unit_preference,
+    });
     await next();
   });
 }

@@ -14,6 +14,10 @@ export function ouncesToGrams(ounces: number): number {
   return ounces * GRAMS_PER_OUNCE;
 }
 
+export function gramsToOunces(grams: number): number {
+  return grams / GRAMS_PER_OUNCE;
+}
+
 export function poundsToKg(pounds: number): number {
   return pounds * KG_PER_POUND;
 }

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BatchDetail, BatchSummary, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
+import { measurementToCanonical } from "../../domain/brewing-calculations/measurement-units.ts";
 import type { BatchStatus, BrewStage, MeasurementKind } from "../../domain/model/brewing.ts";
+import { measurementKindSpecs } from "../../domain/model/brewing.ts";
 import { api } from "../../lib/api.ts";
 import { breweryKey } from "../breweries/api.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
@@ -83,28 +85,35 @@ export interface MeasurementInput {
 
 export function useLogMeasurement(batchId: string, currentUser: { id: string; name: string }) {
   return useBatchMutation(batchId, (base, input: MeasurementInput) => api.post<CreatedResponse>(`${base}/measurements`, input), {
-    optimistic: (input) => ({
-      id: `optimistic-${Date.now()}`,
-      type: "measurement",
-      stage: input.stage ?? null,
-      splitId: input.splitId ?? null,
-      occurredAt: input.measuredAt ?? Date.now(),
-      createdAt: Date.now(),
-      createdBy: currentUser,
-      data: null,
-      measurement: {
-        id: "optimistic",
-        kind: input.kind,
-        label: input.label ?? null,
-        value: input.value,
-        unit: input.unit ?? "",
-        sampleTempC: null,
-        instrument: null,
-        comment: input.comment ?? null,
-      },
-      comment: null,
-      attachment: null,
-    }),
+    optimistic: (input) => {
+      const spec = measurementKindSpecs[input.kind];
+      const enteredUnit = input.unit ?? spec.unit ?? "";
+      const canonicalValue = spec.unit === null ? input.value : measurementToCanonical(input.kind, input.value, enteredUnit) ?? input.value;
+      return {
+        id: `optimistic-${Date.now()}`,
+        type: "measurement",
+        stage: input.stage ?? null,
+        splitId: input.splitId ?? null,
+        occurredAt: input.measuredAt ?? Date.now(),
+        createdAt: Date.now(),
+        createdBy: currentUser,
+        data: null,
+        measurement: {
+          id: "optimistic",
+          kind: input.kind,
+          label: input.label ?? null,
+          value: canonicalValue,
+          unit: spec.unit ?? enteredUnit,
+          enteredValue: input.value,
+          enteredUnit,
+          sampleTempC: null,
+          instrument: null,
+          comment: input.comment ?? null,
+        },
+        comment: null,
+        attachment: null,
+      };
+    },
   });
 }
 

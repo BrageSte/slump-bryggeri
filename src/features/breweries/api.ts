@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { BreweryDetail, CreatedResponse, Role } from "../../domain/model/api.ts";
+import type { MeasurementUnitPreference } from "../../domain/model/brewing.ts";
 import { api } from "../../lib/api.ts";
 import { meQueryKey } from "../auth/session.ts";
 import { useBrewery } from "./BreweryContext.tsx";
@@ -55,3 +56,5 @@ export const useUpdateMemberRole = () =>
   useBreweryMutation((id, input: { userId: string; role: Role }) => api.patch(`/breweries/${id}/members/${input.userId}`, { role: input.role }));
 export const useRemoveMember = () => useBreweryMutation((id, userId: string) => api.delete(`/breweries/${id}/members/${userId}`));
 export const useRenameBrewery = () => useBreweryMutation((id, name: string) => api.patch(`/breweries/${id}`, { name }));
+export const useUpdateBreweryUnitPreference = () =>
+  useBreweryMutation((id, unitPreference: MeasurementUnitPreference) => api.patch(`/breweries/${id}/settings`, { unitPreference }));

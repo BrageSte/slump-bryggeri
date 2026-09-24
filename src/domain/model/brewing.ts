@@ -46,6 +46,10 @@ export function nextStage(stage: BrewStage | null): BrewStage | null {
   return brewStages[index + 1] ?? null;
 }
 
+export function fermentationHasStarted(stage: BrewStage | null): boolean {
+  return stage === "fermentation" || stage === "conditioning" || stage === "packaging";
+}
+
 /** Event type recorded when a stage starts, e.g. `boil_started`. */
 export function stageStartedEventType(stage: BrewStage): string {
   return `${stage}_started`;
@@ -106,6 +110,10 @@ export const measurementKinds = [
 ] as const;
 export type MeasurementKind = (typeof measurementKinds)[number];
 export const measurementKindSchema = z.enum(measurementKinds);
+
+export const measurementUnitPreferences = ["metric", "us_volume", "mixed"] as const;
+export type MeasurementUnitPreference = (typeof measurementUnitPreferences)[number];
+export const measurementUnitPreferenceSchema = z.enum(measurementUnitPreferences);
 
 export interface MeasurementKindSpec {
   label: string;

@@ -1,12 +1,15 @@
 import { useState, type FormEvent } from "react";
-import { Button, Card, Field, InlineError, PageHeader, SegmentedControl, TextInput, useToast } from "../design-system/index.ts";
+import { Button, Card, Field, InlineError, PageHeader, Select, SegmentedControl, TextInput, useToast } from "../design-system/index.ts";
 import { useMe } from "../features/auth/session.ts";
-import { useUpdateMyName } from "../features/breweries/api.ts";
+import { useUpdateBreweryUnitPreference, useUpdateMyName } from "../features/breweries/api.ts";
+import { useBrewery } from "../features/breweries/BreweryContext.tsx";
 import { getThemePreference, setThemePreference, type ThemePreference } from "../lib/theme.ts";
 
 export function SettingsPage() {
   const me = useMe();
+  const { isAdmin, unitPreference } = useBrewery();
   const updateName = useUpdateMyName();
+  const updateUnits = useUpdateBreweryUnitPreference();
   const toast = useToast();
   const [name, setName] = useState(me.data?.user.name ?? "");
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
@@ -29,6 +32,35 @@ export function SettingsPage() {
             Lagre
           </Button>
         </form>
+      </Card>
+      <Card className="space-y-3">
+        <h2 className="font-semibold">Måleenheter</h2>
+        {isAdmin ? (
+          <Field label="Standard for bryggeriet" hint="Brukes som startvalg når noen logger en måling.">
+            {(p) => (
+              <Select
+                {...p}
+                value={unitPreference}
+                disabled={updateUnits.isPending}
+                onChange={(event) =>
+                  updateUnits.mutate(event.target.value as typeof unitPreference, {
+                    onSuccess: () => toast("Standardmåleenheter oppdatert"),
+                  })
+                }
+              >
+                <option value="metric">Metrisk</option>
+                <option value="us_volume">US-enheter</option>
+                <option value="mixed">Blandet (°C og US gal)</option>
+              </Select>
+            )}
+          </Field>
+        ) : (
+          <p className="text-small text-muted">
+            Standard: {unitPreference === "metric" ? "Metrisk" : unitPreference === "us_volume" ? "US-enheter" : "Blandet (°C og US gal)"}.
+            Bare administratorer kan endre dette.
+          </p>
+        )}
+        {updateUnits.error && <InlineError>{updateUnits.error.message}</InlineError>}
       </Card>
       <Card className="space-y-3">
         <h2 className="font-semibold">Tema</h2>

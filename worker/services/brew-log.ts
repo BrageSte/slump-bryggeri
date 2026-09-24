@@ -12,6 +12,7 @@ import {
   type BrewStage,
   type MeasurementKind,
 } from "../../src/domain/model/brewing.ts";
+import { measurementFromCanonical, measurementToCanonical, isSupportedMeasurementUnit } from "../../src/domain/brewing-calculations/measurement-units.ts";
 import type { MembershipContext, SessionUser } from "../lib/context.ts";
 import { atomic, newId, parseJson, type DB } from "../lib/db.ts";
 import { badRequest, forbidden, HttpError, notFound } from "../lib/errors.ts";
@@ -49,6 +50,8 @@ export async function getTimeline(db: DB, breweryId: string, batchId: string): P
       "m.label as m_label",
       "m.value as m_value",
       "m.unit as m_unit",
+      "m.entered_value as m_entered_value",
+      "m.entered_unit as m_entered_unit",
       "m.sample_temp_c as m_sample_temp_c",
       "m.instrument as m_instrument",
       "m.comment as m_comment",
@@ -87,6 +90,8 @@ export async function getTimeline(db: DB, breweryId: string, batchId: string): P
             label: r.m_label,
             value: r.m_value as number,
             unit: r.m_unit as string,
+            enteredValue: r.m_entered_value ?? (r.m_value as number),
+            enteredUnit: r.m_entered_unit ?? (r.m_unit as string),
             sampleTempC: r.m_sample_temp_c,
             instrument: r.m_instrument,
             comment: r.m_comment,
@@ -152,19 +157,23 @@ export async function logMeasurement(
   await assertSplit(db, breweryId, batchId, input.splitId);
 
   const spec = measurementKindSpecs[input.kind];
-  if (input.value < spec.min || input.value > spec.max) {
+  const enteredUnit = spec.unit === null ? input.unit : input.unit ?? spec.unit;
+  if (!enteredUnit || !isSupportedMeasurementUnit(input.kind, enteredUnit)) {
+    throw badRequest(`Enheten støttes ikke for ${spec.label}.`);
+  }
+  const value = spec.unit === null ? input.value : measurementToCanonical(input.kind, input.value, enteredUnit);
+  if (value === null || value === undefined) throw badRequest(`Enheten støttes ikke for ${spec.label}.`);
+  if (value < spec.min || value > spec.max) {
+    const min = spec.unit === null ? spec.min : measurementFromCanonical(input.kind, spec.min, enteredUnit) ?? spec.min;
+    const max = spec.unit === null ? spec.max : measurementFromCanonical(input.kind, spec.max, enteredUnit) ?? spec.max;
     throw new HttpError(400, "validation_failed", "Verdien er utenfor gyldig område.", [
-      { path: "value", message: `Må være mellom ${spec.min} og ${spec.max}` },
+      {
+        path: "value",
+        message: `Må være mellom ${min.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} og ${max.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} ${enteredUnit}`,
+      },
     ]);
   }
-  let unit: string;
-  if (spec.unit === null) {
-    if (!input.unit) throw badRequest("Egendefinerte målinger må ha en enhet.");
-    unit = input.unit;
-  } else {
-    if (input.unit && input.unit !== spec.unit) throw badRequest(`${spec.label} lagres i ${spec.unit}.`);
-    unit = spec.unit;
-  }
+  const unit = spec.unit ?? enteredUnit;
 
   const now = Date.now();
   const occurredAt = input.measuredAt ?? now;
@@ -190,8 +199,10 @@ export async function logMeasurement(
       event_id: eventId,
       kind: input.kind,
       label: input.label ?? null,
-      value: input.value,
+      value,
       unit,
+      entered_value: input.value,
+      entered_unit: enteredUnit,
       stage,
       measured_at: occurredAt,
       sample_temp_c: input.sampleTempC ?? null,

@@ -129,7 +129,26 @@ describe("collaborative brew day", () => {
   it("validates measurement values and units", async () => {
     const path = `${base}/batches/${batchId}/measurements`;
     expect((await kari.post(path, { kind: "ph", value: 15 })).status).toBe(400);
-    expect((await kari.post(path, { kind: "temperature", value: 66, unit: "°F" })).status).toBe(400);
+    const fahrenheit = await kari.post(path, { kind: "temperature", value: 66, unit: "°F" });
+    expect(fahrenheit.status).toBe(201);
+    const gallons = await kari.post(path, { kind: "volume", value: 20, unit: "US gal" });
+    expect(gallons.status).toBe(201);
+    const timeline = await kari.get<TimelineItem[]>(`${base}/batches/${batchId}/timeline`);
+    expect(timeline.body.find((event) => event.id === fahrenheit.body.id)?.measurement).toMatchObject({
+      kind: "temperature",
+      value: expect.closeTo(18.8889, 3),
+      unit: "°C",
+      enteredValue: 66,
+      enteredUnit: "°F",
+    });
+    expect(timeline.body.find((event) => event.id === gallons.body.id)?.measurement).toMatchObject({
+      kind: "volume",
+      value: expect.closeTo(75.7082, 3),
+      unit: "L",
+      enteredValue: 20,
+      enteredUnit: "US gal",
+    });
+    expect((await kari.post(path, { kind: "volume", value: 10, unit: "imperial gallons" })).status).toBe(400);
     expect((await kari.post(path, { kind: "custom", value: 3 })).status).toBe(400);
     expect((await kari.post(path, { kind: "custom", value: 3, unit: "ppm", label: "Oppløst O2" })).status).toBe(201);
     expect((await kari.post(path, { kind: "sg", value: "1.061" })).status).toBe(400);

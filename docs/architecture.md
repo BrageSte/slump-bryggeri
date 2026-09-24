@@ -108,6 +108,11 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
 
+Målinger lagrer både kanonisk `value/unit` og `entered_value/entered_unit`, slik at API-et kan regne med
+liter/°C/g/bar/SG samtidig som loggen viser det bryggeren skrev. `breweries.unit_preference` deles mellom
+medlemmer (`metric`, `us_volume` eller `mixed`) og brukes som startvalg i måleinput. Brix fra gjæring får bare
+et avledet FG når batchloggen inneholder en Brix-måling før gjæring; resultatet merkes som estimat.
+
 ## Bryggeri-eksport
 
 Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker

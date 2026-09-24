@@ -128,19 +128,23 @@ oppretter resultattabellen. Auth-sesjoner og credentials eksporteres ikke.
 
 ### M2.1 Skriv inn i gallons, °F, oz … (B4)
 
-- [ ] Enhetskatalog per målingstype og rene konverteringer i `brewing-calculations`: L ↔ US gal,
+- [x] Enhetskatalog per målingstype og rene konverteringer i `brewing-calculations`: L ↔ US gal,
       °C ↔ °F, g/kg ↔ oz/lb, bar ↔ psi, SG ↔ °Plato og Brix ↔ SG. For Brix etter gjærstart
       kreves original-Brix og WCF; merk avledet SG med metode og usikkerhet. Test kjente tall/rundtur.
-- [ ] Migrasjon `0005_measurement_units.sql`: `measurements.entered_value REAL`, `measurements.entered_unit TEXT`.
-- [ ] API: `createMeasurementSchema` tar `value` + `unit` i en hvilken som helst støttet enhet for typen.
+- [x] Migrasjon `0005_measurement_units.sql`: `measurements.entered_value REAL`, `measurements.entered_unit TEXT`.
+- [x] API: `createMeasurementSchema` tar `value` + `unit` i en hvilken som helst støttet enhet for typen.
       **Serveren** konverterer til kanonisk verdi (lagres i `value/unit`) og lagrer det som ble skrevet inn.
       Ukjent enhet → 400.
-- [ ] `MeasurementInput`: enhetsvalg ved siden av tallet (f.eks. «L | gal», «°C | °F»), norsk desimalkomma, live omregning
+- [x] `MeasurementInput`: enhetsvalg ved siden av tallet (f.eks. «L | gal», «°C | °F»), norsk desimalkomma, live omregning
       («20,0 gal = 75,7 L»). Sist brukte enhet huskes per type og enhet (lokalt).
-- [ ] Bryggeri-innstilling (admin, Mer → Innstillinger): standard visningsenheter for bryggeriet (metrisk / US volum / blandet).
+- [x] Bryggeri-innstilling (admin, Mer → Innstillinger): standard visningsenheter for bryggeriet (metrisk / US volum / blandet).
       Loggen viser det som ble skrevet inn, med omregning i parentes: «20,0 gal (75,7 L)».
-- [ ] «Omregner» (arket fra bryggedagen og Mer): gal↔L, °F↔°C, oz↔g, lb↔kg, psi↔bar, Brix↔SG (med WCF), °P↔SG.
-- [ ] Tester: domene (konvertering), integrasjon (gal inn → L lagret, begge returneres), UI-logikk.
+- [x] «Omregner» (arket fra bryggedagen og Mer): gal↔L, °F↔°C, oz↔g, lb↔kg, psi↔bar, Brix↔SG (med WCF), °P↔SG.
+- [x] Tester: domene (konvertering), integrasjon (gal inn → L lagret, begge returneres), UI-logikk.
+
+Gjort 2026-09-24. Bryggeriet lagrer standardvalg `metric`, `us_volume` eller `mixed`.
+Etter gjæringsstart vises Brix-avledet SG bare når en Brix-måling før gjæring finnes; resultatet merkes
+som estimat med Terrill-metode, WCF og en forklaring av usikkerheten.
 
 **Akseptanse:** På bryggedagen kan man logge «19,0 US gal», se kanoniske liter og fortsatt finne
 originaltallet. Avledet SG fra gjæret Brix fremstår ikke som direkte målt SG.

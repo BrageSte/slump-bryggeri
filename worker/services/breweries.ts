@@ -3,6 +3,7 @@ import type {
   MeResponse,
   Role,
 } from "../../src/domain/model/api.ts";
+import type { MeasurementUnitPreference } from "../../src/domain/model/brewing.ts";
 import { defaultProfileValues } from "../../src/domain/model/equipment-profile.ts";
 import { publicEmail } from "../auth/brewery-mode.ts";
 import type { MembershipContext, SessionUser } from "../lib/context.ts";
@@ -23,7 +24,7 @@ export async function getMe(db: DB, sessionUser: SessionUser): Promise<MeRespons
     db
       .selectFrom("brewery_members as m")
       .innerJoin("breweries as b", "b.id", "m.brewery_id")
-      .select(["b.id", "b.name", "m.role"])
+      .select(["b.id", "b.name", "b.unit_preference", "m.role"])
       .where("m.user_id", "=", user.id)
       .where("b.deleted_at", "is", null)
       .orderBy("b.name")
@@ -44,7 +45,7 @@ export async function getMe(db: DB, sessionUser: SessionUser): Promise<MeRespons
   const memberOf = new Set(memberships.map((m) => m.id));
   return {
     user: { ...user, email: publicEmail(user.email) },
-    memberships: memberships.map((m) => ({ brewery: { id: m.id, name: m.name }, role: m.role })),
+    memberships: memberships.map((m) => ({ brewery: { id: m.id, name: m.name, unitPreference: m.unit_preference }, role: m.role })),
     pendingInvites: invites
       .filter((i) => !memberOf.has(i.brewery_id))
       .map((i) => ({
@@ -65,7 +66,14 @@ export async function createBrewery(d1: D1Database, db: DB, user: SessionUser, n
   const values = Object.entries(defaultProfileValues());
 
   await atomic(d1, [
-    db.insertInto("breweries").values({ id: breweryId, name, created_by: user.id, created_at: now, updated_at: now }),
+    db.insertInto("breweries").values({
+      id: breweryId,
+      name,
+      created_by: user.id,
+      created_at: now,
+      updated_at: now,
+      unit_preference: "metric",
+    }),
     db.insertInto("brewery_members").values({ brewery_id: breweryId, user_id: user.id, role: "admin", created_at: now }),
     db.insertInto("equipment_profiles").values({
       id: profileId,
@@ -118,10 +126,19 @@ export async function getBreweryDetail(db: DB, membership: MembershipContext): P
     id: membership.breweryId,
     name: membership.breweryName,
     myRole: membership.role,
+    unitPreference: membership.unitPreference,
     members: members.map((m) => ({ user: { id: m.id, name: m.name, email: publicEmail(m.email) }, role: m.role, joinedAt: m.created_at })),
     invites:
       invites?.map((i) => ({ id: i.id, email: i.email, role: i.role, createdAt: i.created_at, expiresAt: i.expires_at })) ?? null,
   };
+}
+
+export async function updateBreweryUnitPreference(db: DB, membership: MembershipContext, unitPreference: MeasurementUnitPreference): Promise<void> {
+  await db
+    .updateTable("breweries")
+    .set({ unit_preference: unitPreference, updated_at: Date.now() })
+    .where("id", "=", membership.breweryId)
+    .execute();
 }
 
 export async function createInvite(

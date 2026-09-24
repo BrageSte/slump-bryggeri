@@ -32,6 +32,10 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 Administratorer kan laste ned en versjonert JSON-sikkerhetskopi under **Mer → Eksport**. Vedleggsmetadata og
 nedlastingslenker følger med; bilde- og PDF-bytes gjør det ikke, og gjenoppretting støttes ikke ennå.
 
+Måleinput godtar metriske og amerikanske enheter, viser samtidig den kanoniske verdien og husker sist brukte
+enhet per målingstype. Administratorer velger bryggeriets standard under **Mer → Innstillinger**; omregneren
+er tilgjengelig fra **Mer** og målearket på bryggedagen.
+
 ## Status
 
 | Fase | Innhold | Status |

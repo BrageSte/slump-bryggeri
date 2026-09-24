@@ -67,7 +67,10 @@ describe("brewery mode (no accounts)", () => {
     const me = await phone.request<MeResponse>("GET", "/me");
     expect(me.status).toBe(200);
     expect(me.body.user).toMatchObject({ id: brageId, name: "Brage", email: "" });
-    expect(me.body.memberships).toEqual([{ brewery: { id: expect.any(String), name: "Slump Bryggeri" }, role: "admin" }]);
+    expect(me.body.memberships).toEqual([{
+      brewery: { id: expect.any(String), name: "Slump Bryggeri", unitPreference: "metric" },
+      role: "admin",
+    }]);
   });
 
   it("lets a second phone pick an existing person or add a new one as member", async () => {

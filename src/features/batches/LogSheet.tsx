@@ -5,6 +5,7 @@ import { eventTypeLabels, ingredientKinds, measurementKindSpecs, type BrewStage,
 import { BottomSheet, Button, cx, Field, Icon, InlineError, parseDecimal, Select, TextArea, TextInput, useToast, type IconName } from "../../design-system/index.ts";
 import { prepareImageForUpload } from "../../lib/image.ts";
 import { formatAmount } from "../../lib/format.ts";
+import { UnitConverter } from "./UnitConverter.tsx";
 import { useAddComment, useLogEvent, useLogMeasurement, useUploadPhoto } from "./api.ts";
 import { MeasurementInput } from "./MeasurementInput.tsx";
 
@@ -13,6 +14,7 @@ export type LogIntent =
   | { kind: "measurement"; measurementKind: MeasurementKind; label?: string; target?: TargetValue; previous?: { value: number; occurredAt: number } | null }
   | { kind: "comment" }
   | { kind: "photo" }
+  | { kind: "converter" }
   | { kind: "addition"; addition?: PlannedAddition }
   | { kind: "event" };
 
@@ -28,6 +30,7 @@ const menu: { label: string; icon: IconName; intent: LogIntent }[] = [
   { label: "Tilsetning", icon: "leaf", intent: { kind: "addition" } },
   { label: "Hendelse", icon: "flag", intent: { kind: "event" } },
   { label: "Annen måling", icon: "sliders", intent: { kind: "measurement", measurementKind: "custom" } },
+  { label: "Omregner", icon: "sliders", intent: { kind: "converter" } },
 ];
 
 function titleFor(intent: LogIntent): string {
@@ -44,12 +47,15 @@ function titleFor(intent: LogIntent): string {
       return "Tilsetning";
     case "event":
       return "Hendelse";
+    case "converter":
+      return "Omregner";
   }
 }
 
 export function LogSheet({
   batch,
   stage,
+  originalBrix,
   intent,
   onIntent,
   onClose,
@@ -58,6 +64,7 @@ export function LogSheet({
 }: {
   batch: BatchDetail;
   stage: BrewStage | null;
+  originalBrix?: number;
   intent: LogIntent | null;
   onIntent: (intent: LogIntent) => void;
   onClose: () => void;
@@ -89,9 +96,11 @@ export function LogSheet({
         <MeasurementInput
           key={intent.measurementKind + (intent.label ?? "")}
           kind={intent.measurementKind}
+          stage={stage}
           target={intent.target}
           previous={intent.previous}
           wcf={batch.equipmentSnapshot.values.refractometer_wcf ?? 1}
+          originalBrix={originalBrix}
           splits={batch.splits}
           submitting={logMeasurement.isPending}
           error={logMeasurement.error?.message}
@@ -115,6 +124,9 @@ export function LogSheet({
         <AdditionForm batch={batch} stage={stage} preset={intent.addition} pending={pendingAdditions} onDone={onClose} />
       )}
       {intent?.kind === "event" && <EventForm batch={batch} stage={stage} onDone={onClose} />}
+      {intent?.kind === "converter" && (
+        <UnitConverter initialWcf={batch.equipmentSnapshot.values.refractometer_wcf ?? 1} onBack={() => onIntent({ kind: "menu" })} />
+      )}
     </BottomSheet>
   );
 }

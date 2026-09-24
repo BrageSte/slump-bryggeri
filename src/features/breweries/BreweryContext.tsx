@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import type { Membership, Role } from "../../domain/model/api.ts";
+import type { MeasurementUnitPreference } from "../../domain/model/brewing.ts";
 import { storage } from "../../lib/storage.ts";
 
 const KEY = "slump.activeBrewery";
@@ -9,6 +10,7 @@ interface BreweryContextValue {
   breweryName: string;
   role: Role;
   isAdmin: boolean;
+  unitPreference: MeasurementUnitPreference;
   memberships: Membership[];
   switchBrewery: (id: string) => void;
 }
@@ -33,6 +35,7 @@ export function BreweryProvider({ memberships, children }: { memberships: Member
             breweryName: active.brewery.name,
             role: active.role,
             isAdmin: active.role === "admin",
+            unitPreference: active.brewery.unitPreference,
             memberships,
             switchBrewery,
           }
