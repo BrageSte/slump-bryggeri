@@ -253,18 +253,20 @@ export function MeasurementInput({
           ) : measurementUnitOptions[kind].length === 1 ? (
             <span className="shrink-0 text-section font-semibold text-muted">{unit}</span>
           ) : (
-            <>
+            // The width lives on a wrapper: Select's own `w-full` would win over a width class
+            // (cx does not merge Tailwind classes) and squeeze the number field to nothing.
+            <div className="w-28 shrink-0">
               <label htmlFor={unitId} className="sr-only">Måleenhet</label>
               <Select
                 id={unitId}
                 aria-label="Måleenhet"
-                className="w-24 shrink-0 px-2 text-small font-semibold"
+                className="font-semibold"
                 value={unit}
                 onChange={(event) => setUnit(event.target.value)}
               >
                 {measurementUnitOptions[kind].map((option) => <option key={option} value={option}>{option}</option>)}
               </Select>
-            </>
+            </div>
           )}
         </div>
         <div className="mt-2 flex min-h-7 flex-wrap items-center gap-x-4 gap-y-1 text-small text-muted">
