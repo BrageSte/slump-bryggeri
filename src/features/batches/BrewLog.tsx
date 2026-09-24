@@ -206,7 +206,7 @@ function EntrySheet({
   if (!item) return null;
   const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1, originalBrix);
   const correction = correctionSummary(item);
-  const canCorrect = item.measurement !== null || (!item.comment && !item.attachment && item.type !== "status_changed");
+  const canCorrect = item.measurement !== null || (!item.comment && !item.attachment && item.type !== "status_changed" && !item.type.endsWith("_started"));
   const close = () => {
     setDraft(null);
     onClose();

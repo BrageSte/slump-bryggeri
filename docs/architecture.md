@@ -110,7 +110,10 @@ Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte m
 
 Loggkorrigering bruker en ny `brew_events`-rad med `data.corrections` som revisjonsspor. Originalhendelsen
 og eventuell målerad markeres slettet, men beholdes i databasen. `baseUpdatedAt` gir konfliktkontroll; batch
-og bryggeri filtreres fra verifisert medlemskap. Kommentarer beholder egen forfatterstyrt redigering.
+og bryggeri filtreres fra verifisert medlemskap. Erstatningen beholder opprinnelig `created_by`, mens
+`data.corrections` angir hvem som korrigerte. Hendelser med type `*_started` avvises så
+`batches.stage_started_at` forblir konsistent. `ingredient_added` og `yeast_pitched` valideres med
+`ingredientAddedDataSchema`. Kommentarer beholder egen forfatterstyrt redigering.
 
 Målinger lagrer både kanonisk `value/unit` og `entered_value/entered_unit`, slik at API-et kan regne med
 liter/°C/g/bar/SG samtidig som loggen viser det bryggeren skrev. Måleinput starter alltid metrisk; en annen

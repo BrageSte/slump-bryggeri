@@ -272,6 +272,7 @@ export async function correctLogEntry(
       "m.sample_temp_c as measurement_sample_temp_c",
       "m.instrument as measurement_instrument",
       "m.comment as measurement_comment",
+      "m.created_by as measurement_created_by",
       "c.id as comment_id",
       "a.id as attachment_id",
     ])
@@ -282,6 +283,7 @@ export async function correctLogEntry(
     .executeTakeFirst();
   if (!current) throw notFound("Loggføringen");
   if (input.baseUpdatedAt !== current.updated_at) throw conflict("Loggføringen er endret. Last inn på nytt før du korrigerer.");
+  if (current.type.endsWith("_started")) throw badRequest("Startede hendelser kan ikke korrigeres.");
   if (current.comment_id || current.attachment_id || current.type === "comment" || current.type === "photo" || current.type === "status_changed") {
     throw badRequest("Denne typen loggføring kan ikke korrigeres her.");
   }
@@ -322,7 +324,11 @@ export async function correctLogEntry(
     correctedBy: user.id,
     correctedAt: now,
   };
-  const replacementBaseData = input.entryKind === "event" ? input.data : originalData ?? {};
+  let replacementBaseData: Record<string, unknown> = input.entryKind === "event" ? input.data : originalData ?? {};
+  if (input.entryKind === "event" && (current.type === "ingredient_added" || current.type === "yeast_pitched")) {
+    const validatedData = parse(ingredientAddedDataSchema, input.data);
+    replacementBaseData = { ...input.data, ...validatedData };
+  }
   const replacementData = JSON.stringify({
     ...replacementBaseData,
     corrections: [...corrections, correctionRecord],
@@ -340,7 +346,7 @@ export async function correctLogEntry(
     stage: input.stage,
     occurred_at: input.occurredAt,
     data: replacementData,
-    created_by: user.id,
+    created_by: current.created_by,
     created_at: now,
     updated_at: now,
   };
@@ -405,7 +411,7 @@ export async function correctLogEntry(
         sample_temp_c: input.sampleTempC === undefined ? current.measurement_sample_temp_c : input.sampleTempC,
         instrument,
         comment: input.comment === undefined ? current.measurement_comment : input.comment,
-        created_by: user.id,
+        created_by: current.measurement_created_by ?? current.created_by,
         created_at: now,
       }),
     );

@@ -169,13 +169,17 @@ forfatteren. Behold hvem/når og forrige verdi. Dette er den minste sikre løsni
 - [x] «Korriger» for målinger og hendelser: verdi/enhet, tidspunkt, steg/variant og notat. Behold
       originalen via enkel append-only korreksjonspost eller erstatningshendelse; vis «korrigert».
 - [x] Kommentarer kan redigeres av forfatteren; vis at de er redigert.
-- [x] Skriv endring/spor atomisk med `requireMember`, batch-/bryggeri-scope og konfliktkontroll.
-      Test 404 for andre bryggerier og at korrigert tall brukes i mål-mot-faktisk-visning.
+- [x] Skriv endring/spor atomisk med `requireMember`, batch-/bryggeri-scope og konfliktkontroll. Erstatningen
+      beholder opprinnelig `created_by`; `corrections` angir hvem som korrigerte. Startede steg kan ikke
+      korrigeres fordi batchens `stage_started_at` ellers blir feil. Valider ingrediensdata med samme schema
+      som ved ny logging. Test 404 for andre bryggerier og at korrigert tall brukes i mål-mot-faktisk-visning.
 - [x] Lag UI for eksisterende API for batchnavn/bryggedato; rettelser av splits kan tas når de trengs.
 
 Gjort 2026-09-24. Korrigering lager en ny logghendelse med forrige verdi, tidspunkt og forfatter i
 `data.corrections`, og skjuler originalhendelsen fra den aktive loggen. Gamle rader bevares i databasen.
-Korrigering krever `baseUpdatedAt`; samtidige eller utdaterte endringer avvises.
+Erstatningen beholder opprinnelig `created_by`; korrigerende medlem står i `data.corrections`. Startede steg
+avvises. `ingredient_added` og `yeast_pitched` valideres med `ingredientAddedDataSchema`. Korrigering krever
+`baseUpdatedAt`; samtidige eller utdaterte endringer avvises.
 
 ### Senere: full revisjon og avanserte planendringer
 

@@ -216,6 +216,7 @@ describe("collaborative brew day", () => {
     expect(after.body.some((item) => item.id === original.id)).toBe(false);
     const replacement = after.body.find((item) => item.id === corrected.body.id)!;
     expect(replacement.measurement).toMatchObject({ kind: "ph", value: 5.48, unit: "pH", instrument: null, comment: "Første avlesning var feil" });
+    expect(replacement.createdBy).toMatchObject({ id: kari.id, name: "Kari" });
     expect(replacement.data?.corrections).toEqual([
       expect.objectContaining({
         previousMeasurement: expect.objectContaining({ value: 5.34, unit: "pH" }),
@@ -253,6 +254,7 @@ describe("collaborative brew day", () => {
       splitId: null,
     });
     expect(stale.status).toBe(409);
+    expect((await ola.delete(`${base}/batches/${correctionBatchId}/events/${replacement.id}`)).status).toBe(403);
   });
 
   it("corrects generic event data by replacing the old timeline row", async () => {
@@ -281,6 +283,68 @@ describe("collaborative brew day", () => {
     expect(replacement.data?.corrections).toEqual([
       expect.objectContaining({ previousData: expect.objectContaining({ amount: 20, note: "før" }) }),
     ]);
+  });
+
+  it("blocks correction of stage-start events so the batch clock stays consistent", async () => {
+    const batch = await kari.post(`${base}/batches`, { recipeId });
+    const correctionBatchId = batch.body.id as string;
+    expect((await kari.post(`${base}/batches/${correctionBatchId}/stage`, { stage: "mash" })).status).toBe(201);
+    const before = await kari.get<BatchDetail>(`${base}/batches/${correctionBatchId}`);
+    const timeline = await kari.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+    const started = timeline.body.find((item) => item.type === "mash_started")!;
+
+    const rejected = await ola.patch(`${base}/batches/${correctionBatchId}/events/${started.id}/correction`, {
+      entryKind: "event",
+      baseUpdatedAt: started.updatedAt,
+      occurredAt: started.occurredAt + 60_000,
+      stage: "mash",
+      splitId: null,
+      data: started.data ?? {},
+    });
+    expect(rejected.status).toBe(400);
+    const after = await kari.get<BatchDetail>(`${base}/batches/${correctionBatchId}`);
+    expect(after.body.stageStartedAt).toBe(before.body.stageStartedAt);
+    expect((await kari.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`)).body.some((item) => item.id === started.id)).toBe(true);
+  });
+
+  it("validates ingredient event data when correcting it", async () => {
+    const batch = await kari.post(`${base}/batches`, { recipeId });
+    const correctionBatchId = batch.body.id as string;
+
+    for (const type of ["ingredient_added", "yeast_pitched"] as const) {
+      const data = {
+        ingredientKind: type === "yeast_pitched" ? "culture" : "hop",
+        name: type === "yeast_pitched" ? "Ale yeast" : "Simcoe",
+        amount: 65,
+        unit: "g",
+      };
+      const logged = await kari.post(`${base}/batches/${correctionBatchId}/events`, { type, stage: "boil", data });
+      expect(logged.status).toBe(201);
+      const before = await kari.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+      const original = before.body.find((item) => item.id === logged.body.id)!;
+
+      const invalid = await ola.patch(`${base}/batches/${correctionBatchId}/events/${original.id}/correction`, {
+        entryKind: "event",
+        baseUpdatedAt: original.updatedAt,
+        occurredAt: original.occurredAt,
+        stage: "boil",
+        splitId: null,
+        data: { ...data, amount: -1 },
+      });
+      expect(invalid.status).toBe(400);
+
+      const corrected = await ola.patch(`${base}/batches/${correctionBatchId}/events/${original.id}/correction`, {
+        entryKind: "event",
+        baseUpdatedAt: original.updatedAt,
+        occurredAt: original.occurredAt,
+        stage: "boil",
+        splitId: null,
+        data: { ...data, amount: 60 },
+      });
+      expect(corrected.status).toBe(201);
+      const after = await ola.get<TimelineItem[]>(`${base}/batches/${correctionBatchId}/timeline`);
+      expect(after.body.find((item) => item.id === corrected.body.id)?.data).toMatchObject({ ...data, amount: 60 });
+    }
   });
 
   it("lets authors and admins remove log entries, but not other members", async () => {
