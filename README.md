@@ -3,7 +3,9 @@
 Mobil-først PWA for brygging: oppskrifter, bryggerikalibrering, felles bryggelogg og (senere)
 inventar og en bryggeassistent. Cloudflare Workers + D1 + R2, React + Vite + TypeScript.
 
-**Source of truth:** [docs/implementation-package.md](docs/implementation-package.md)
+**Source of truth:** [docs/implementation-package.md](docs/implementation-package.md) · **Neste steg:** [docs/implementation-plan.md](docs/implementation-plan.md)
+
+**Produksjon:** https://slump-bryggeri.brage-steen.workers.dev
 
 ## Kom i gang
 
@@ -41,6 +43,7 @@ terminalen der `npm run dev` kjører. Under «Importer oppskrift» ligger Sunset
 
 ## Dokumentasjon
 
+- **[Implementeringsplan v0.2](docs/implementation-plan.md)** — neste milepæler (M1–M8)
 - [Arkitektur og beslutninger](docs/architecture.md)
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)

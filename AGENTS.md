@@ -4,6 +4,10 @@ Read [docs/implementation-package.md](docs/implementation-package.md) (product s
 [docs/architecture.md](docs/architecture.md) (decisions already made) before changing anything.
 When a requirement is ambiguous, choose the simpler option that preserves the product principles.
 
+**What to build next:** [docs/implementation-plan.md](docs/implementation-plan.md) — milestones in order, with
+acceptance criteria and Brage's decisions. Work on a branch per milestone/task, open a PR, keep CI green,
+and tick the plan's checkboxes in the same PR. Merging to `main` deploys (once the Cloudflare token is set).
+
 ## Commands
 
 - `npm test` — all tests (unit + workerd integration). Must pass before you finish.
