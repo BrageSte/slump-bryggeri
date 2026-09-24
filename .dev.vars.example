@@ -1,0 +1,5 @@
+# Copy to .dev.vars for local development.
+# Generate with: openssl rand -base64 32
+BETTER_AUTH_SECRET=change-me
+# Optional. Without it, sign-in codes are printed to the dev server log instead of emailed.
+RESEND_API_KEY=

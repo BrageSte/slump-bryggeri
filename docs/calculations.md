@@ -1,0 +1,62 @@
+# Beregningsmotor
+
+`src/domain/brewing-calculations/` — rene, deterministiske funksjoner uten React, database eller AI
+(§43). Assistenten (fase 6) skal kalle disse som verktøy og forklare resultatet; den skal aldri regne selv.
+
+Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skjer i import-adapterne.
+
+## Funksjoner
+
+| Funksjon | Formel / kilde |
+|---|---|
+| `platoToSg`, `sgToPlato` | ASBC-tilnærming: SG = 1 + P / (258,6 − 227,1·P/258,2); invers kubisk |
+| `brixToSg(brix, wcf)` | P = Brix / WCF, deretter `platoToSg`. WCF er instrumentets korreksjonsfaktor (kalibreringsverdi, standard 1,00) |
+| `refractometerFinalGravity` | Sean Terrills kubiske formel (2011), for Brix-avlesning etter at gjæringen har startet |
+| `calculateGravityEstimate` | Poeng = Σ(kg · utbytte% · 385,67) · effektivitet / L. Sukrose = 46,214 ppg = 385,67 poeng·L/kg. Sukker/ekstrakt får 100 % |
+| `calculateEfficiency` | Invers av over: målt SG og volum → brygghuseffektivitet |
+| `calculateAbv` | Standard (OG − FG) · 131,25; alternativ høygravitetsformel tilgjengelig |
+| `tinsethUtilization`, `calculateIbu` | Tinseth (1997). Whirlpool: Tinseth for trekketiden × isomeriseringsrate ved temperaturen (Malowicki 2005, normalisert til 1,0 ved 100 °C). Tørrhumle/mesk = 0 IBU |
+| `calculateHopAdjustment` | Mengde × oppskriftens AA / faktisk AA |
+| `dryHopDose` | g / L |
+| `calculateColorEbc` | MCU → SRM (Morey) → EBC |
+| `calculateBoilOff` | Før kok − fordampning · tid |
+| `calculateWaterVolumes` | Baklengs fra volum i gjæringskar: tap → krymping ved kjøling → fordampning → absorpsjon/dødvolum |
+| `calculateStrikeTemperature` | Palmer (metrisk): Tw = (0,41 / r)(T₂ − T₁) + T₂, pluss bryggeriets kalibrerte systemkorreksjon |
+| `calculateTemperatureOffset`, `summarizeCalibrationObservations` | ΔT per observasjon; snitt, standardavvik og forslag (≥ 3 observasjoner). Foreslår bare — admin må godkjenne |
+| `calculateRecipeScaling` | Humle/gjær/tilsetninger skaleres med volum; meskede råvarer også med effektivitetsforhold så OG bevares; gjær i hele pakker rundes opp |
+| `calculateRecipeMetrics`, `expectedGravities` | Samlet OG/FG/ABV/IBU/farge for en oppskrift |
+
+## Forenklinger (dokumentert, bevisste)
+
+- IBU: isomerisering fra kokehumle etter flameout (under whirlpool/kjøling) regnes ikke med.
+- IBU bruker oppskriftens batchvolum og estimert OG som kokegravitet.
+- Uten oppgitt utbytte antas 75 %; uten oppgitt forgjæring antas 75 %.
+- Kjølekrymping 4 % som standard (samme som BeerSmith).
+
+## Tester og toleranser
+
+Hver formel har tester med kjente input, forventet resultat og toleranse (`tests/calculations/`).
+Referanser: publiserte tabeller (Tinseth, ASBC Plato), spesifikasjonens eksempler (74,6 °C innmesking,
+−2,6 °C kalibreringsforslag, 54,7 g Citra), og **Sunset IPA-loggen**:
+
+| Sjekk | Logg | Toleranse |
+|---|---|---|
+| 12,1 / 14,0 / 15,0 °Bx → SG | 1.048 / 1.057 / 1.061 | ±0,001 (loggen oppgir «≈») |
+| 20,0 / 19,0 / 16,5 US gal | 75,7 / 71,9 / 62,5 L | ±0,05 |
+| Maltandeler | 74,7 / 20,2 / 1,9 / 3,3 % | 0,1 |
+| Tørrhumledose | 5,8 / 6,7 g/L | 0,05 |
+| 75,7 L → 62,5 L på 60 min | ≈ 13,2 L/t fordampning | 0,05 |
+| 62,5 L varmt × (1 − 4 %) | 60 L til gjæring | 0,05 |
+
+Merk: loggens Brix → SG stemmer med WCF = 1,00. Refraktometerets reelle WCF bør kalibreres og legges
+inn i utstyrsprofilen.
+
+## BeerSmith-referanser (§44)
+
+Ikke laget ennå. Fremgangsmåte:
+
+1. Eksporter utstyrsprofil, meskeprofil og 3–5 oppskrifter med kjente resultater fra BeerSmith.
+2. Legg filene i `tests/calculations/beersmith/` sammen med BeerSmith sine beregnede verdier
+   (OG, IBU, farge, vannvolumer, innmeskingstemperatur).
+3. Skriv tester som kjører samme input gjennom motoren og sammenligner med toleranse.
+4. Avvik dokumenteres her — målet er forklarbare forskjeller, ikke å kopiere BeerSmith.

@@ -1,0 +1,358 @@
+import { z } from "zod";
+import {
+  batchStatusSchema,
+  brewStageSchema,
+  eventTypeSchema,
+  ingredientAddedDataSchema,
+  measurementKindSchema,
+  type BatchStatus,
+  type BrewStage,
+  type MeasurementKind,
+} from "./brewing.ts";
+import { equipmentKinds, type ProfileValues } from "./equipment-profile.ts";
+import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
+import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
+
+/**
+ * Request schemas and response types shared by the Worker API and the React client.
+ */
+
+export type Role = "admin" | "member";
+export const roleSchema = z.enum(["admin", "member"]);
+
+export interface UserRef {
+  id: string;
+  name: string;
+}
+
+export interface ApiError {
+  error: { code: string; message: string; issues?: { path: string; message: string }[] };
+}
+
+// --- Me / breweries --------------------------------------------------------
+
+export interface Membership {
+  brewery: { id: string; name: string };
+  role: Role;
+}
+
+export interface PendingInvite {
+  id: string;
+  brewery: { id: string; name: string };
+  role: Role;
+  invitedBy: UserRef;
+  expiresAt: number;
+}
+
+export interface MeResponse {
+  user: { id: string; name: string; email: string };
+  memberships: Membership[];
+  pendingInvites: PendingInvite[];
+}
+
+export const updateProfileSchema = z.object({ name: z.string().trim().min(1, "Skriv inn et navn").max(80) });
+
+export const createBrewerySchema = z.object({ name: z.string().trim().min(2, "Minst 2 tegn").max(80) });
+
+export interface BreweryMember {
+  user: UserRef & { email: string };
+  role: Role;
+  joinedAt: number;
+}
+
+export interface BreweryInvite {
+  id: string;
+  email: string;
+  role: Role;
+  createdAt: number;
+  expiresAt: number;
+}
+
+export interface BreweryDetail {
+  id: string;
+  name: string;
+  myRole: Role;
+  members: BreweryMember[];
+  /** Only included for admins. */
+  invites: BreweryInvite[] | null;
+}
+
+export const createInviteSchema = z.object({
+  email: z.email("Ugyldig e-postadresse").transform((e) => e.trim().toLowerCase()),
+  role: roleSchema,
+});
+
+export const updateMemberSchema = z.object({ role: roleSchema });
+
+// --- Equipment ---------------------------------------------------------------
+
+export interface EquipmentItem {
+  id: string;
+  kind: (typeof equipmentKinds)[number];
+  name: string;
+  capacityL: number | null;
+  notes: string | null;
+}
+
+export const equipmentInputSchema = z.object({
+  kind: z.enum(equipmentKinds),
+  name: z.string().trim().min(1).max(80),
+  capacityL: z.number().positive().max(100_000).nullable(),
+  notes: z.string().trim().max(1000).nullable(),
+});
+
+export interface ProfileValueEntry {
+  value: number;
+  source: "manual" | "calibration" | "default";
+  note: string | null;
+}
+
+export interface EquipmentProfile {
+  id: string;
+  version: number;
+  name: string;
+  isActive: boolean;
+  changeNote: string | null;
+  createdAt: number;
+  createdBy: UserRef;
+  values: Record<string, ProfileValueEntry>;
+}
+
+export interface EquipmentProfileVersionSummary {
+  id: string;
+  version: number;
+  isActive: boolean;
+  changeNote: string | null;
+  createdAt: number;
+  createdBy: UserRef;
+}
+
+export const createProfileVersionSchema = z.object({
+  changeNote: z.string().trim().max(500).optional(),
+  values: z.record(z.string(), z.number().finite().nullable()),
+});
+
+// --- Recipes -------------------------------------------------------------------
+
+export interface RecipeSummary {
+  id: string;
+  name: string;
+  style: string | null;
+  version: number;
+  batchSizeL: number;
+  updatedAt: number;
+}
+
+export interface RecipeVersionSummary {
+  id: string;
+  version: number;
+  kind: "normalized" | "adaptation";
+  changeNote: string | null;
+  createdAt: number;
+  createdBy: UserRef;
+}
+
+export interface RecipeDetail {
+  id: string;
+  name: string;
+  style: string | null;
+  createdAt: number;
+  updatedAt: number;
+  current: RecipeVersionSummary & { data: RecipeDocument; parentVersionId: string | null };
+  versions: RecipeVersionSummary[];
+  source: { kind: string; url: string | null; originalText: string | null } | null;
+}
+
+export const recipeSourceKinds = ["manual", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
+
+export const createRecipeSchema = z.object({
+  recipe: recipeDocumentSchema,
+  source: z
+    .object({
+      kind: z.enum(recipeSourceKinds),
+      url: z.url().max(2000).optional(),
+      originalText: z.string().max(200_000).optional(),
+    })
+    .optional(),
+});
+
+export const saveRecipeVersionSchema = z.object({
+  recipe: recipeDocumentSchema,
+  kind: z.enum(["normalized", "adaptation"]).default("normalized"),
+  changeNote: z.string().trim().max(500).optional(),
+  /** Optimistic concurrency: the version the edit was based on. */
+  baseVersionId: z.string().min(1),
+});
+
+// --- Recipe library ----------------------------------------------------------------
+
+export interface LibraryRecipeSummary {
+  id: string;
+  name: string;
+  tagline: string | null;
+  category: LibraryCategory;
+  abvPct: number | null;
+  ibu: number | null;
+  og: number | null;
+  colorEbc: number | null;
+  batchSizeL: number;
+}
+
+export interface LibrarySearchResponse {
+  items: LibraryRecipeSummary[];
+  total: number;
+}
+
+export interface LibraryRecipeDetail extends LibraryRecipeSummary {
+  recipe: RecipeDocument;
+  /** What the importer had to guess or leave out. */
+  warnings: string[];
+  source: { key: string; name: string; license: string; url: string | null };
+}
+
+export const librarySearchQuerySchema = z.object({
+  q: z.string().trim().max(100).optional(),
+  category: z.enum(libraryCategoryKeys).optional(),
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  offset: z.coerce.number().int().min(0).max(10_000).default(0),
+});
+
+export const copyFromLibrarySchema = z.object({ libraryId: z.string().min(1).max(64) });
+
+// --- Batches ---------------------------------------------------------------------
+
+export interface BatchSummary {
+  id: string;
+  number: number;
+  name: string;
+  status: BatchStatus;
+  currentStage: BrewStage | null;
+  stageStartedAt: number | null;
+  brewDate: string | null;
+  recipe: { id: string; name: string };
+  createdAt: number;
+  updatedAt: number;
+  completedAt: number | null;
+}
+
+export interface BatchSplit {
+  id: string;
+  name: string;
+  vessel: string | null;
+  volumeL: number | null;
+  notes: string | null;
+}
+
+export interface BatchDetail extends BatchSummary {
+  recipeVersion: { id: string; version: number };
+  recipeSnapshot: RecipeDocument;
+  equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues };
+  splits: BatchSplit[];
+}
+
+export const createBatchSchema = z.object({
+  recipeId: z.string().min(1),
+  /** Defaults to the recipe's current version. */
+  recipeVersionId: z.string().min(1).optional(),
+  name: z.string().trim().min(1).max(120).optional(),
+  brewDate: z.iso.date().optional(),
+});
+
+export const updateBatchSchema = z.object({
+  name: z.string().trim().min(1).max(120).optional(),
+  brewDate: z.iso.date().nullable().optional(),
+  status: batchStatusSchema.optional(),
+});
+
+export const startStageSchema = z.object({
+  stage: brewStageSchema,
+  occurredAt: z.number().int().positive().optional(),
+});
+
+export const createSplitSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  vessel: z.string().trim().max(80).nullable().optional(),
+  volumeL: z.number().positive().max(10_000).nullable().optional(),
+  notes: z.string().trim().max(1000).nullable().optional(),
+});
+
+// --- Brew log --------------------------------------------------------------------
+
+export interface TimelineMeasurement {
+  id: string;
+  kind: MeasurementKind;
+  label: string | null;
+  value: number;
+  unit: string;
+  sampleTempC: number | null;
+  instrument: string | null;
+  comment: string | null;
+}
+
+export interface TimelineComment {
+  id: string;
+  body: string;
+  editedAt: number | null;
+}
+
+export interface TimelineAttachment {
+  id: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  caption: string | null;
+  url: string;
+}
+
+export interface TimelineItem {
+  id: string;
+  type: string;
+  stage: BrewStage | null;
+  splitId: string | null;
+  occurredAt: number;
+  createdAt: number;
+  createdBy: UserRef;
+  data: Record<string, unknown> | null;
+  measurement: TimelineMeasurement | null;
+  comment: TimelineComment | null;
+  attachment: TimelineAttachment | null;
+}
+
+const optionalTimestamp = z.number().int().positive().optional();
+
+export const createMeasurementSchema = z.object({
+  kind: measurementKindSchema,
+  value: z.number().finite(),
+  /** Required for `custom`; otherwise the canonical unit for the kind is used. */
+  unit: z.string().trim().min(1).max(20).optional(),
+  label: z.string().trim().max(80).optional(),
+  stage: brewStageSchema.nullable().optional(),
+  splitId: z.string().min(1).nullable().optional(),
+  measuredAt: optionalTimestamp,
+  sampleTempC: z.number().min(-10).max(110).nullable().optional(),
+  instrument: z.string().trim().max(80).nullable().optional(),
+  comment: z.string().trim().max(1000).nullable().optional(),
+});
+
+export const createCommentSchema = z.object({
+  body: z.string().trim().min(1, "Skriv noe").max(4000),
+  stage: brewStageSchema.nullable().optional(),
+  splitId: z.string().min(1).nullable().optional(),
+  occurredAt: optionalTimestamp,
+});
+
+export const updateCommentSchema = z.object({ body: z.string().trim().min(1).max(4000) });
+
+export const createEventSchema = z.object({
+  type: eventTypeSchema,
+  stage: brewStageSchema.nullable().optional(),
+  splitId: z.string().min(1).nullable().optional(),
+  occurredAt: optionalTimestamp,
+  data: z.record(z.string(), z.unknown()).optional(),
+});
+
+export { ingredientAddedDataSchema };
+
+export interface CreatedResponse {
+  id: string;
+}

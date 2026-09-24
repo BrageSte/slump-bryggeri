@@ -1,0 +1,49 @@
+{
+  "name": "slump-bryggeri",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local",
+    "db:migrate:remote": "wrangler d1 migrations apply DB --remote",
+    "cf-typegen": "wrangler types --strict-vars=false worker/worker-configuration.d.ts",
+    "icons": "node scripts/generate-icons.mjs",
+    "library:build": "node scripts/build-recipe-library.ts",
+    "db:seed:library:local": "wrangler d1 execute DB --local --file db/seeds/recipe-library.sql",
+    "db:seed:library:remote": "wrangler d1 execute DB --remote --file db/seeds/recipe-library.sql"
+  },
+  "dependencies": {
+    "@hookform/resolvers": "^5.9.1",
+    "@tanstack/react-query": "^5.103.2",
+    "better-auth": "^1.7.5",
+    "hono": "^4.13.8",
+    "kysely": "^0.29.6",
+    "kysely-d1": "^0.4.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-hook-form": "^7.88.0",
+    "react-router": "^8.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.58.0",
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.1",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.137.0"
+  }
+}

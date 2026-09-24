@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+/*
+ * Slump design tokens (docs/design-system.md).
+ * Colours are CSS variables so light/dark switch without rebuilding; Tailwind utilities
+ * (bg-surface, text-muted, border-border …) are mapped onto them with @theme inline.
+ * Dark mode follows the system unless the user picked a theme ([data-theme]).
+ */
+
+:root {
+  --bg: #f4f1e8;
+  --surface: #fffefa;
+  --surface-2: #efebdf;
+  --border: #e2dccd;
+  --text: #18231f;
+  --text-muted: #68736d;
+  --primary: #294a3d;
+  --on-primary: #fffefa;
+  --primary-strong: #294a3d;
+  --primary-soft: #dde8e0;
+  --accent: #c68b42;
+  --accent-soft: #f3e6d2;
+  --success: #3f7653;
+  --success-soft: #e1ede4;
+  --warning: #9a6423;
+  --warning-soft: #f5e8d3;
+  --danger: #a84e42;
+  --danger-soft: #f3deda;
+  --info: #426c83;
+  --info-soft: #dce8ef;
+  --focus: #c68b42;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121916;
+    --surface: #1a2420;
+    --surface-2: #213029;
+    --border: #2c3b34;
+    --text: #edf2ee;
+    --text-muted: #9daba2;
+    --primary: #3a6b57;
+    --on-primary: #f4f8f5;
+    --primary-strong: #9ccbb2;
+    --primary-soft: #22352d;
+    --accent: #d9a15e;
+    --accent-soft: #3a2e1c;
+    --success: #7cc095;
+    --success-soft: #1e3328;
+    --warning: #e0ac6b;
+    --warning-soft: #3a2e1c;
+    --danger: #e8958a;
+    --danger-soft: #3d2420;
+    --info: #86b6d1;
+    --info-soft: #1c2e38;
+    --focus: #d9a15e;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #121916;
+  --surface: #1a2420;
+  --surface-2: #213029;
+  --border: #2c3b34;
+  --text: #edf2ee;
+  --text-muted: #9daba2;
+  --primary: #3a6b57;
+  --on-primary: #f4f8f5;
+  --primary-strong: #9ccbb2;
+  --primary-soft: #22352d;
+  --accent: #d9a15e;
+  --accent-soft: #3a2e1c;
+  --success: #7cc095;
+  --success-soft: #1e3328;
+  --warning: #e0ac6b;
+  --warning-soft: #3a2e1c;
+  --danger: #e8958a;
+  --danger-soft: #3d2420;
+  --info: #86b6d1;
+  --info-soft: #1c2e38;
+  --focus: #d9a15e;
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-primary: var(--primary);
+  --color-on-primary: var(--on-primary);
+  --color-primary-strong: var(--primary-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+}
+
+@theme {
+  --font-sans: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* Type scale: size / line height (spec §28) */
+  --text-display: 2.5rem;
+  --text-display--line-height: 2.75rem;
+  --text-title: 1.75rem;
+  --text-title--line-height: 2.125rem;
+  --text-section: 1.25rem;
+  --text-section--line-height: 1.625rem;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5rem;
+  --text-small: 0.875rem;
+  --text-small--line-height: 1.25rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+
+  /* Shape (spec §30) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-card: 16px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 1rem;
+    line-height: 1.5rem;
+    min-height: 100dvh;
+    -webkit-font-smoothing: antialiased;
+  }
+  :focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+    border-radius: 6px;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 1rem; /* ≥16 px: no iOS zoom on focus */
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@utility safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom);
+}

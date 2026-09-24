@@ -1,0 +1,15 @@
+/**
+ * Deterministic brewing calculations. Pure functions only: no React, no database, no AI.
+ * The assistant calls these as tools and explains the results — it never computes them itself.
+ * See docs/calculations.md for formulas and sources.
+ */
+export * from "./abv.ts";
+export * from "./calibration.ts";
+export * from "./color.ts";
+export * from "./gravity.ts";
+export * from "./hops.ts";
+export * from "./ibu.ts";
+export * from "./recipe-metrics.ts";
+export * from "./scaling.ts";
+export * from "./units.ts";
+export * from "./water.ts";

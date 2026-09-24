@@ -1,0 +1,95 @@
+/** Post-boil volume after evaporation. */
+export function calculateBoilOff(input: { preBoilVolumeL: number; boilOffLPerH: number; boilTimeMin: number }): {
+  postBoilVolumeL: number;
+  evaporatedL: number;
+} {
+  const evaporatedL = input.boilOffLPerH * (input.boilTimeMin / 60);
+  return { postBoilVolumeL: Math.max(0, input.preBoilVolumeL - evaporatedL), evaporatedL };
+}
+
+export interface WaterVolumeInput {
+  /** Target volume into the fermenter(s). */
+  batchVolumeL: number;
+  grainKg: number;
+  boilTimeMin: number;
+  boilOffLPerH: number;
+  grainAbsorptionLPerKg: number;
+  mashThicknessLPerKg: number;
+  mashDeadSpaceL?: number;
+  pumpPipeLossL?: number;
+  kettleLossL?: number;
+  chillerLossL?: number;
+  transferLossL?: number;
+  coolingShrinkagePct?: number;
+}
+
+export interface WaterVolumeResult {
+  mashWaterL: number;
+  spargeWaterL: number;
+  totalWaterL: number;
+  preBoilVolumeL: number;
+  /** Measured hot, right after the boil. */
+  postBoilVolumeL: number;
+  /** In the kettle after cooling, before kettle/chiller/transfer losses. */
+  cooledVolumeL: number;
+  grainAbsorptionL: number;
+  evaporatedL: number;
+}
+
+/**
+ * Works backwards from the volume wanted in the fermenter to the water needed:
+ * fermenter ← losses ← cooling shrinkage ← boil-off ← pre-boil ← absorption/dead space ← water.
+ */
+export function calculateWaterVolumes(input: WaterVolumeInput): WaterVolumeResult {
+  const shrinkage = (input.coolingShrinkagePct ?? 4) / 100;
+  const cooledVolumeL =
+    input.batchVolumeL + (input.kettleLossL ?? 0) + (input.chillerLossL ?? 0) + (input.transferLossL ?? 0);
+  const postBoilVolumeL = cooledVolumeL / (1 - shrinkage);
+  const evaporatedL = input.boilOffLPerH * (input.boilTimeMin / 60);
+  const preBoilVolumeL = postBoilVolumeL + evaporatedL;
+  const grainAbsorptionL = input.grainKg * input.grainAbsorptionLPerKg;
+  const totalWaterL = preBoilVolumeL + grainAbsorptionL + (input.mashDeadSpaceL ?? 0) + (input.pumpPipeLossL ?? 0);
+  const mashWaterL = Math.min(totalWaterL, input.grainKg * input.mashThicknessLPerKg);
+  return {
+    mashWaterL,
+    spargeWaterL: totalWaterL - mashWaterL,
+    totalWaterL,
+    preBoilVolumeL,
+    postBoilVolumeL,
+    cooledVolumeL,
+    grainAbsorptionL,
+    evaporatedL,
+  };
+}
+
+/**
+ * Strike water temperature for a single infusion (Palmer, metric):
+ *   Tw = (0.41 / r) · (T_target − T_grain) + T_target
+ * where r is the mash thickness in L/kg. `systemOffsetC` is the brewery's calibrated
+ * correction for heat lost to the mash tun and is added on top.
+ */
+export function calculateStrikeTemperature(input: {
+  targetMashTempC: number;
+  grainTempC: number;
+  mashThicknessLPerKg: number;
+  systemOffsetC?: number;
+}): { strikeTempC: number; baseStrikeTempC: number; systemOffsetC: number } {
+  if (input.mashThicknessLPerKg <= 0) throw new RangeError("mashThicknessLPerKg must be positive");
+  const baseStrikeTempC =
+    (0.41 / input.mashThicknessLPerKg) * (input.targetMashTempC - input.grainTempC) + input.targetMashTempC;
+  const systemOffsetC = input.systemOffsetC ?? 0;
+  return { strikeTempC: baseStrikeTempC + systemOffsetC, baseStrikeTempC, systemOffsetC };
+}
+
+/** Temperature expected after a transfer given the calibrated delta (negative = loss). */
+export function calculateVolumeTransfer(input: {
+  volumeL: number;
+  lossL: number;
+  temperatureC?: number;
+  temperatureDeltaC?: number;
+}): { volumeL: number; temperatureC: number | undefined } {
+  return {
+    volumeL: Math.max(0, input.volumeL - input.lossL),
+    temperatureC: input.temperatureC === undefined ? undefined : input.temperatureC + (input.temperatureDeltaC ?? 0),
+  };
+}
