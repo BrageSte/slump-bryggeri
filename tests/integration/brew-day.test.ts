@@ -508,3 +508,73 @@ describe("logging after the fact", () => {
     expect((await brewer.post(`${base}/batches/${batchId}/comments`, { body: "Klokka går litt fort", occurredAt: Date.now() + 60_000 })).status).toBe(201);
   });
 });
+
+describe("batch results", () => {
+  it("records a result per variant, protects against stale edits and shows it in the history", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const tropical = (await brewer.post(`${base}/batches/${batchId}/splits`, { name: "Sunset Tropical", volumeL: 38 })).body.id;
+    const pine = (await brewer.post(`${base}/batches/${batchId}/splits`, { name: "Sunset Pine", volumeL: 22 })).body.id;
+    const empty = {
+      og: null, ogSource: null, fg: null, fgSource: null, packagedVolumeL: null, packagedOn: null,
+      packaging: null, carbonationVols: null, tastingNotes: null, rating: null, nextTime: null,
+    };
+    const url = `${base}/batches/${batchId}/outcomes`;
+
+    const saved = await brewer.put(url, {
+      ...empty, splitId: tropical, og: 1.061, ogSource: "brix", fg: 1.012, fgSource: "sg",
+      packagedVolumeL: 34, packagedOn: "2026-10-05", packaging: "cans", carbonationVols: 2.4,
+      tastingNotes: "Tropisk, rent", rating: 4, nextTime: "Mindre Special B",
+    });
+    expect(saved.status).toBe(200);
+    // Pine is kegged later, with only the FG measured so far.
+    expect((await brewer.put(url, { ...empty, splitId: pine, fg: 1.014, fgSource: "sg", packaging: "keg" })).status).toBe(200);
+
+    const batch = await brewer.get<BatchDetail>(`${base}/batches/${batchId}`);
+    expect(batch.body.outcomes.map((o) => [o.splitId, o.fg, o.og])).toEqual([
+      [tropical, 1.012, 1.061],
+      [pine, 1.014, null],
+    ]);
+    const tropicalResult = batch.body.outcomes[0]!;
+    expect(tropicalResult).toMatchObject({ packaging: "cans", rating: 4, updatedBy: { name: "Brage" } });
+
+    // Editing needs the version the form was opened with.
+    const edit = { ...empty, splitId: tropical, og: 1.061, ogSource: "brix", fg: 1.011, fgSource: "sg", rating: 5 };
+    expect((await brewer.put(url, edit)).status).toBe(409);
+    expect((await brewer.put(url, { ...edit, baseUpdatedAt: tropicalResult.updatedAt - 1 })).status).toBe(409);
+    expect((await brewer.put(url, { ...edit, baseUpdatedAt: tropicalResult.updatedAt })).status).toBe(200);
+
+    expect((await brewer.patch(`${base}/batches/${batchId}`, { status: "completed" })).status).toBe(204);
+    const history = await brewer.get<{ id: string; result?: { abvPct: [number, number] | null; rating: number | null } }[]>(
+      `${base}/batches?status=completed`,
+    );
+    const result = history.body.find((b) => b.id === batchId)?.result;
+    expect(result?.rating).toBe(5);
+    expect(result?.abvPct?.[0]).toBeCloseTo((1.061 - 1.011) * 131.25, 6);
+  });
+
+  it("validates results and rejects variants from other batches", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const a = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const b = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const splitOfB = (await brewer.post(`${base}/batches/${b}/splits`, { name: "B" })).body.id;
+    const empty = {
+      splitId: null, og: null, ogSource: null, fg: null, fgSource: null, packagedVolumeL: null, packagedOn: null,
+      packaging: null, carbonationVols: null, tastingNotes: null, rating: null, nextTime: null,
+    };
+    const url = `${base}/batches/${a}/outcomes`;
+
+    expect((await brewer.put(url, { ...empty, og: 1.05, ogSource: "sg", fg: 1.06, fgSource: "sg" })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, fg: 1.012 })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, rating: 6 })).status).toBe(400);
+    expect((await brewer.put(url, { ...empty, splitId: splitOfB })).status).toBe(400);
+    // "Ikke målt" everywhere is a valid result: the brewer can still write a tasting note.
+    expect((await brewer.put(url, { ...empty, tastingNotes: "Ikke målt, men god" })).status).toBe(200);
+  });
+});

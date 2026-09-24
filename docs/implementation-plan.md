@@ -93,19 +93,24 @@ Gjort 2026-09-24. `src/domain/brew-day/fermentation.ts` gir OG, målinger og pit
 grafen bruker samme grunnlag. Tidspunkt frem i tid avvises av API-et (5 min slakk). En utført tilsetning viser
 faktisk mengde med planen ved siden av.
 
-### Steg 3 — Avslutt batch (tidl. M4, forenklet)
+### Steg 3 — Avslutt batch (tidl. M4, forenklet) ✅
 
-- [ ] «Avslutt batch» blir et skjema per variant: FG, pakket volum, pakkedato, pakning (boks/fat/flaske),
+- [x] «Avslutt batch» blir et skjema per variant: FG, pakket volum, pakkedato, pakning (boks/fat/flaske),
       CO₂-volumer, smaksnotat, karakter 1–5 og «neste gang». Forhåndsutfyll bare fra egne loggede
       målinger med synlig kilde; «ikke målt» er lov. Oppskriftsmål er aldri faktisk verdi.
-- [ ] Ny migrasjon for `batch_outcomes` (per batch/variant). Resultatet kan korrigeres senere, og
+- [x] Ny migrasjon for `batch_outcomes` (per batch/variant). Resultatet kan korrigeres senere, og
       JSON-backupen tar det med.
-- [ ] Rene funksjoner for faktisk ABV og tilsynelatende forgjæring (og effektivitet/fordampning når
+- [x] Rene funksjoner for faktisk ABV og tilsynelatende forgjæring (og effektivitet/fordampning når
       volumer og OG finnes), med kjent input, forventet svar og toleranse. Vis grunnlag og hva som mangler.
-- [ ] Batchsiden og historikken viser plan mot faktisk.
+- [x] Batchsiden og historikken viser plan mot faktisk.
 
 **Akseptanse:** Sunset Tropical (bokser) og Sunset Pine (fat) kan avsluttes hver for seg med egne tall
 og smaksnotater.
+
+Gjort 2026-09-24. `/batcher/:id/resultat` har ett skjema per variant (OG/FG forhåndsutfylt fra loggen med
+kilde, «skrevet inn» når det endres), `PUT …/outcomes` med konfliktkontroll, og «Bryggeri-tall»
+(fordampning og brygghuseffektivitet fra egne volum-målinger, `src/domain/brew-day/outcome.ts`). Historikken
+viser faktisk ABV og karakter. Resultater kan legges inn før batchen avsluttes, f.eks. når Tropical er boksa.
 
 ### Steg 4 — Rapport (tidl. M8, forenklet)
 

@@ -2,7 +2,8 @@ import { apparentAttenuationSoFar, fermentationDayOf, plannedFermentationTempera
 import { compareMeasurementToTarget, type BrewDayState } from "../../domain/brew-day/state.ts";
 import type { BatchDetail } from "../../domain/model/api.ts";
 import { brewStageLabels } from "../../domain/model/brewing.ts";
-import { Button, Card, MetricCard, SectionLabel, TargetStatusChip } from "../../design-system/index.ts";
+import { Link } from "react-router";
+import { Button, buttonClasses, Card, MetricCard, SectionLabel, TargetStatusChip } from "../../design-system/index.ts";
 import { formatLogTime, formatNumber, formatSg } from "../../lib/format.ts";
 import { formatTarget } from "./helpers.ts";
 import type { LogIntent } from "./LogSheet.tsx";
@@ -40,6 +41,9 @@ export function FermentationCard({
           <VariantBlock key={variant.splitId ?? "batch"} batch={batch} variant={variant} now={now} onLog={onLog} />
         ))}
       </div>
+      <Link to={`/batcher/${batch.id}/resultat`} className={`${buttonClasses("ghost", "md", true)} mt-2`}>
+        Tappet eller på fat? Registrer resultat
+      </Link>
     </Card>
   );
 }

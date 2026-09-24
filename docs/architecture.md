@@ -132,15 +132,23 @@ Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggeda
 hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
 enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
 
+### Resultater
+
+`batch_outcomes` har ett resultat per variant (`split_id`, NULL = hele batchen; unik indeks på
+`(batch_id, IFNULL(split_id, ''))`). OG/FG lagres med kilde (`sg`, `brix`, `manual`), og NULL betyr
+«ikke målt». Resultater kan endres: `PUT /batches/:id/outcomes` krever `baseUpdatedAt` fra skjemaet og gir
+409 ved samtidige endringer; `updated_by/updated_at` viser hvem som endret sist. ABV, forgjæring, fordampning
+og brygghuseffektivitet regnes ut ved visning (`src/domain/brew-day/outcome.ts`), aldri lagret.
+
 ## Bryggeri-eksport
 
 Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer → Eksport**. API-et bruker
 `c.var.membership.breweryId` etter `requireMember("admin")` og returnerer formatet
 `slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
 bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
-batcher/snapshots/splits og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og credentials er ikke
-med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger fortsatt i objektlageret.
-Resultattabellen er en tom liste fram til M4 legger til batchresultater. Gjenoppretting støttes ikke ennå.
+batcher/snapshots/splits/resultater og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og
+credentials er ikke med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger
+fortsatt i objektlageret. Gjenoppretting støttes ikke ennå.
 
 ## Oppskriftsbibliotek
 

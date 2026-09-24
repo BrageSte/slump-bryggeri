@@ -11,7 +11,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
     .executeTakeFirst();
   if (!brewery) throw notFound("Bryggeriet");
 
-  const [members, invites, equipment, equipmentProfiles, profileValues, recipes, recipeSources, recipeVersions, batches, recipeSnapshots, equipmentSnapshots, splits, events, measurements, comments, attachments] =
+  const [members, invites, equipment, equipmentProfiles, profileValues, recipes, recipeSources, recipeVersions, batches, recipeSnapshots, equipmentSnapshots, splits, events, measurements, comments, attachments, outcomes] =
     await Promise.all([
       db.selectFrom("brewery_members").selectAll().where("brewery_id", "=", breweryId).orderBy("user_id").execute(),
       db.selectFrom("brewery_invites").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
@@ -67,6 +67,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
       db.selectFrom("measurements").selectAll().where("brewery_id", "=", breweryId).orderBy("measured_at").orderBy("id").execute(),
       db.selectFrom("comments").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
       db.selectFrom("attachments").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
+      db.selectFrom("batch_outcomes").selectAll().where("brewery_id", "=", breweryId).orderBy("batch_id").orderBy("created_at").execute(),
     ]);
 
   const userIds = [
@@ -83,6 +84,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
     ...measurements.map((measurement) => measurement.created_by),
     ...comments.map((comment) => comment.created_by),
     ...attachments.map((attachment) => attachment.created_by),
+    ...outcomes.flatMap((outcome) => [outcome.created_by, outcome.updated_by]),
   ].filter((userId): userId is string => userId !== null);
   const users = await db.selectFrom("users").selectAll().where("id", "in", [...new Set(userIds)]).orderBy("id").execute();
 
@@ -130,8 +132,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
       measurements,
       comments,
       attachments,
-      // M4 will add this table. Keep the versioned export shape ready for its results.
-      batch_outcomes: [],
+      batch_outcomes: outcomes,
     },
   };
 }

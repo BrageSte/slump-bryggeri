@@ -255,6 +255,8 @@ export interface BatchSummary {
   number: number;
   name: string;
   status: BatchStatus;
+  /** Short result for the history list; only on list responses, once results are recorded. */
+  result?: { abvPct: [number, number] | null; rating: number | null };
   currentStage: BrewStage | null;
   stageStartedAt: number | null;
   brewDate: string | null;
@@ -277,7 +279,67 @@ export interface BatchDetail extends BatchSummary {
   recipeSnapshot: RecipeDocument;
   equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues };
   splits: BatchSplit[];
+  outcomes: BatchOutcome[];
 }
+
+// --- Batch results -----------------------------------------------------------------
+
+export const packagingKinds = ["cans", "keg", "bottles", "other"] as const;
+export type PackagingKind = (typeof packagingKinds)[number];
+export const packagingLabels: Record<PackagingKind, string> = { cans: "Bokser", keg: "Fat", bottles: "Flasker", other: "Annet" };
+
+/** Where a result gravity came from: a logged SG, a logged Brix reading, or typed in on the result form. */
+export const gravitySources = ["sg", "brix", "manual"] as const;
+export type GravitySource = (typeof gravitySources)[number];
+
+/** Actual result for the whole batch (`splitId` null) or one fermentation variant. Null = ikke målt. */
+export interface BatchOutcome {
+  id: string;
+  splitId: string | null;
+  og: number | null;
+  ogSource: GravitySource | null;
+  fg: number | null;
+  fgSource: GravitySource | null;
+  packagedVolumeL: number | null;
+  packagedOn: string | null;
+  packaging: PackagingKind | null;
+  carbonationVols: number | null;
+  tastingNotes: string | null;
+  rating: number | null;
+  nextTime: string | null;
+  updatedAt: number;
+  updatedBy: UserRef;
+}
+
+export const saveOutcomeSchema = z
+  .object({
+    splitId: z.string().min(1).nullable(),
+    og: z.number().min(1).max(1.2).nullable(),
+    ogSource: z.enum(gravitySources).nullable(),
+    fg: z.number().min(0.98).max(1.2).nullable(),
+    fgSource: z.enum(gravitySources).nullable(),
+    packagedVolumeL: z.number().positive().max(10_000).nullable(),
+    packagedOn: z.iso.date().nullable(),
+    packaging: z.enum(packagingKinds).nullable(),
+    carbonationVols: z.number().min(0).max(6).nullable(),
+    tastingNotes: z.string().trim().max(4000).nullable(),
+    rating: z.number().int().min(1).max(5).nullable(),
+    nextTime: z.string().trim().max(2000).nullable(),
+    /** Optimistic concurrency: the result's `updatedAt` when the form was opened; absent for a new result. */
+    baseUpdatedAt: z.number().int().positive().optional(),
+  })
+  .superRefine((input, ctx) => {
+    if ((input.og === null) !== (input.ogSource === null)) {
+      ctx.addIssue({ code: "custom", path: ["ogSource"], message: "OG og kilde må fylles ut sammen." });
+    }
+    if ((input.fg === null) !== (input.fgSource === null)) {
+      ctx.addIssue({ code: "custom", path: ["fgSource"], message: "FG og kilde må fylles ut sammen." });
+    }
+    if (input.og !== null && input.fg !== null && input.fg >= input.og) {
+      ctx.addIssue({ code: "custom", path: ["fg"], message: "FG må være lavere enn OG." });
+    }
+  });
+export type SaveOutcomeInput = z.output<typeof saveOutcomeSchema>;
 
 export const createBatchSchema = z.object({
   recipeId: z.string().min(1),

@@ -119,7 +119,7 @@ export async function getTimeline(db: DB, breweryId: string, batchId: string): P
   }));
 }
 
-async function assertSplit(db: DB, breweryId: string, batchId: string, splitId: string | null | undefined): Promise<void> {
+export async function assertSplit(db: DB, breweryId: string, batchId: string, splitId: string | null | undefined): Promise<void> {
   if (!splitId) return;
   const split = await db
     .selectFrom("batch_splits")

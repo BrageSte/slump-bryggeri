@@ -63,13 +63,7 @@ export function buildFermentationSeries(input: FermentationInput): FermentationV
     const preferOwn = <T>(pick: (entries: BrewDayLogEntry[]) => T | null, entries: BrewDayLogEntry[]): T | null =>
       pick(own(entries)) ?? (splitId === null ? null : pick(shared(entries)));
 
-    const hotSide = log.filter((e) => e.stage !== null && HOT_SIDE.includes(e.stage));
-    const ogEntry = preferOwn((entries) => entries.findLast((e) => e.measurement?.kind === "sg" || e.measurement?.kind === "brix") ?? null, hotSide);
-    const og: GravityPoint | null = ogEntry?.measurement
-      ? ogEntry.measurement.kind === "sg"
-        ? { at: ogEntry.occurredAt, sg: ogEntry.measurement.value, source: "sg" }
-        : { at: ogEntry.occurredAt, sg: round3(brixToSg(ogEntry.measurement.value, wcf)), source: "brix" }
-      : null;
+    const og = findOriginalGravity(log, splitId, wcf);
 
     const beforeFermentation = log.filter((e) => !fermentationHasStarted(e.stage));
     const originalBrix = preferOwn((entries) => entries.findLast((e) => e.measurement?.kind === "brix")?.measurement?.value ?? null, beforeFermentation);
@@ -107,6 +101,22 @@ export function buildFermentationSeries(input: FermentationInput): FermentationV
     (e) => splitOf(e) === null && (e.measurement?.kind === "sg" || e.measurement?.kind === "brix" || e.measurement?.kind === "temperature" || e.measurement?.kind === "pressure"),
   );
   return sharedReadings ? [...variants, variant(null, "Hele batchen")] : variants;
+}
+
+/**
+ * The OG: the latest SG or Brix reading from the boil, whirlpool or cooling. A reading for the
+ * fermenter wins over one for the whole batch; gravity from before the boil is never the OG.
+ */
+export function findOriginalGravity(log: BrewDayLogEntry[], splitId: string | null, wcf = 1): GravityPoint | null {
+  const hotSide = log
+    .filter((e) => e.stage !== null && HOT_SIDE.includes(e.stage) && (e.measurement?.kind === "sg" || e.measurement?.kind === "brix"))
+    .sort((a, b) => a.occurredAt - b.occurredAt);
+  const entry =
+    hotSide.findLast((e) => (e.splitId ?? null) === splitId) ?? (splitId === null ? undefined : hotSide.findLast((e) => (e.splitId ?? null) === null));
+  if (!entry?.measurement) return null;
+  return entry.measurement.kind === "sg"
+    ? { at: entry.occurredAt, sg: entry.measurement.value, source: "sg" }
+    : { at: entry.occurredAt, sg: round3(brixToSg(entry.measurement.value, wcf)), source: "brix" };
 }
 
 /** Apparent attenuation from OG to the latest gravity; null when it cannot be computed. */

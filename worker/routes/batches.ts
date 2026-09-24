@@ -6,6 +6,7 @@ import {
   createMeasurementSchema,
   correctLogEntrySchema,
   createSplitSchema,
+  saveOutcomeSchema,
   startStageSchema,
   timestampSchema,
   updateBatchSchema,
@@ -17,6 +18,7 @@ import { badRequest } from "../lib/errors.ts";
 import { clientIp, enforceRateLimit } from "../lib/middleware.ts";
 import { parse, parseJsonBody } from "../lib/validate.ts";
 import { addBatchAttachment } from "../services/attachments.ts";
+import { saveOutcome } from "../services/batch-outcomes.ts";
 import { createBatch, createSplit, deleteBatch, getBatch, listBatches, startStage, updateBatch } from "../services/batches.ts";
 import { addComment, correctLogEntry, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
 
@@ -47,6 +49,11 @@ export const batchRoutes = new Hono<AppEnv>()
     const input = await parseJsonBody(c, startStageSchema);
     const id = await startStage(c.env.DB, c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.var.user, input);
     return c.json({ id }, 201);
+  })
+  .put("/:batchId/outcomes", async (c) => {
+    const input = await parseJsonBody(c, saveOutcomeSchema);
+    const id = await saveOutcome(c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.var.user, input);
+    return c.json({ id });
   })
   .post("/:batchId/splits", async (c) => {
     const input = await parseJsonBody(c, createSplitSchema);

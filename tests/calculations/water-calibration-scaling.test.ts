@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateBoilOff,
+  calculateBoilOffRate,
   calculateGravityEstimate,
   calculateRecipeMetrics,
   calculateRecipeScaling,
@@ -33,6 +34,12 @@ describe("volumes", () => {
   it("computes boil-off (Sunset IPA: 75.7 L → 62.5 L in 60 min ≈ 13.2 L/h)", () => {
     const result = calculateBoilOff({ preBoilVolumeL: 75.7, boilOffLPerH: 13.2, boilTimeMin: 60 });
     expect(result.postBoilVolumeL).toBeCloseTo(62.5, 1);
+  });
+
+  it("measures the boil-off rate from logged volumes (Sunset IPA: 75.7 → 62.5 L in 60 min = 13.2 L/h)", () => {
+    expect(calculateBoilOffRate({ preBoilVolumeL: 75.7, postBoilVolumeL: 62.5, boilTimeMin: 60 })).toBeCloseTo(13.2, 6);
+    expect(calculateBoilOffRate({ preBoilVolumeL: 30, postBoilVolumeL: 27, boilTimeMin: 90 })).toBeCloseTo(2, 6);
+    expect(() => calculateBoilOffRate({ preBoilVolumeL: 30, postBoilVolumeL: 27, boilTimeMin: 0 })).toThrow(RangeError);
   });
 
   it("reproduces the Sunset IPA volumes from 60 L into the fermenters", () => {

@@ -35,6 +35,7 @@ import { useBatch, useCreateSplit, useDeleteBatch, useStartStage, useTimeline, u
 import { BrewLog } from "./BrewLog.tsx";
 import { FermentationCard } from "./FermentationCard.tsx";
 import { FermentationChart } from "./FermentationChart.tsx";
+import { ResultSummary } from "./ResultSummary.tsx";
 import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
 import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
@@ -81,11 +82,11 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   const me = useMe();
   const { isAdmin } = useBrewery();
   const toast = useToast();
+  const navigate = useNavigate();
   const startStage = useStartStage(batch.id);
   const updateBatch = useUpdateBatch(batch.id);
   const [intent, setIntent] = useState<LogIntent | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [confirmComplete, setConfirmComplete] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [screenOn, setScreenOn] = useState(true);
   useScreenWakeLock(batch.status === "brewing" && screenOn);
@@ -133,7 +134,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       case "log_measurement":
         return setIntent({ kind: "measurement", measurementKind: action.measurementKind });
       case "complete":
-        return setConfirmComplete(true);
+        return navigate(`/batcher/${batch.id}/resultat`);
     }
   }
 
@@ -167,7 +168,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       />
 
       {batch.status === "completed" ? (
-        <CompletedSummary batch={batch} timeline={timeline} />
+        <CompletedCard batch={batch} />
       ) : batch.currentStage === null ? (
         <PlannedCard batch={batch} onStart={() => goToStage("mash")} starting={startStage.isPending} />
       ) : (
@@ -199,6 +200,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
           </Button>
         </Card>
       )}
+
+      <ResultSummary batch={batch} />
 
       {(fermenting || batch.currentStage === "packaging" || batch.status === "completed") && (
         <FermentationChart variants={variants} until={batch.completedAt ?? now} />
@@ -250,27 +253,13 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         pendingAdditions={pendingAdditions}
         currentUser={user}
       />
-      <BatchMenu batch={batch} open={menuOpen} onClose={() => setMenuOpen(false)} onStage={goToStage} onComplete={() => setConfirmComplete(true)} />
-      <ConfirmDialog
-        open={confirmComplete}
-        title="Avslutte batchen?"
-        confirmLabel="Avslutt"
-        loading={updateBatch.isPending}
-        onClose={() => setConfirmComplete(false)}
-        onConfirm={() =>
-          updateBatch.mutate(
-            { status: "completed" },
-            {
-              onSuccess: () => {
-                setConfirmComplete(false);
-                toast("Batchen er avsluttet og ligger i historikken");
-              },
-            },
-          )
-        }
-      >
-        Batchen flyttes til historikken. Du kan fortsatt legge til smaksnotater, og den kan gjenåpnes.
-      </ConfirmDialog>
+      <BatchMenu
+        batch={batch}
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        onStage={goToStage}
+        onComplete={() => navigate(`/batcher/${batch.id}/resultat`)}
+      />
     </div>
   );
 }
@@ -448,20 +437,19 @@ function NextActionBody({ action, remainingMin }: { action: NextAction; remainin
   );
 }
 
-function CompletedSummary({ batch, timeline }: { batch: BatchDetail; timeline: TimelineItem[] }) {
-  const last = (kind: string) => timeline.findLast((t) => t.measurement?.kind === kind)?.measurement;
-  const { og, fg } = expectedGravities(batch.recipeSnapshot);
+function CompletedCard({ batch }: { batch: BatchDetail }) {
   return (
     <Card className="space-y-3">
       <SectionLabel>Ferdig</SectionLabel>
       <p className="text-muted">
         Avsluttet {batch.completedAt ? new Date(batch.completedAt).toLocaleDateString("nb-NO", { day: "numeric", month: "long" }) : ""}.
+        {batch.outcomes.length === 0 && " Ingen resultat er lagret ennå."}
       </p>
-      <div className="grid grid-cols-3 gap-2">
-        <MetricCard label="Planlagt OG" value={formatSg(og)} />
-        <MetricCard label="Planlagt FG" value={formatSg(fg)} />
-        <MetricCard label="Siste SG" value={last("sg") ? formatSg(last("sg")?.value) : "–"} />
-      </div>
+      {batch.outcomes.length === 0 && (
+        <Link to={`/batcher/${batch.id}/resultat`} className={buttonClasses("primary", "md", true)}>
+          Registrer resultat
+        </Link>
+      )}
     </Card>
   );
 }
