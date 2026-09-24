@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { BatchDetail, BatchSummary, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
+import type { BatchDetail, BatchSummary, CorrectLogEntryInput, CreatedResponse, TimelineItem } from "../../domain/model/api.ts";
 import { measurementToCanonical } from "../../domain/brewing-calculations/measurement-units.ts";
 import type { BatchStatus, BrewStage, MeasurementKind } from "../../domain/model/brewing.ts";
 import { measurementKindSpecs } from "../../domain/model/brewing.ts";
@@ -131,6 +131,12 @@ export const useEditComment = (batchId: string) =>
   useBatchMutation(batchId, (base, input: { commentId: string; body: string }) =>
     api.patch(`${base}/comments/${input.commentId}`, { body: input.body }),
   );
+
+export const useCorrectLogEntry = (batchId: string) =>
+  useBatchMutation(batchId, (base, input: CorrectLogEntryInput & { eventId: string }) => {
+    const { eventId, ...correction } = input;
+    return api.patch<CreatedResponse>(`${base}/events/${eventId}/correction`, correction);
+  });
 
 export const useLogEvent = (batchId: string) =>
   useBatchMutation(

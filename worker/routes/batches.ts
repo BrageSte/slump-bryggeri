@@ -4,6 +4,7 @@ import {
   createCommentSchema,
   createEventSchema,
   createMeasurementSchema,
+  correctLogEntrySchema,
   createSplitSchema,
   startStageSchema,
   updateBatchSchema,
@@ -16,7 +17,7 @@ import { clientIp, enforceRateLimit } from "../lib/middleware.ts";
 import { parse, parseJsonBody } from "../lib/validate.ts";
 import { addBatchAttachment } from "../services/attachments.ts";
 import { createBatch, createSplit, deleteBatch, getBatch, listBatches, startStage, updateBatch } from "../services/batches.ts";
-import { addComment, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
+import { addComment, correctLogEntry, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
 
 /** Mounted under /breweries/:breweryId/batches — membership is already verified. */
 export const batchRoutes = new Hono<AppEnv>()
@@ -68,6 +69,19 @@ export const batchRoutes = new Hono<AppEnv>()
     const { body } = await parseJsonBody(c, updateCommentSchema);
     await editComment(c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.req.param("commentId"), c.var.user, body);
     return c.body(null, 204);
+  })
+  .patch("/:batchId/events/:eventId/correction", async (c) => {
+    const input = await parseJsonBody(c, correctLogEntrySchema);
+    const id = await correctLogEntry(
+      c.env.DB,
+      c.var.db,
+      c.var.membership.breweryId,
+      c.req.param("batchId"),
+      c.req.param("eventId"),
+      c.var.user,
+      input,
+    );
+    return c.json({ id }, 201);
   })
   .post("/:batchId/events", async (c) => {
     const input = await parseJsonBody(c, createEventSchema);

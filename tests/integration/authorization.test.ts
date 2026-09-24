@@ -136,6 +136,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.post(`/breweries/${breweryA}/batches`, { recipeId: recipeA }),
       bob.post(`/breweries/${breweryB}/batches`, { recipeId: recipeA }),
       bob.post(`/breweries/${breweryA}/batches/${batchA}/measurements`, { kind: "temperature", value: 99 }),
+      bob.patch(`/breweries/${breweryA}/batches/${batchA}/events/${eventA}/correction`, { entryKind: "measurement" }),
       bob.post(`/breweries/${breweryB}/batches/${batchA}/measurements`, { kind: "temperature", value: 99 }),
       bob.post(`/breweries/${breweryB}/batches/${batchA}/comments`, { body: "hei" }),
       bob.post(`/breweries/${breweryB}/batches/${batchA}/stage`, { stage: "boil" }),

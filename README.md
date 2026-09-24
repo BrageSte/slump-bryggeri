@@ -37,6 +37,9 @@ den aktuelle inntastingen og viser omregningen med én gang. Valget huskes ikke.
 delvis overlapp med målet vises som **Usikker**. Omregneren er tilgjengelig fra **Mer** og målearket på
 bryggedagen.
 
+Loggføringer kan korrigeres fra detaljarket; tidligere verdier og hvem/når bevares. Batchnavn og bryggedato
+kan endres fra batchmenyen.
+
 ## Status
 
 | Fase | Innhold | Status |

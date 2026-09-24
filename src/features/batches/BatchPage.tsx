@@ -486,10 +486,17 @@ function BatchMenu({
   const updateBatch = useUpdateBatch(batch.id);
   const createSplit = useCreateSplit(batch.id);
   const deleteBatch = useDeleteBatch();
-  const [view, setView] = useState<"menu" | "stage" | "split" | "delete">("menu");
+  const [view, setView] = useState<"menu" | "stage" | "split" | "details" | "delete">("menu");
   const [splitName, setSplitName] = useState("");
   const [splitVessel, setSplitVessel] = useState("");
   const [splitVolume, setSplitVolume] = useState("");
+  const [batchName, setBatchName] = useState(batch.name);
+  const [brewDate, setBrewDate] = useState(batch.brewDate ?? "");
+
+  useEffect(() => {
+    setBatchName(batch.name);
+    setBrewDate(batch.brewDate ?? "");
+  }, [batch.name, batch.brewDate, open]);
 
   const close = () => {
     setView("menu");
@@ -498,9 +505,16 @@ function BatchMenu({
 
   return (
     <>
-      <BottomSheet open={open && view !== "delete"} onClose={close} title={view === "stage" ? "Gå til steg" : view === "split" ? "Ny variant" : "Batch"}>
+      <BottomSheet
+        open={open && view !== "delete"}
+        onClose={close}
+        title={view === "stage" ? "Gå til steg" : view === "split" ? "Ny variant" : view === "details" ? "Batchdetaljer" : "Batch"}
+      >
         {view === "menu" && (
           <div className="grid gap-2">
+            <Button block icon="edit" onClick={() => setView("details")}>
+              Rediger navn og dato
+            </Button>
             {batch.status !== "completed" && (
               <Button block icon="play" onClick={() => setView("stage")}>
                 Gå til steg …
@@ -552,6 +566,30 @@ function BatchMenu({
               </Button>
             ))}
           </div>
+        )}
+        {view === "details" && (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              updateBatch.mutate(
+                { name: batchName.trim(), brewDate: brewDate || null },
+                { onSuccess: () => (toast("Batchdetaljer oppdatert"), close()) },
+              );
+            }}
+          >
+            <Field label="Batchnavn">
+              {(props) => <TextInput {...props} required maxLength={120} value={batchName} onChange={(event) => setBatchName(event.target.value)} />}
+            </Field>
+            <Field label="Bryggedato">
+              {(props) => <TextInput {...props} type="date" value={brewDate} onChange={(event) => setBrewDate(event.target.value)} />}
+            </Field>
+            {updateBatch.error && <InlineError>{updateBatch.error.message}</InlineError>}
+            <div className="flex gap-2">
+              <Button type="submit" variant="primary" loading={updateBatch.isPending}>Lagre</Button>
+              <Button variant="ghost" onClick={() => setView("menu")}>Avbryt</Button>
+            </div>
+          </form>
         )}
         {view === "split" && (
           <form

@@ -5,7 +5,52 @@ import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasSta
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
 import { formatAmount, formatLogTime, formatSg } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
+import { CorrectionForm } from "./CorrectionForm.tsx";
 import { formatMeasurement, formatMeasurementInUnit, formatMeasurementRange } from "./helpers.ts";
+
+function latestCorrection(item: TimelineItem): Record<string, unknown> | null {
+  const history = item.data?.corrections;
+  if (!Array.isArray(history)) return null;
+  const latest = history.at(-1);
+  return latest && typeof latest === "object" ? latest as Record<string, unknown> : null;
+}
+
+function correctionSummary(item: TimelineItem): string | null {
+  const correction = latestCorrection(item);
+  if (!correction) return null;
+  const previous = correction.previousMeasurement;
+  let previousValue = "";
+  let unit = "";
+  if (previous && typeof previous === "object") {
+    const measurement = previous as Record<string, unknown>;
+    const kind = measurement.kind;
+    const enteredValue = measurement.enteredValue;
+    const enteredUnit = measurement.enteredUnit;
+    if (typeof kind === "string" && kind in measurementKindSpecs && typeof enteredValue === "number" && typeof enteredUnit === "string") {
+      const measurementKind = kind as keyof typeof measurementKindSpecs;
+      const min = measurement.valueMin;
+      const max = measurement.valueMax;
+      previousValue = typeof min === "number" && typeof max === "number"
+        ? formatMeasurementRange(measurementKind, min, max, enteredUnit)
+        : formatMeasurementInUnit(measurementKind, enteredValue, enteredUnit);
+      unit = enteredUnit;
+    }
+  }
+  if (!previousValue && correction.previousData && typeof correction.previousData === "object") {
+    const data = correction.previousData as Record<string, unknown>;
+    const value = typeof data.amount === "number" ? data.amount : typeof data.value === "number" ? data.value : null;
+    if (value !== null) {
+      previousValue = value.toLocaleString("nb-NO", { maximumFractionDigits: 2 });
+      unit = typeof data.unit === "string" ? data.unit : "";
+    }
+  }
+  const details = [
+    previousValue ? `Før: ${previousValue}${unit ? ` ${unit}` : ""}` : null,
+    typeof correction.previousCreatedByName === "string" ? `registrert av ${correction.previousCreatedByName}` : null,
+    typeof correction.previousOccurredAt === "number" ? new Date(correction.previousOccurredAt).toLocaleString("nb-NO") : null,
+  ].filter(Boolean);
+  return details.join(" · ") || "Loggføringen er korrigert.";
+}
 
 function iconFor(item: TimelineItem): IconName {
   if (item.measurement) {
@@ -86,6 +131,7 @@ export function BrewLog({
         {visible.map((item) => {
           const d = describe(item, wcf, originalBrix);
           const pending = item.id.startsWith("optimistic-");
+          const corrected = latestCorrection(item) !== null;
           return (
             <li key={item.id}>
               <button
@@ -115,6 +161,7 @@ export function BrewLog({
                     {item.stage && <span>· {brewStageLabels[item.stage]}</span>}
                     {splitName(item.splitId) && <StatusChip tone="info">{splitName(item.splitId)}</StatusChip>}
                     {item.comment?.editedAt && <span>· redigert</span>}
+                    {corrected && <StatusChip tone="warning">Korrigert</StatusChip>}
                   </span>
                 </span>
               </button>
@@ -154,9 +201,12 @@ function EntrySheet({
   const editComment = useEditComment(batch.id);
   const [confirming, setConfirming] = useState(false);
   const [draft, setDraft] = useState<string | null>(null);
+  const [correcting, setCorrecting] = useState(false);
 
   if (!item) return null;
   const d = describe(item, batch.equipmentSnapshot.values.refractometer_wcf ?? 1, originalBrix);
+  const correction = correctionSummary(item);
+  const canCorrect = item.measurement !== null || (!item.comment && !item.attachment && item.type !== "status_changed" && !item.type.endsWith("_started"));
   const close = () => {
     setDraft(null);
     onClose();
@@ -164,8 +214,16 @@ function EntrySheet({
 
   return (
     <>
-      <BottomSheet open={!confirming} onClose={close} title={item.measurement ? d.title : (eventTypeLabels[item.type] ?? "Loggføring")}>
-        <div className="space-y-4">
+      <BottomSheet open={!confirming} onClose={close} title={correcting ? "Korriger loggføring" : item.measurement ? d.title : (eventTypeLabels[item.type] ?? "Loggføring")}>
+        {correcting ? (
+          <CorrectionForm
+            batch={batch}
+            item={item}
+            originalBrix={originalBrix}
+            onCancel={() => setCorrecting(false)}
+            onSaved={close}
+          />
+        ) : <div className="space-y-4">
           {d.value && (
             <p className="tabular text-display font-bold">
               {d.value}
@@ -187,6 +245,7 @@ function EntrySheet({
             </a>
           )}
           {d.detail && <p className="text-muted">{d.detail}</p>}
+          {correction && <p className="rounded-md bg-warning-soft p-3 text-small text-warning">Korrigert · {correction}</p>}
           <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-small">
             <dt className="text-muted">Tidspunkt</dt>
             <dd>{new Date(item.occurredAt).toLocaleString("nb-NO")}</dd>
@@ -201,6 +260,7 @@ function EntrySheet({
           </dl>
           {(editComment.error || deleteEvent.error) && <InlineError>{(editComment.error ?? deleteEvent.error)?.message}</InlineError>}
           <div className="flex flex-wrap gap-2">
+            {canCorrect && <Button icon="edit" onClick={() => setCorrecting(true)}>Korriger</Button>}
             {item.comment && canEdit && draft === null && (
               <Button icon="edit" onClick={() => setDraft(item.comment?.body ?? "")}>
                 Rediger
@@ -227,7 +287,7 @@ function EntrySheet({
               </Button>
             )}
           </div>
-        </div>
+        </div>}
       </BottomSheet>
       <ConfirmDialog
         open={confirming}
