@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Wordmark } from "../../components/AppShell.tsx";
 import { Button, Card, Field, InlineError, LoadingState, SectionLabel, TextInput, useToast } from "../../design-system/index.ts";
+import { useMode } from "../auth/mode.ts";
 import { useMe } from "../auth/session.ts";
 import { useCreateBrewery, useRespondToInvite, useUpdateMyName } from "./api.ts";
 import { rememberBrewery } from "./BreweryContext.tsx";
@@ -9,6 +10,7 @@ import { rememberBrewery } from "./BreweryContext.tsx";
 /** First run: tell us your name, then join an invited brewery or create one. */
 export function OnboardingPage() {
   const me = useMe();
+  const mode = useMode();
   const navigate = useNavigate();
   const toast = useToast();
   const updateName = useUpdateMyName();
@@ -18,6 +20,7 @@ export function OnboardingPage() {
   const [breweryName, setBreweryName] = useState("");
 
   if (me.isPending) return <div className="mx-auto max-w-md p-4"><LoadingState rows={2} /></div>;
+  if (mode.data?.breweryMode) return <Navigate to={me.data ? "/" : "/inngang"} replace />;
   if (!me.data) return <Navigate to="/logg-inn" replace />;
   const { user, memberships, pendingInvites } = me.data;
   const needsName = !user.name.trim();

@@ -5,6 +5,7 @@ import { AssistantPage } from "../features/assistant/AssistantPage.tsx";
 import { LoginPage } from "../features/auth/LoginPage.tsx";
 import { BatchPage } from "../features/batches/BatchPage.tsx";
 import { BrewPage } from "../features/batches/BrewPage.tsx";
+import { BreweryModePage } from "../features/breweries/BreweryModePage.tsx";
 import { OnboardingPage } from "../features/breweries/OnboardingPage.tsx";
 import { InventoryPage } from "../features/inventory/InventoryPage.tsx";
 import { ImportRecipePage } from "../features/recipes/ImportRecipePage.tsx";
@@ -38,6 +39,7 @@ const settings = async () => ({ Component: (await import("./SettingsPage.tsx")).
 
 export const router = createBrowserRouter([
   { path: "/logg-inn", element: <LoginPage /> },
+  { path: "/inngang", element: <BreweryModePage /> },
   { path: "/velkommen", element: <OnboardingPage /> },
   {
     element: <RequireBrewery />,

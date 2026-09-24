@@ -4,6 +4,7 @@ import { Navigate, useNavigate } from "react-router";
 import { Wordmark } from "../../components/AppShell.tsx";
 import { Button, Card, Field, InlineError, TextInput } from "../../design-system/index.ts";
 import { authClient } from "../../lib/auth-client.ts";
+import { useMode } from "./mode.ts";
 import { meQueryKey, useMe } from "./session.ts";
 
 type AuthError = { status?: number; code?: string; message?: string } | null;
@@ -30,6 +31,7 @@ const isLocalDev = ["localhost", "127.0.0.1"].includes(window.location.hostname)
 
 export function LoginPage() {
   const me = useMe();
+  const mode = useMode();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -39,6 +41,7 @@ export function LoginPage() {
   const [busy, setBusy] = useState(false);
 
   if (me.data) return <Navigate to="/" replace />;
+  if (mode.data?.breweryMode) return <Navigate to="/inngang" replace />;
 
   async function sendCode(event?: FormEvent) {
     event?.preventDefault();

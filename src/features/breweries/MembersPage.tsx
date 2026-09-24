@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import type { Role } from "../../domain/model/api.ts";
 import { Button, Card, ConfirmDialog, ErrorState, Field, InlineError, ListCard, LoadingState, PageHeader, Section, Select, StatusChip, TextInput, useToast } from "../../design-system/index.ts";
 import { formatDate } from "../../lib/format.ts";
+import { useMode } from "../auth/mode.ts";
 import { useMe } from "../auth/session.ts";
 import { useBreweryDetail, useInvite, useRemoveMember, useRevokeInvite, useUpdateMemberRole } from "./api.ts";
 import { useBrewery } from "./BreweryContext.tsx";
@@ -11,6 +12,7 @@ const roleLabel = (role: Role) => (role === "admin" ? "Administrator" : "Medlem"
 export function MembersPage() {
   const detail = useBreweryDetail();
   const me = useMe();
+  const breweryMode = useMode().data?.breweryMode ?? false;
   const { isAdmin, breweryName } = useBrewery();
   const toast = useToast();
   const invite = useInvite();
@@ -46,7 +48,7 @@ export function MembersPage() {
                   {member.user.name || member.user.email}
                   {member.user.id === myId && <span className="font-normal text-muted"> (deg)</span>}
                 </p>
-                <p className="truncate text-small text-muted">{member.user.email}</p>
+                {member.user.email && <p className="truncate text-small text-muted">{member.user.email}</p>}
               </div>
               {isAdmin && member.user.id !== myId ? (
                 <div className="flex items-center gap-1">
@@ -76,7 +78,14 @@ export function MembersPage() {
         </ListCard>
       </Section>
 
-      {isAdmin && (
+      {breweryMode && (
+        <p className="text-small text-muted">
+          Nye bryggere legger seg til selv: åpne appen, skriv inn bryggerikoden og velg «Legg meg til».
+          {isAdmin ? " Du kan gjøre andre til administrator over." : ""}
+        </p>
+      )}
+
+      {isAdmin && !breweryMode && (
         <>
           <Card>
             <form onSubmit={submitInvite} className="space-y-4">

@@ -30,7 +30,7 @@ Brages tilbakemeldinger 2026-09-24 (oppsummert under).
 | # | Tema | Beslutning |
 |---|---|---|
 | B1 | Drift | Skal være gratis, i hvert fall i starten. Vi blir på Cloudflare (gratisnivået dekker behovet); ingen flytting til Vercel. |
-| B2 | Innlogging | Må være gratis og uten eget domene → **Google-innlogging** først. E-postkode beholdes til et domene finnes. |
+| B2 | Innlogging | **Ingen innlogging i starten** (2026-09-24, oppdatert): appen er Slump Bryggeris egen. «Bryggerimodus» med felles bryggerikode og «Hvem er du?». Ekte innlogging (Google/e-post) kommer når appen skal brukes av andre (M9). |
 | B3 | Vannplan | Kommer fra **BeerSmith**-import (stegene ligger der). Egen beregning er kontroll/fallback. |
 | B4 | Enheter | Bryggeriet skriver ofte i **gallons**. Må kunne skrive i gal, °F, oz, lb osv. og få liter/°C — og omvendt. |
 | B5 | Bryggedag | **Timere og alarmer**, og skjermen skal ikke slukke. |
@@ -45,7 +45,7 @@ Brages tilbakemeldinger 2026-09-24 (oppsummert under).
 
 | Milepæl | Innhold | Størrelse | Avhenger av | Brage må |
 |---|---|---|---|---|
-| **M1** | Gratis drift: Google-innlogging, bildelagring, deploy fra GitHub | M | — | Google OAuth-klient, API-token, (evt. kort for R2) |
+| **M1** | Gratis drift: bryggerimodus ✅, bildelagring, deploy fra GitHub | S | — | API-token, (evt. kort for R2) |
 | **M2** | Enheter (gal/°F/oz …), pH-strips, redigering overalt med historikk | L | — | — |
 | **M3** | Timere, alarmer, skjermen på | M | M2 (delvis) | — |
 | **M4** | Gjæringsgraf | S–M | — | — |
@@ -53,6 +53,7 @@ Brages tilbakemeldinger 2026-09-24 (oppsummert under).
 | **M6** | Avslutning av batch, faktiske tall, smaksnotater, kalibreringsobservasjoner | M | M2, M4 | — |
 | **M7** | Vann og pH: kildevann, salter, syre, pH-estimat | L | M5 | Kommunens vannanalyse |
 | **M8** | Bryggerapport (pen, printbar) og eksport | M | M4, M6, (M7) | — |
+| **M9** | Innlogging for andre bryggerier (Google/e-post), knytte personer til kontoer | M | — | Google OAuth-klient / domene |
 
 M4 er liten og kan tas parallelt med M2/M3.
 
@@ -76,29 +77,19 @@ Lovable føles gratis fordi det bruker Supabase, som har innebygd e-post for inn
 begrenset til noen få e-poster i timen og ment for testing. Vercel har gratis hosting, men ingen
 innebygd innlogging/e-post; vi ville fått samme problem og måttet flytte database og filer.
 
-### M1.1 Google-innlogging (+ valg av innloggingsmetode)
+### M1.1 Bryggerimodus — ingen innlogging i starten ✅
 
-- [ ] `worker/auth/auth.ts`: `socialProviders.google` når `GOOGLE_CLIENT_ID` og `GOOGLE_CLIENT_SECRET` finnes.
-      `account.accountLinking = { enabled: true, trustedProviders: ["google"] }` så samme e-post = samme bruker
-      uansett metode. Legg secrets inn i `.dev.vars.example` (tomme) og kjør `npm run cf-typegen`.
-- [ ] Sett `APP_URL` i `env.production.vars` til `https://slump-bryggeri.brage-steen.workers.dev`
-      (OAuth-redirect må være eksakt).
-- [ ] Nytt offentlig endepunkt `GET /api/auth/methods` → `{ google: boolean, emailOtp: boolean }`
-      (e-postkode er bare tilgjengelig når `canSendEmail()` er sann). Legg det *foran* Better Auth-handleren.
-- [ ] `LoginPage`: «Fortsett med Google» (primær når tilgjengelig, `authClient.signIn.social({ provider: "google", callbackURL: "/" })`),
-      e-postkode som alternativ når den er tilgjengelig. Tydelig feilmelding hvis ingen metode er satt opp.
-- [ ] Invitasjoner fungerer uendret: de matcher på e-post, og Google gir verifisert e-post.
-- [ ] Tester: `/api/auth/methods` speiler konfigurasjonen; `POST /api/auth/sign-in/social` gir en Google-URL med riktig
-      `redirect_uri` når nøkler er satt, og 4xx når de mangler.
-- [ ] Docs: architecture.md (innlogging) og README.
+Gjort 2026-09-24. Appen er Slump Bryggeris egen: ingen kontoer, ingen e-post.
 
-**Brage må:** Google Cloud Console → nytt prosjekt «Slump» → *OAuth consent screen* (External; scopes kun
-`openid`, `email`, `profile` — da trengs ingen verifisering) → *Credentials* → *OAuth client ID* (Web).
-Autoriserte redirect-URI-er: `https://slump-bryggeri.brage-steen.workers.dev/api/auth/callback/google` og
-`http://localhost:5173/api/auth/callback/google`. Deretter:
-`npx wrangler secret put GOOGLE_CLIENT_ID --env production` og tilsvarende for `GOOGLE_CLIENT_SECRET`.
-
-**Akseptanse:** Brage og en invitert venn kan logge inn på produksjon med Google og ser samme bryggeri.
+- Felles **bryggerikode** (secret `BREWERY_ACCESS_CODE`) skrives inn én gang per enhet → signert cookie.
+  Uten satt kode er appen åpen (brukes lokalt). Ny kode = alle enheter må skrive inn koden på nytt.
+- **«Hvem er du?»**: velg deg selv fra listen eller «Legg meg til». Første person oppretter bryggeriet og blir administrator.
+  «Bytt person» under Mer.
+- Personer er vanlige rader i `users` (plassholder-e-post `…@personer.slump.invalid`), så M9 kan koble dem til ekte
+  kontoer uten datamigrering. Navnet i loggen er en merkelapp, ikke bevis — alle med koden kan velge hvem som helst.
+- Kode: `worker/auth/brewery-mode.ts`, `worker/routes/brewery-mode.ts`, `src/features/breweries/BreweryModePage.tsx`.
+  Tester: `tests/integration/brewery-mode.test.ts`.
+- Slås av med `BREWERY_MODE` ≠ `"on"` (da gjelder vanlig innlogging).
 
 ### M1.2 Bilder uten R2 (gratis, uten kort)
 
@@ -121,10 +112,7 @@ Alternativt: aktiver R2 i dashbordet (krever kort) og bruk R2 direkte.
 legg til **D1: Edit** (og **Workers KV Storage: Edit** for M1.2). Legg inn som GitHub-secrets i repoet:
 `CLOUDFLARE_API_TOKEN` og `CLOUDFLARE_ACCOUNT_ID` (`12e5fd15eb499d3af63d742451c5d185`).
 
-### M1.4 E-postkode senere (valgfritt)
-
-Når/hvis Brage har et domene på Cloudflare: Email Routing + verifiserte mottakeradresser (gratis), eller
-Email Sending (Workers Paid). Legg til `send_email`-binding `EMAIL` og sett `EMAIL_FROM`. Koden støtter det allerede.
+### M1.4 Flyttet: innlogging → M9
 
 ---
 
@@ -292,6 +280,22 @@ pH-estimatet sammenlignes med strip-målinger over tid.
       loggen, hele bryggeriet → JSON-backup.
 
 ---
+
+## M9 — Innlogging for andre (senere)
+
+Når appen skal brukes av andre enn Slump Bryggeri:
+
+- [ ] **Google-innlogging** (gratis, uten domene): `socialProviders.google` i `worker/auth/auth.ts` når
+      `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` finnes; `account.accountLinking = { enabled: true, trustedProviders: ["google"] }`;
+      `APP_URL` satt i `env.production.vars`; «Fortsett med Google» på innloggingssiden; offentlig `GET /api/auth/methods`.
+      **Brage må:** OAuth-klient i Google Cloud Console (scopes `openid`, `email`, `profile`; redirect-URI-er
+      `https://slump-bryggeri.brage-steen.workers.dev/api/auth/callback/google` og `http://localhost:5173/api/auth/callback/google`),
+      og `npx wrangler secret put GOOGLE_CLIENT_ID|GOOGLE_CLIENT_SECRET --env production`.
+- [ ] **Koble personer til kontoer:** hver person i bryggerimodus legger inn sin e-post (Mer → Innstillinger); da kobler
+      Better Auth kontoen til samme bruker ved første innlogging. Deretter kan bryggerimodus slås av.
+- [ ] **E-postkode** (valgfritt): domene + Cloudflare Email Routing til verifiserte adresser (gratis) eller Email Sending /
+      Resend; `send_email`-binding `EMAIL` + `EMAIL_FROM`. Koden støtter det allerede.
+- [ ] Flere bryggerier per installasjon (bryggerimodus antar ett).
 
 ## Tverrgående krav (hver oppgave)
 

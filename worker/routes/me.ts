@@ -9,13 +9,18 @@ export const meRoutes = new Hono<AppEnv>()
   .get("/me", async (c) => c.json(await getMe(c.var.db, c.var.user)))
   .patch("/me", async (c) => {
     const { name } = await parseJsonBody(c, updateProfileSchema);
-    const { headers } = await createAuth(c.env, c.req.raw).api.updateUser({
-      body: { name },
-      headers: c.req.raw.headers,
-      returnHeaders: true,
-    });
-    // Forward the refreshed session cookie cache so the new name is used immediately.
-    for (const cookie of headers.getSetCookie()) c.header("Set-Cookie", cookie, { append: true });
+    const auth = createAuth(c.env, c.req.raw);
+    if (await auth.api.getSession({ headers: c.req.raw.headers })) {
+      const { headers } = await auth.api.updateUser({ body: { name }, headers: c.req.raw.headers, returnHeaders: true });
+      // Forward the refreshed session cookie cache so the new name is used immediately.
+      for (const cookie of headers.getSetCookie()) c.header("Set-Cookie", cookie, { append: true });
+    } else {
+      await c.var.db
+        .updateTable("users")
+        .set({ name, updated_at: new Date().toISOString() })
+        .where("id", "=", c.var.user.id)
+        .execute();
+    }
     return c.json(await getMe(c.var.db, c.var.user));
   })
   .post("/invites/:inviteId/accept", async (c) => {

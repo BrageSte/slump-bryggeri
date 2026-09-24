@@ -25,7 +25,10 @@
   "vars": {
     // Public URL of the app. Leave empty to derive it from the request (fine for local dev).
     "APP_URL": "",
-    "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>"
+    "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
+    // Brewery mode: no accounts, one brewery, optional shared code (secret BREWERY_ACCESS_CODE).
+    "BREWERY_MODE": "on",
+    "BREWERY_NAME": "Slump Bryggeri"
   },
   "env": {
     // Deployed with `npm run deploy` (CLOUDFLARE_ENV=production). Same as the top level, but without
@@ -47,7 +50,9 @@
       ],
       "vars": {
         "APP_URL": "",
-        "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>"
+        "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
+        "BREWERY_MODE": "on",
+        "BREWERY_NAME": "Slump Bryggeri"
       }
     }
   }

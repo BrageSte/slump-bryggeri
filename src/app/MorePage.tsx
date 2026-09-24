@@ -1,17 +1,20 @@
 import { Link } from "react-router";
 import { Icon, ListCard, ListLink, PageHeader, Section, type IconName } from "../design-system/index.ts";
+import { useLeavePerson, useMode } from "../features/auth/mode.ts";
 import { useMe, useSignOut } from "../features/auth/session.ts";
 import { useBrewery } from "../features/breweries/BreweryContext.tsx";
 
 export function MorePage() {
   const me = useMe();
   const signOut = useSignOut();
+  const leavePerson = useLeavePerson();
+  const breweryMode = useMode().data?.breweryMode ?? false;
   const { breweryName, memberships, switchBrewery, breweryId } = useBrewery();
   const icon = (name: IconName) => <Icon name={name} className="shrink-0 text-primary-strong" />;
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Mer" subtitle={me.data?.user.email} />
+      <PageHeader title="Mer" subtitle={breweryMode ? `Du er ${me.data?.user.name ?? ""}` : me.data?.user.email} />
 
       <Section title={breweryName}>
         <ListCard>
@@ -44,10 +47,14 @@ export function MorePage() {
       <Section title="Konto">
         <ListCard>
           <ListLink to="/mer/innstillinger" title="Innstillinger" subtitle="Navn og tema" icon={icon("settings")} />
-          <ListLink to="/velkommen" title="Opprett eller bli med i bryggeri" icon={icon("plus")} />
-          <button type="button" onClick={() => void signOut()} className="flex min-h-14 w-full items-center gap-3 px-4 text-left font-semibold text-danger hover:bg-surface-2">
-            <Icon name="logout" />
-            Logg ut
+          {!breweryMode && <ListLink to="/velkommen" title="Opprett eller bli med i bryggeri" icon={icon("plus")} />}
+          <button
+            type="button"
+            onClick={() => void (breweryMode ? leavePerson() : signOut())}
+            className="flex min-h-14 w-full items-center gap-3 px-4 text-left font-semibold text-danger hover:bg-surface-2"
+          >
+            <Icon name={breweryMode ? "users" : "logout"} />
+            {breweryMode ? "Bytt person" : "Logg ut"}
           </button>
         </ListCard>
       </Section>

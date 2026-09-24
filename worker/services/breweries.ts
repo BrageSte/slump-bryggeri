@@ -4,6 +4,7 @@ import type {
   Role,
 } from "../../src/domain/model/api.ts";
 import { defaultProfileValues } from "../../src/domain/model/equipment-profile.ts";
+import { publicEmail } from "../auth/brewery-mode.ts";
 import type { MembershipContext, SessionUser } from "../lib/context.ts";
 import { atomic, newId, type DB } from "../lib/db.ts";
 import { badRequest, conflict, notFound } from "../lib/errors.ts";
@@ -42,7 +43,7 @@ export async function getMe(db: DB, sessionUser: SessionUser): Promise<MeRespons
 
   const memberOf = new Set(memberships.map((m) => m.id));
   return {
-    user,
+    user: { ...user, email: publicEmail(user.email) },
     memberships: memberships.map((m) => ({ brewery: { id: m.id, name: m.name }, role: m.role })),
     pendingInvites: invites
       .filter((i) => !memberOf.has(i.brewery_id))
@@ -117,7 +118,7 @@ export async function getBreweryDetail(db: DB, membership: MembershipContext): P
     id: membership.breweryId,
     name: membership.breweryName,
     myRole: membership.role,
-    members: members.map((m) => ({ user: { id: m.id, name: m.name, email: m.email }, role: m.role, joinedAt: m.created_at })),
+    members: members.map((m) => ({ user: { id: m.id, name: m.name, email: publicEmail(m.email) }, role: m.role, joinedAt: m.created_at })),
     invites:
       invites?.map((i) => ({ id: i.id, email: i.email, role: i.role, createdAt: i.created_at, expiresAt: i.expires_at })) ?? null,
   };

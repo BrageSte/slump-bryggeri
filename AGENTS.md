@@ -19,6 +19,9 @@ and tick the plan's checkboxes in the same PR. Merging to `main` deploys (once t
 
 ## Rules that are easy to break
 
+- **Brewery mode** is on in dev and production: no accounts; `requireUser` accepts a Better Auth session
+  *or* the person chosen on the device (worker/auth/brewery-mode.ts). Never add routes that bypass
+  `requireUser`/`requireMember` because "there is no login" — the code and membership still apply.
 - **Authorization**: every brewery-scoped route lives under `/api/breweries/:breweryId/*` behind
   `requireMember()` (worker/routes/breweries.ts). Scope every query by `c.var.membership.breweryId`,
   never by an id from the request body. Non-members get 404. Add an isolation test for new resources

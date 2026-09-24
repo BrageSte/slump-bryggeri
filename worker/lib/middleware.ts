@@ -1,5 +1,6 @@
 import { createMiddleware } from "hono/factory";
 import { createAuth } from "../auth/auth.ts";
+import { currentPerson } from "../auth/brewery-mode.ts";
 import type { AppEnv } from "./context.ts";
 import { createDb } from "./db.ts";
 import { forbidden, HttpError, notFound, unauthorized } from "./errors.ts";
@@ -29,10 +30,16 @@ export const noStore = createMiddleware<AppEnv>(async (c, next) => {
   c.header("X-Content-Type-Options", "nosniff");
 });
 
+/** A signed-in account (Better Auth), or — in brewery mode — the person chosen on this device. */
 export const requireUser = createMiddleware<AppEnv>(async (c, next) => {
   const session = await createAuth(c.env, c.req.raw).api.getSession({ headers: c.req.raw.headers });
-  if (!session) throw unauthorized();
-  c.set("user", { id: session.user.id, name: session.user.name, email: session.user.email });
+  if (session) {
+    c.set("user", { id: session.user.id, name: session.user.name, email: session.user.email });
+  } else {
+    const person = await currentPerson(c);
+    if (!person) throw unauthorized();
+    c.set("user", person);
+  }
   await next();
 });
 

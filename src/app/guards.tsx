@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from "react-router";
 import { Wordmark } from "../components/AppShell.tsx";
 import { Button, ErrorState, Spinner } from "../design-system/index.ts";
+import { useMode } from "../features/auth/mode.ts";
 import { useMe } from "../features/auth/session.ts";
 import { BreweryProvider } from "../features/breweries/BreweryContext.tsx";
 
@@ -20,7 +21,8 @@ function Splash() {
  */
 export function RequireBrewery() {
   const me = useMe();
-  if (me.isPending) return <Splash />;
+  const mode = useMode();
+  if (me.isPending || (me.data === null && mode.isPending)) return <Splash />;
   if (me.error && !me.data) {
     return (
       <div className="mx-auto max-w-md p-4 pt-20">
@@ -31,7 +33,7 @@ export function RequireBrewery() {
       </div>
     );
   }
-  if (!me.data) return <Navigate to="/logg-inn" replace />;
+  if (!me.data) return <Navigate to={mode.data?.breweryMode ? "/inngang" : "/logg-inn"} replace />;
   if (!me.data.user.name.trim() || me.data.memberships.length === 0) return <Navigate to="/velkommen" replace />;
   return (
     <BreweryProvider memberships={me.data.memberships}>

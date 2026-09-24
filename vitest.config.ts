@@ -24,6 +24,7 @@ export default defineConfig(async () => {
                   TEST_MIGRATIONS: migrations,
                   BETTER_AUTH_SECRET: "test-secret-that-is-long-enough-for-better-auth",
                   RESEND_API_KEY: "",
+                  BREWERY_ACCESS_CODE: "",
                   APP_URL: "http://localhost",
                 },
               },

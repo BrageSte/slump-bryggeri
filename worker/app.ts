@@ -6,6 +6,7 @@ import { canSendEmail } from "./auth/email.ts";
 import type { AppEnv } from "./lib/context.ts";
 import { HttpError } from "./lib/errors.ts";
 import { clientIp, enforceRateLimit, noStore, requireUser, sameOriginWrites, withDb } from "./lib/middleware.ts";
+import { breweryModeRoutes } from "./routes/brewery-mode.ts";
 import { breweryRoutes } from "./routes/breweries.ts";
 import { libraryRoutes } from "./routes/library.ts";
 import { meRoutes } from "./routes/me.ts";
@@ -39,6 +40,8 @@ app.on(["GET", "POST"], "/auth/*", async (c) => {
   }
   return createAuth(c.env, c.req.raw).handler(c.req.raw);
 });
+
+app.route("/", breweryModeRoutes);
 
 app.use("*", requireUser);
 app.route("/", meRoutes);

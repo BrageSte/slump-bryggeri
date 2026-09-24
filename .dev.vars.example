@@ -3,3 +3,5 @@
 BETTER_AUTH_SECRET=change-me
 # Optional. Without it, sign-in codes are printed to the dev server log instead of emailed.
 RESEND_API_KEY=
+# Optional. Shared brewery code for brewery mode; leave empty for no code locally.
+BREWERY_ACCESS_CODE=

@@ -43,6 +43,15 @@ db/migrations/                     D1-migrasjoner (wrangler d1 migrations)
 tests/                             calculations, domain, integration
 ```
 
+## Bryggerimodus (ingen innlogging i starten)
+
+Produksjon kjører i **bryggerimodus** (`BREWERY_MODE=on`): appen tjener ett bryggeri, uten kontoer.
+En felles bryggerikode (`BREWERY_ACCESS_CODE`, secret) skrives inn én gang per enhet, og enheten velger
+«Hvem er du?» blant bryggeriets personer. Personer er vanlige `users`-rader med plassholder-e-post, og
+`requireUser` godtar enten en Better Auth-sesjon eller personen valgt på enheten (signerte cookies,
+HMAC med `BETTER_AUTH_SECRET`). All autorisasjon videre (medlemskap, roller, isolasjon) er uendret.
+Avvik fra §20 etter ønske fra Brage; ekte innlogging er M9 i implementeringsplanen.
+
 ## Autorisasjon (§50)
 
 Alle ruter under `/api/breweries/:breweryId/*` går gjennom `requireMember()`:

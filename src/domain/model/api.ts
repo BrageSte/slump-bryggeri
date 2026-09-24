@@ -50,6 +50,24 @@ export interface MeResponse {
   pendingInvites: PendingInvite[];
 }
 
+/** Brewery mode: the app serves one brewery without accounts (see worker/auth/brewery-mode.ts). */
+export interface ModeResponse {
+  breweryMode: boolean;
+  codeRequired: boolean;
+  /** This device has entered the brewery code (or none is required). */
+  unlocked: boolean;
+  breweryName: string | null;
+  /** The brewery's people; only when unlocked. */
+  people: UserRef[] | null;
+}
+
+export const unlockSchema = z.object({ code: z.string().trim().min(1, "Skriv inn koden").max(100) });
+
+export const choosePersonSchema = z.union([
+  z.object({ userId: z.string().min(1).max(64) }),
+  z.object({ name: z.string().trim().min(1, "Skriv inn et navn").max(80) }),
+]);
+
 export const updateProfileSchema = z.object({ name: z.string().trim().min(1, "Skriv inn et navn").max(80) });
 
 export const createBrewerySchema = z.object({ name: z.string().trim().min(2, "Minst 2 tegn").max(80) });

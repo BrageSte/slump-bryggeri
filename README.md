@@ -17,8 +17,9 @@ npm run db:seed:library:local    # oppskriftsbiblioteket (415 oppskrifter)
 npm run dev                      # http://localhost:5173
 ```
 
-Logg inn med en hvilken som helst e-post. Lokalt sendes ingen e-post — innloggingskoden skrives i
-terminalen der `npm run dev` kjører. Under «Importer oppskrift» ligger Sunset IPA som eksempel.
+Appen kjører i **bryggerimodus**: ingen innlogging, bare «Hvem er du?». Lokalt kreves ingen bryggerikode
+(sett `BREWERY_ACCESS_CODE` i `.dev.vars` for å teste den). I produksjon deles koden i bryggeriet.
+Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifter → Bibliotek 415 oppskrifter.
 
 | Kommando | |
 |---|---|
@@ -32,7 +33,7 @@ terminalen der `npm run dev` kjører. Under «Importer oppskrift» ligger Sunset
 
 | Fase | Innhold | Status |
 |---|---|---|
-| 0 Foundation | Repo, CI, D1-migrasjoner, auth (e-post-OTP), PWA, designtokens, komponenter | ✅ (deploy krever Cloudflare-ressurser) |
+| 0 Foundation | Repo, CI, D1-migrasjoner, bryggerimodus (+ e-post-OTP klar for senere), PWA, designtokens, komponenter | ✅ |
 | 1 Brewery | Bryggerier, medlemmer, invitasjoner, roller, utstyr, versjonert kalibreringsprofil | ✅ |
 | 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ — BeerXML/BeerJSON-import gjenstår |
 | 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring | ✅ |
