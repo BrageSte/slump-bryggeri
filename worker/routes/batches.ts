@@ -7,6 +7,7 @@ import {
   correctLogEntrySchema,
   createSplitSchema,
   startStageSchema,
+  timestampSchema,
   updateBatchSchema,
   updateCommentSchema,
 } from "../../src/domain/model/api.ts";
@@ -106,7 +107,7 @@ export const batchRoutes = new Hono<AppEnv>()
       file,
       caption: typeof caption === "string" && caption.trim() ? caption.trim().slice(0, 500) : null,
       stage: typeof stage === "string" && stage ? parse(brewStageSchema, stage) : undefined,
-      occurredAt: typeof occurredAt === "string" && occurredAt ? Number(occurredAt) : undefined,
+      occurredAt: typeof occurredAt === "string" && occurredAt ? parse(timestampSchema, Number(occurredAt)) : undefined,
     });
     return c.json({ id: result.eventId, attachmentId: result.attachmentId }, 201);
   });

@@ -70,24 +70,28 @@ før neste bryggedag.
 - [x] Forsiden viser bare målinger fra steget batchen er i, ikke gårsdagens whirlpool-temperatur under gjæring.
 - [x] Plan v0.4, README og arkitektur oppdatert.
 
-### Steg 2 — Gjæring
+### Steg 2 — Gjæring ✅
 
 Det Sunset trenger de neste dagene.
 
-- [ ] **Gjæringskort per variant** (hele batchen når den ikke er delt): OG (målt SG, ellers fra Brix før
+- [x] **Gjæringskort per variant** (hele batchen når den ikke er delt): OG (målt SG, ellers fra Brix før
       gjæring, merket «fra Brix»), siste SG og temperatur med tidspunkt, tilsynelatende forgjæring og dag
       siden pitching. SG vurderes ikke som «Høy/Lav» mot FG-målet mens gjæringen pågår.
-- [ ] **Tidspunkt på alt:** kommentar, tilsetning, hendelse og bilde kan få et annet tidspunkt enn «nå»,
+- [x] **Tidspunkt på alt:** kommentar, tilsetning, hendelse og bilde kan få et annet tidspunkt enn «nå»,
       og «Gå til steg» kan starte et steg tilbake i tid. Da kan en bryggedag føres inn i etterkant.
-- [ ] **«Tilsatt» med faktisk mengde:** knappen på en planlagt tilsetning åpner et lite ark med planlagt
+- [x] **«Tilsatt» med faktisk mengde:** knappen på en planlagt tilsetning åpner et lite ark med planlagt
       mengde forhåndsutfylt; mengden kan endres før lagring (tørrhumle «justeres etter smak»).
-- [ ] **Gjæringsgraf** (tidl. M7): ren `buildFermentationSeries` fra egne tidsstemplede målinger — SG
+- [x] **Gjæringsgraf** (tidl. M7): ren `buildFermentationSeries` fra egne tidsstemplede målinger — SG
       (Brix-avledet er tydelig merket), temperatur og trykk per variant. Manglende målinger er hull, ikke
       interpolerte «faktiske» data. Enkel SVG med tabell under, lesbar i mørkt tema. Testet med Sunset og
       med manglende data.
 
 **Akseptanse:** På dag 3 kan man logge SG for Tropical og Pine hver for seg, se OG → nå → forgjæring per
 variant, registrere faktisk tørrhumlemengde og se kurven.
+
+Gjort 2026-09-24. `src/domain/brew-day/fermentation.ts` gir OG, målinger og pitch-tid per variant; kortet og
+grafen bruker samme grunnlag. Tidspunkt frem i tid avvises av API-et (5 min slakk). En utført tilsetning viser
+faktisk mengde med planen ved siden av.
 
 ### Steg 3 — Avslutt batch (tidl. M4, forenklet)
 

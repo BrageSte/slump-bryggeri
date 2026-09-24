@@ -47,7 +47,7 @@ kan endres fra batchmenyen.
 | 0 Foundation | Repo, CI, D1-migrasjoner, bryggerimodus (+ e-post-OTP klar for senere), PWA, designtokens, komponenter | ✅ |
 | 1 Brewery | Bryggerier, medlemmer, invitasjoner, roller, utstyr, versjonert kalibreringsprofil | ✅ |
 | 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ — BeerSmith-import (.bsmx) er steg 6 |
-| 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring, enheter, pH-strips, korrigering | ✅ — gjæring, avslutning, rapport og timere er steg 2–5 |
+| 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring, enheter, pH-strips, korrigering, gjæring per variant med graf, etterregistrering | ✅ — avslutning, rapport og timere er steg 3–5 |
 
 Inventar, AI-assistent, smart import, kalibreringsforslag, vannkjemi og innlogging for andre er strøket
 (2026-09-24). Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).

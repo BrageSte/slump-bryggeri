@@ -108,6 +108,14 @@ Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.
 `measurements`, `comments`, `attachments`. Nye bryggesteg krever ingen skjemaendring.
 
 Tidslinjen sorteres på `occurred_at` (når det skjedde), så etterregistrerte målinger havner riktig.
+Alle loggskjemaer og «Gå til steg» kan settes tilbake i tid; `timestampSchema` avviser tidspunkt mer enn
+fem minutter frem i tid (klokker som går litt fort er greit).
+
+Under gjæring og modning oppsummeres loggen per variant (`batch_splits`) av
+`src/domain/brew-day/fermentation.ts`: OG fra siste SG/Brix etter kok, målinger i gjæringskaret (Brix
+korrigeres for alkohol bare når en Brix-måling fra før gjæringen finnes), temperatur og trykk. SG vurderes
+ikke mot FG-målet mens gjæringen pågår. Det samme grunnlaget tegner gjæringsgrafen; manglende målinger
+interpoleres aldri.
 
 Loggkorrigering bruker en ny `brew_events`-rad med `data.corrections` som revisjonsspor. Originalhendelsen
 og eventuell målerad markeres slettet, men beholdes i databasen. `baseUpdatedAt` gir konfliktkontroll; batch

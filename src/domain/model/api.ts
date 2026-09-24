@@ -17,6 +17,17 @@ import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
  * Request schemas and response types shared by the Worker API and the React client.
  */
 
+/**
+ * When something happened (log entries, stage starts). It may be set back in time to log after the
+ * fact, but not into the future; a few minutes of slack cover clocks that disagree.
+ */
+export const MAX_FUTURE_SKEW_MS = 5 * 60_000;
+export const timestampSchema = z
+  .number()
+  .int()
+  .positive()
+  .refine((time) => time <= Date.now() + MAX_FUTURE_SKEW_MS, { error: "Tidspunktet kan ikke være frem i tid." });
+
 export type Role = "admin" | "member";
 export const roleSchema = z.enum(["admin", "member"]);
 
@@ -284,7 +295,7 @@ export const updateBatchSchema = z.object({
 
 export const startStageSchema = z.object({
   stage: brewStageSchema,
-  occurredAt: z.number().int().positive().optional(),
+  occurredAt: timestampSchema.optional(),
 });
 
 export const createSplitSchema = z.object({
@@ -341,7 +352,7 @@ export interface TimelineItem {
   attachment: TimelineAttachment | null;
 }
 
-const optionalTimestamp = z.number().int().positive().optional();
+const optionalTimestamp = timestampSchema.optional();
 
 export const createMeasurementSchema = z.object({
   kind: measurementKindSchema,
@@ -389,7 +400,7 @@ export const correctLogEntrySchema = z.discriminatedUnion("entryKind", [
     valueMax: z.number().finite().optional(),
     unit: z.string().trim().min(1).max(20),
     label: z.string().trim().max(80).nullable().optional(),
-    occurredAt: z.number().int().positive(),
+    occurredAt: timestampSchema,
     stage: brewStageSchema.nullable(),
     splitId: z.string().min(1).nullable(),
     sampleTempC: z.number().min(-10).max(110).nullable().optional(),
@@ -406,7 +417,7 @@ export const correctLogEntrySchema = z.discriminatedUnion("entryKind", [
   z.object({
     entryKind: z.literal("event"),
     baseUpdatedAt: z.number().int().positive(),
-    occurredAt: z.number().int().positive(),
+    occurredAt: timestampSchema,
     stage: brewStageSchema.nullable(),
     splitId: z.string().min(1).nullable(),
     data: z.record(z.string(), z.unknown()),

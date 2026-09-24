@@ -29,6 +29,10 @@
   --info: #426c83;
   --info-soft: #dce8ef;
   --focus: #c68b42;
+  /* Chart series (dataviz reference slots 1–3, validated all-pairs on --surface). */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
   color-scheme: light;
 }
 
@@ -55,6 +59,9 @@
     --info: #86b6d1;
     --info-soft: #1c2e38;
     --focus: #d9a15e;
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
     color-scheme: dark;
   }
 }
@@ -81,6 +88,9 @@
   --info: #86b6d1;
   --info-soft: #1c2e38;
   --focus: #d9a15e;
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
   color-scheme: dark;
 }
 

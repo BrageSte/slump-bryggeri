@@ -9,6 +9,7 @@ export function toBrewDayLog(items: TimelineItem[]): BrewDayLogEntry[] {
   return items.map((item) => ({
     type: item.type,
     stage: item.stage,
+    splitId: item.splitId,
     occurredAt: item.occurredAt,
     data: item.data,
     measurement: item.measurement

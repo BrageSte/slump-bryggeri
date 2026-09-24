@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
+import { buildFermentationSeries } from "../../domain/brew-day/fermentation.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
@@ -30,10 +31,13 @@ import {
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
 import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
-import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
+import { useBatch, useCreateSplit, useDeleteBatch, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
 import { BrewLog } from "./BrewLog.tsx";
+import { FermentationCard } from "./FermentationCard.tsx";
+import { FermentationChart } from "./FermentationChart.tsx";
 import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
+import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
 import { useScreenWakeLock } from "./useScreenWakeLock.ts";
 
 function useNow(intervalMs: number): number {
@@ -78,7 +82,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   const { isAdmin } = useBrewery();
   const toast = useToast();
   const startStage = useStartStage(batch.id);
-  const logEvent = useLogEvent(batch.id);
   const updateBatch = useUpdateBatch(batch.id);
   const [intent, setIntent] = useState<LogIntent | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -102,30 +105,23 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       }),
     [batch, timeline, now],
   );
+  const fermenting = batch.currentStage === "fermentation" || batch.currentStage === "conditioning";
+  const variants = useMemo(
+    () => buildFermentationSeries({ log: toBrewDayLog(timeline), splits: batch.splits, wcf: batch.equipmentSnapshot.values.refractometer_wcf }),
+    [batch, timeline],
+  );
 
   const user = me.data?.user ?? { id: "", name: "" };
   const pendingAdditions = state.additions.filter((a) => a.status !== "done");
   const originalBrix = timeline.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
+  // The planned amount is prefilled but can be changed: dry hops are adjusted to taste.
   function addIngredient(addition: PlannedAddition) {
-    logEvent.mutate(
-      {
-        type: "ingredient_added",
-        stage: batch.currentStage,
-        data: {
-          ingredientKind: addition.ingredientKind,
-          ingredientId: addition.ingredientId,
-          name: addition.name,
-          amount: addition.amount,
-          unit: addition.unit,
-        },
-      },
-      { onSuccess: () => toast(`${addition.name} registrert`) },
-    );
+    setIntent({ kind: "addition", addition });
   }
 
-  function goToStage(stage: BrewStage) {
-    startStage.mutate(stage, { onSuccess: () => toast(`${brewStageLabels[stage]} startet`) });
+  function goToStage(stage: BrewStage, occurredAt?: number) {
+    startStage.mutate({ stage, occurredAt }, { onSuccess: () => toast(`${brewStageLabels[stage]} startet`) });
   }
 
   function runNextAction(action: NextAction) {
@@ -176,15 +172,13 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         <PlannedCard batch={batch} onStart={() => goToStage("mash")} starting={startStage.isPending} />
       ) : (
         <>
-          <StageCard state={state} onLog={setIntent} timeline={timeline} />
+          {fermenting ? (
+            <FermentationCard batch={batch} state={state} variants={variants} now={now} onLog={setIntent} />
+          ) : (
+            <StageCard state={state} onLog={setIntent} timeline={timeline} />
+          )}
           {state.additions.length > 0 && (
-            <AdditionsCard
-              additions={state.additions}
-              elapsedMin={state.elapsedMin ?? 0}
-              stage={batch.currentStage}
-              onAdd={addIngredient}
-              busy={logEvent.isPending}
-            />
+            <AdditionsCard additions={state.additions} elapsedMin={state.elapsedMin ?? 0} stage={batch.currentStage} onAdd={addIngredient} />
           )}
         </>
       )}
@@ -198,12 +192,16 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
             size="lg"
             block
             className="mt-3"
-            loading={startStage.isPending || logEvent.isPending || updateBatch.isPending}
+            loading={startStage.isPending || updateBatch.isPending}
             onClick={() => state.nextAction && runNextAction(state.nextAction)}
           >
             {state.nextAction.kind === "add_ingredient" ? "Registrer tilsatt" : state.nextAction.label}
           </Button>
         </Card>
+      )}
+
+      {(fermenting || batch.currentStage === "packaging" || batch.status === "completed") && (
+        <FermentationChart variants={variants} until={batch.completedAt ?? now} />
       )}
 
       <Section
@@ -379,13 +377,11 @@ function AdditionsCard({
   elapsedMin,
   stage,
   onAdd,
-  busy,
 }: {
   additions: PlannedAddition[];
   elapsedMin: number;
   stage: BrewStage;
   onAdd: (addition: PlannedAddition) => void;
-  busy: boolean;
 }) {
   return (
     <Card>
@@ -395,9 +391,12 @@ function AdditionsCard({
           <li key={addition.ingredientId} className="flex items-center gap-3 py-3">
             <div className="min-w-0 flex-1">
               <p className="font-semibold">
-                {formatAmount(addition.amount, addition.unit)} {addition.name}
+                {formatAmount(addition.actual?.amount ?? addition.amount, addition.actual?.unit ?? addition.unit)} {addition.name}
               </p>
               <p className="text-small text-muted">
+                {addition.actual && (addition.actual.amount !== addition.amount || addition.actual.unit !== addition.unit)
+                  ? `Plan ${formatAmount(addition.amount, addition.unit)} · `
+                  : ""}
                 {addition.dueLabel}
                 {addition.variant ? ` · ${addition.variant}` : ""}
                 {addition.status === "upcoming" && stage !== "fermentation" && stage !== "conditioning"
@@ -410,7 +409,7 @@ function AdditionsCard({
                 Tilsatt
               </StatusChip>
             ) : (
-              <Button size="sm" variant={addition.status === "due" ? "primary" : "secondary"} onClick={() => onAdd(addition)} disabled={busy}>
+              <Button size="sm" variant={addition.status === "due" ? "primary" : "secondary"} onClick={() => onAdd(addition)}>
                 Tilsatt
               </Button>
             )}
@@ -494,7 +493,7 @@ function BatchMenu({
   batch: BatchDetail;
   open: boolean;
   onClose: () => void;
-  onStage: (stage: BrewStage) => void;
+  onStage: (stage: BrewStage, occurredAt?: number) => void;
   onComplete: () => void;
 }) {
   const { isAdmin } = useBrewery();
@@ -507,6 +506,7 @@ function BatchMenu({
   const [splitName, setSplitName] = useState("");
   const [splitVessel, setSplitVessel] = useState("");
   const [splitVolume, setSplitVolume] = useState("");
+  const [stageTime, setStageTime] = useState<string | null>(null);
   const [batchName, setBatchName] = useState(batch.name);
   const [brewDate, setBrewDate] = useState(batch.brewDate ?? "");
 
@@ -517,6 +517,7 @@ function BatchMenu({
 
   const close = () => {
     setView("menu");
+    setStageTime(null);
     onClose();
   };
 
@@ -569,13 +570,14 @@ function BatchMenu({
         )}
         {view === "stage" && (
           <div className="grid gap-2">
+            <OccurredAtInput value={stageTime} onChange={setStageTime} />
             {brewStages.map((stage) => (
               <Button
                 key={stage}
                 block
                 variant={stage === batch.currentStage ? "primary" : "secondary"}
                 onClick={() => {
-                  onStage(stage);
+                  onStage(stage, occurredAtOf(stageTime));
                   close();
                 }}
               >

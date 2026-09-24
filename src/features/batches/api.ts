@@ -123,7 +123,7 @@ export function useLogMeasurement(batchId: string, currentUser: { id: string; na
 }
 
 export const useAddComment = (batchId: string) =>
-  useBatchMutation(batchId, (base, input: { body: string; stage?: BrewStage | null; splitId?: string | null }) =>
+  useBatchMutation(batchId, (base, input: { body: string; stage?: BrewStage | null; splitId?: string | null; occurredAt?: number }) =>
     api.post<CreatedResponse>(`${base}/comments`, input),
   );
 
@@ -149,7 +149,7 @@ export const useDeleteEvent = (batchId: string) =>
   useBatchMutation(batchId, (base, eventId: string) => api.delete(`${base}/events/${eventId}`));
 
 export const useStartStage = (batchId: string) =>
-  useBatchMutation(batchId, (base, stage: BrewStage) => api.post<CreatedResponse>(`${base}/stage`, { stage }));
+  useBatchMutation(batchId, (base, input: { stage: BrewStage; occurredAt?: number }) => api.post<CreatedResponse>(`${base}/stage`, input));
 
 export const useUpdateBatch = (batchId: string) =>
   useBatchMutation(batchId, (base, input: { name?: string; status?: BatchStatus; brewDate?: string | null }) => api.patch(base, input));

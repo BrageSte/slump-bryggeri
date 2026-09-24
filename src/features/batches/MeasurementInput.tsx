@@ -13,6 +13,7 @@ import { commonPhStripIntervals, fermentationHasStarted, measurementKindSpecs, t
 import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
 import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
+import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
 
 export interface MeasurementSubmit {
   kind: MeasurementKind;
@@ -155,7 +156,8 @@ export function MeasurementInput({
       instrument: isPhStrips ? "pH-strips" : initial?.instrument ?? null,
       stage,
       splitId,
-      measuredAt: customTime ? new Date(customTime).getTime() : undefined,
+      // "Nå" while correcting an entry means the current time, not the entry's original one.
+      measuredAt: occurredAtOf(customTime) ?? (initial ? Date.now() : undefined),
       comment: comment.trim() || undefined,
     });
   }
@@ -330,16 +332,7 @@ export function MeasurementInput({
       )}
 
       <div className="flex flex-wrap items-center gap-2 text-small">
-        {customTime === null ? (
-          <button type="button" onClick={() => setCustomTime(toDateTimeLocal(Date.now()))} className="min-h-11 text-muted underline underline-offset-4">
-            Tidspunkt: nå · endre
-          </button>
-        ) : (
-          <label className="flex items-center gap-2">
-            <span className="font-semibold">Tidspunkt</span>
-            <TextInput type="datetime-local" value={customTime} onChange={(e) => setCustomTime(e.target.value)} className="w-auto" />
-          </label>
-        )}
+        <OccurredAtInput value={customTime} onChange={setCustomTime} />
         {!showMore && (
           <button type="button" onClick={() => setShowMore(true)} className="min-h-11 text-muted underline underline-offset-4">
             + notat

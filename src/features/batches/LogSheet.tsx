@@ -8,10 +8,19 @@ import { formatAmount } from "../../lib/format.ts";
 import { UnitConverter } from "./UnitConverter.tsx";
 import { useAddComment, useLogEvent, useLogMeasurement, useUploadPhoto } from "./api.ts";
 import { MeasurementInput } from "./MeasurementInput.tsx";
+import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
 
 export type LogIntent =
   | { kind: "menu" }
-  | { kind: "measurement"; measurementKind: MeasurementKind; label?: string; target?: TargetValue; previous?: { value: number; occurredAt: number } | null }
+  | {
+      kind: "measurement";
+      measurementKind: MeasurementKind;
+      label?: string;
+      target?: TargetValue;
+      previous?: { value: number; occurredAt: number } | null;
+      /** Preselected fermentation variant (batch split). */
+      splitId?: string | null;
+    }
   | { kind: "comment" }
   | { kind: "photo" }
   | { kind: "converter" }
@@ -94,7 +103,7 @@ export function LogSheet({
 
       {intent?.kind === "measurement" && (
         <MeasurementInput
-          key={intent.measurementKind + (intent.label ?? "")}
+          key={intent.measurementKind + (intent.label ?? "") + (intent.splitId ?? "")}
           kind={intent.measurementKind}
           stage={stage}
           target={intent.target}
@@ -102,6 +111,7 @@ export function LogSheet({
           wcf={batch.equipmentSnapshot.values.refractometer_wcf ?? 1}
           originalBrix={originalBrix}
           splits={batch.splits}
+          defaultSplitId={intent.splitId ?? null}
           submitting={logMeasurement.isPending}
           error={logMeasurement.error?.message}
           onSubmit={(input) => {
@@ -129,6 +139,14 @@ export function LogSheet({
       )}
     </BottomSheet>
   );
+}
+
+/** The batch split a recipe variant belongs to, e.g. variant "Tropical" → split "Sunset Tropical". */
+function splitForVariant(batch: BatchDetail, variant: string | undefined): string | null {
+  if (!variant) return null;
+  const wanted = variant.trim().toLowerCase();
+  const exact = batch.splits.find((split) => split.name.trim().toLowerCase() === wanted);
+  return (exact ?? batch.splits.find((split) => split.name.toLowerCase().includes(wanted)))?.id ?? null;
 }
 
 function SplitChooser({ batch, value, onChange }: { batch: BatchDetail; value: string | null; onChange: (id: string | null) => void }) {
@@ -161,10 +179,14 @@ function CommentForm({ batch, stage, onDone }: { batch: BatchDetail; stage: Brew
   const addComment = useAddComment(batch.id);
   const [body, setBody] = useState("");
   const [splitId, setSplitId] = useState<string | null>(null);
+  const [time, setTime] = useState<string | null>(null);
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    addComment.mutate({ body: body.trim(), stage, splitId }, { onSuccess: () => (toast("Kommentar lagt til"), onDone()) });
+    addComment.mutate(
+      { body: body.trim(), stage, splitId, occurredAt: occurredAtOf(time) },
+      { onSuccess: () => (toast("Kommentar lagt til"), onDone()) },
+    );
   }
 
   return (
@@ -173,6 +195,7 @@ function CommentForm({ batch, stage, onDone }: { batch: BatchDetail; stage: Brew
         {(p) => <TextArea {...p} autoFocus required value={body} onChange={(e) => setBody(e.target.value)} placeholder="Lukt, smak, observasjoner …" />}
       </Field>
       <SplitChooser batch={batch} value={splitId} onChange={setSplitId} />
+      <OccurredAtInput value={time} onChange={setTime} />
       {addComment.error && <InlineError>{addComment.error.message}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={addComment.isPending} disabled={!body.trim()}>
         Legg til
@@ -188,6 +211,7 @@ function PhotoForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
   const [preview, setPreview] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [preparing, setPreparing] = useState(false);
+  const [time, setTime] = useState<string | null>(null);
 
   async function choose(selected: File | undefined) {
     if (!selected) return;
@@ -206,6 +230,8 @@ function PhotoForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
     form.set("file", file);
     if (caption.trim()) form.set("caption", caption.trim());
     if (stage) form.set("stage", stage);
+    const occurredAt = occurredAtOf(time);
+    if (occurredAt !== undefined) form.set("occurredAt", String(occurredAt));
     upload.mutate(form, { onSuccess: () => (toast("Bilde lagt til"), onDone()) });
   }
 
@@ -229,6 +255,7 @@ function PhotoForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
         />
       </label>
       <Field label="Bildetekst (valgfritt)">{(p) => <TextInput {...p} value={caption} onChange={(e) => setCaption(e.target.value)} />}</Field>
+      <OccurredAtInput value={time} onChange={setTime} />
       {upload.error && <InlineError>{upload.error.message}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={upload.isPending || preparing} disabled={!file}>
         Last opp
@@ -267,7 +294,8 @@ function AdditionForm({
   const [amount, setAmount] = useState(preset ? String(preset.amount).replace(".", ",") : "");
   const [unit, setUnit] = useState(preset?.unit ?? "g");
   const [note, setNote] = useState("");
-  const [splitId, setSplitId] = useState<string | null>(null);
+  const [splitId, setSplitId] = useState<string | null>(() => splitForVariant(batch, preset?.variant));
+  const [time, setTime] = useState<string | null>(null);
 
   function pick(addition: PlannedAddition) {
     setSelected(addition);
@@ -275,6 +303,7 @@ function AdditionForm({
     setName(addition.name);
     setAmount(String(addition.amount).replace(".", ","));
     setUnit(addition.unit);
+    setSplitId(splitForVariant(batch, addition.variant));
   }
 
   const parsedAmount = parseDecimal(amount);
@@ -287,6 +316,7 @@ function AdditionForm({
         type: "ingredient_added",
         stage,
         splitId,
+        occurredAt: occurredAtOf(time),
         data: {
           ingredientKind,
           ingredientId: selected && selected.name === name ? selected.ingredientId : undefined,
@@ -359,6 +389,7 @@ function AdditionForm({
       </div>
       <Field label="Notat (valgfritt)">{(p) => <TextInput {...p} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
       <SplitChooser batch={batch} value={splitId} onChange={setSplitId} />
+      <OccurredAtInput value={time} onChange={setTime} />
       {logEvent.error && <InlineError>{logEvent.error.message}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={logEvent.isPending} disabled={!name.trim() || !parsedAmount}>
         Registrer tilsetning
@@ -376,6 +407,7 @@ function EventForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
   const [title, setTitle] = useState("");
   const [note, setNote] = useState("");
   const [splitId, setSplitId] = useState<string | null>(null);
+  const [time, setTime] = useState<string | null>(null);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -394,7 +426,7 @@ function EventForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
       });
     }
     logEvent.mutate(
-      { type, stage, splitId, data: Object.keys(data).length > 0 ? data : undefined },
+      { type, stage, splitId, occurredAt: occurredAtOf(time), data: Object.keys(data).length > 0 ? data : undefined },
       { onSuccess: () => (toast("Hendelse logget"), onDone()) },
     );
   }
@@ -422,6 +454,7 @@ function EventForm({ batch, stage, onDone }: { batch: BatchDetail; stage: BrewSt
       )}
       <Field label="Notat (valgfritt)">{(p) => <TextInput {...p} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
       <SplitChooser batch={batch} value={splitId} onChange={setSplitId} />
+      <OccurredAtInput value={time} onChange={setTime} />
       {logEvent.error && <InlineError>{logEvent.error.message}</InlineError>}
       <Button type="submit" variant="primary" size="lg" block loading={logEvent.isPending} disabled={type === "custom" && !title.trim()}>
         Logg hendelse

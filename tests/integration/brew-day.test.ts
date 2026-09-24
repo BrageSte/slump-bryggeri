@@ -465,3 +465,46 @@ describe("Sunset IPA reference batch replayed through the API", () => {
     expect((await brewer.post(`${base}/batches/${a}/events`, { type: "cold_crash_started", data: { targetC: 2 } })).status).toBe(201);
   });
 });
+
+describe("logging after the fact", () => {
+  it("starts a stage back in time and keeps back-dated entries in order", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const yesterday = Date.now() - 86_400_000;
+
+    expect((await brewer.post(`${base}/batches/${batchId}/stage`, { stage: "fermentation", occurredAt: yesterday })).status).toBe(201);
+    const batch = await brewer.get<BatchDetail>(`${base}/batches/${batchId}`);
+    expect(batch.body).toMatchObject({ status: "fermenting", currentStage: "fermentation", stageStartedAt: yesterday });
+
+    const comment = await brewer.post(`${base}/batches/${batchId}/comments`, { body: "Gjær strødd på i går", occurredAt: yesterday + 60_000 });
+    expect(comment.status).toBe(201);
+    const timeline = await brewer.get<TimelineItem[]>(`${base}/batches/${batchId}/timeline`);
+    expect(timeline.body.map((e) => [e.type, e.occurredAt])).toEqual([
+      ["fermentation_started", yesterday],
+      ["comment", yesterday + 60_000],
+    ]);
+  });
+
+  it("rejects times in the future but allows a phone clock that is a little ahead", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batchId = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const tomorrow = Date.now() + 86_400_000;
+
+    const attempts: [string, Record<string, unknown>][] = [
+      ["stage", { stage: "mash", occurredAt: tomorrow }],
+      ["comments", { body: "For tidlig", occurredAt: tomorrow }],
+      ["events", { type: "cold_crash_started", occurredAt: tomorrow }],
+      ["measurements", { kind: "temperature", value: 20, measuredAt: tomorrow }],
+    ];
+    for (const [path, body] of attempts) {
+      expect((await brewer.post(`${base}/batches/${batchId}/${path}`, body)).status, path).toBe(400);
+    }
+    expect((await brewer.post(`${base}/batches/${batchId}/comments`, { body: "Klokka går litt fort", occurredAt: Date.now() + 60_000 })).status).toBe(201);
+  });
+});

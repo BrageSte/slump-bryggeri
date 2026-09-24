@@ -44,7 +44,7 @@ Form (§30): `rounded-sm` 8, `rounded-md` 12, `rounded-card` 16, `rounded-full` 
 |---|---|
 | Navigasjon | `AppShell` (MobileBottomNav + DesktopSidebar), `PageHeader`, `SegmentedControl`, `ListLink` |
 | Data | `Measurement`, `MetricCard`, `StatusChip`, `TargetStatusChip`, `TargetVsActual` |
-| Bryggedag | `MeasurementInput`, `BrewLog`, `LogSheet` (i `features/batches/`) |
+| Bryggedag | `MeasurementInput`, `OccurredAtInput`, `BrewLog`, `LogSheet`, `FermentationCard`, `FermentationChart` (i `features/batches/`) |
 | Innhold | `Card` (`highlight` for NESTE), `Section`, `SectionLabel`, `ListCard`, `EmptyState`, `ErrorState`, `LoadingState`, `Skeleton` |
 | Interaksjon | `Button` (primary/secondary/ghost/danger), `IconButton`, `BottomSheet` (`<dialog>`), `ConfirmDialog`, `Toast` |
 | Skjema | `Field`, `TextInput`, `Select`, `TextArea`, `parseDecimal` |
@@ -56,6 +56,14 @@ Form (§30): `rounded-sm` 8, `rounded-md` 12, `rounded-card` 16, `rounded-full` 
 - `MeasurementInput` lar bryggeren velge enhet ved siden av tallet og viser samtidig lagret kanonisk verdi.
 - SG skrives med punktum (1.061); «1061» eller «61» tolkes som 1.061 i måleinput.
 - Brix før gjæring viser live «≈ SG» med bryggeriets refraktometer-WCF; etter gjæring kreves opprinnelig Brix og resultatet merkes som beregnet.
+
+## Grafer
+
+Gjæringsgrafen (`FermentationChart`) følger dataviz-reglene: én linje per gjæringskar, SG og temperatur i
+hvert sitt panel på felles tidsakse (aldri to y-akser), 2 px linjer, prikker med 2 px ring i flatefargen,
+hul prikk = SG regnet fra Brix, forklaring når det er flere varianter, og en tabell under grafen.
+Fargene er `--series-1..3` i `tokens.css` (egne verdier for mørkt tema), validert for alle par mot `--surface`.
+Fargen følger varianten, ikke filteret. Lys `--series-3` er under 3:1 mot flaten, så tabellen er påkrevd.
 
 ## Tilgjengelighet
 
