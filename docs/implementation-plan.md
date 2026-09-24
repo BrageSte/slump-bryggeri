@@ -125,17 +125,23 @@ Gjort 2026-09-24. Rapporten lenkes fra batchmenyen («Rapport (PDF)») og fra fe
 bare fra loggen, snapshotet og resultatene; «Lagre som PDF» bruker nettleserens utskrift (A4, lys palett,
 uten appens menyer). Gjæringsgrafen tegnes i full papirbredde med tabellen åpen.
 
-### Steg 5 — Bryggedag: timer og alarmer (tidl. M3-rest)
+### Steg 5 — Bryggedag: timer og alarmer (tidl. M3-rest) ✅
 
-- [ ] Delte timere som hendelser `timer_started` `{ label, durationMin, dueAt }` og `timer_cancelled`;
+- [x] Delte timere som hendelser `timer_started` `{ label, durationMin, dueAt }` og `timer_cancelled`;
       alle i bryggeriet ser samme nedtelling (polling finnes). Hurtigvalg 5/10/15/20/30/60 min + egendefinert.
-- [ ] Alarmer i appen når en timer går ut, et steg er ferdig eller en planlagt tilsetning forfaller
+- [x] Alarmer i appen når en timer går ut, et steg er ferdig eller en planlagt tilsetning forfaller
       (forvarsel 1 min): lyd (Web Audio, låses opp ved første trykk), vibrasjon der det støttes og et stort
       banner med «Kvitter» / «Registrer tilsatt». Kvittering er per enhet; lyd kan slås av.
-- [ ] Rene funksjoner for «hva forfaller når» i `src/domain/brew-day/` med tester, blant annet at samme
+- [x] Rene funksjoner for «hva forfaller når» i `src/domain/brew-day/` med tester, blant annet at samme
       tilsetning ikke varsles to ganger.
 
 **Akseptanse:** Under kok varsles neste humletilsetning med lyd, og den kan registreres med ett trykk.
+
+Gjort 2026-09-24. `src/domain/brew-day/alarms.ts` (timere fra loggen, forfalte tilsetninger med forvarsel,
+steg som er ferdige, timere som har gått ut — hver alarm har en fast nøkkel). Serveren validerer
+`timer_started`/`timer_cancelled` og regner ut `dueAt` selv. Banneret ligger nederst over menyen; «Registrer
+tilsatt» der logger planlagt mengde med ett trykk, mens «Tilsatt» i listen lar deg endre mengden først.
+Alarmer som allerede var forfalt da siden ble åpnet, vises uten lyd.
 
 ### Steg 6 — BeerSmith-import (tidl. M5-rest, forenklet)
 

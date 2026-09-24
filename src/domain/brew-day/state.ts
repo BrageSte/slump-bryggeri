@@ -18,6 +18,8 @@ import type { RecipeDocument } from "../model/recipe.ts";
  */
 
 export interface BrewDayLogEntry {
+  /** Timeline id; needed to cancel a timer. */
+  id?: string;
   type: string;
   stage: BrewStage | null;
   /** Fermentation variant (batch split) the entry belongs to; null or absent for the whole batch. */
@@ -66,6 +68,8 @@ export interface StageStep {
   detail: string | null;
   totalMin: number | null;
   remainingMin: number | null;
+  /** When the current timed step ends (mash rest, boil, whirlpool), or null. */
+  endsAt: number | null;
 }
 
 export interface BrewDayState {
@@ -142,7 +146,7 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
 
   const additions = plannedAdditions(recipe, stage, elapsedMin ?? 0, fermentationDay, doneIngredients);
   const targets = stageTargets(input, log, stage, stageStartedAt);
-  const step = stageStep(recipe, stage, elapsedMin, fermentationDay);
+  const step = stageStep(recipe, stage, elapsedMin, fermentationDay, stageStartedAt);
   const nextAction = chooseNextAction(recipe, stage, additions, log, elapsedMin ?? 0, now);
 
   return { stage, stageStartedAt, elapsedMin, step, fermentationDay, targets, additions, nextAction };
@@ -441,10 +445,12 @@ function stageStep(
   stage: BrewStage,
   elapsedMin: number | null,
   fermentationDay: number | null,
+  stageStartedAt: number | null,
 ): StageStep {
+  const endsAt = (minutesIntoStage: number) => (stageStartedAt === null ? null : stageStartedAt + minutesIntoStage * MINUTE);
   switch (stage) {
     case "mash": {
-      if (recipe.mashSteps.length === 0) return { label: "Mesk", detail: null, totalMin: null, remainingMin: null };
+      if (recipe.mashSteps.length === 0) return { label: "Mesk", detail: null, totalMin: null, remainingMin: null, endsAt: null };
       let cumulative = 0;
       const elapsed = elapsedMin ?? 0;
       for (const [index, step] of recipe.mashSteps.entries()) {
@@ -456,10 +462,11 @@ function stageStep(
             detail: recipe.mashSteps.length > 1 ? `Steg ${index + 1} av ${recipe.mashSteps.length}` : null,
             totalMin: step.durationMin,
             remainingMin: elapsedMin === null ? null : Math.max(0, cumulative - elapsed),
+            endsAt: endsAt(cumulative),
           };
         }
       }
-      return { label: "Mesk", detail: null, totalMin: null, remainingMin: null };
+      return { label: "Mesk", detail: null, totalMin: null, remainingMin: null, endsAt: null };
     }
     case "boil":
       return {
@@ -467,6 +474,7 @@ function stageStep(
         detail: `${recipe.boilTimeMin} min`,
         totalMin: recipe.boilTimeMin,
         remainingMin: elapsedMin === null ? null : Math.max(0, recipe.boilTimeMin - elapsedMin),
+        endsAt: endsAt(recipe.boilTimeMin),
       };
     case "whirlpool": {
       const whirlpoolHops = recipe.hops.filter((h) => h.use === "whirlpool");
@@ -476,6 +484,7 @@ function stageStep(
         detail: null,
         totalMin: total,
         remainingMin: elapsedMin === null ? null : Math.max(0, total - elapsedMin),
+        endsAt: endsAt(total),
       };
     }
     case "fermentation": {
@@ -485,10 +494,11 @@ function stageStep(
         detail: step?.notes ?? null,
         totalMin: null,
         remainingMin: null,
+        endsAt: null,
       };
     }
     default:
-      return { label: brewStageLabels[stage], detail: null, totalMin: null, remainingMin: null };
+      return { label: brewStageLabels[stage], detail: null, totalMin: null, remainingMin: null, endsAt: null };
   }
 }
 

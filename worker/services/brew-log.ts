@@ -9,6 +9,8 @@ import type {
 } from "../../src/domain/model/api.ts";
 import {
   ingredientAddedDataSchema,
+  timerCancelledDataSchema,
+  timerStartedDataSchema,
   measurementKindSpecs,
   stageFromStartedEvent,
   type BrewStage,
@@ -500,13 +502,31 @@ export async function logEvent(
   const batch = await findBatch(db, breweryId, batchId);
   await assertSplit(db, breweryId, batchId, input.splitId);
 
+  const now = Date.now();
+  const occurredAt = input.occurredAt ?? now;
   let data: unknown = input.data ?? null;
   if (input.type === "ingredient_added" || input.type === "yeast_pitched") {
     data = parse(ingredientAddedDataSchema, input.data ?? {});
+  } else if (input.type === "timer_started") {
+    // Everyone's countdown runs from the same server-side due time, whatever the phone clocks say.
+    const timer = parse(timerStartedDataSchema, input.data ?? {});
+    data = { ...timer, dueAt: occurredAt + timer.durationMin * 60_000 };
+  } else if (input.type === "timer_cancelled") {
+    const { timerId } = parse(timerCancelledDataSchema, input.data ?? {});
+    const timer = await db
+      .selectFrom("brew_events")
+      .select("id")
+      .where("id", "=", timerId)
+      .where("batch_id", "=", batchId)
+      .where("brewery_id", "=", breweryId)
+      .where("type", "=", "timer_started")
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+    if (!timer) throw badRequest("Fant ikke timeren i dette brygget.");
+    data = { timerId };
   }
   if (data !== null && JSON.stringify(data).length > MAX_EVENT_DATA_BYTES) throw badRequest("Hendelsesdata er for stor.");
 
-  const now = Date.now();
   const eventId = newId();
   await atomic(d1, [
     db.insertInto("brew_events").values(
@@ -515,7 +535,7 @@ export async function logEvent(
         type: input.type,
         stage: input.stage === undefined ? batch.currentStage : input.stage,
         splitId: input.splitId ?? null,
-        occurredAt: input.occurredAt ?? now,
+        occurredAt,
         data,
         now,
       }),

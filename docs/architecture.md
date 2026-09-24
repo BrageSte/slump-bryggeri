@@ -132,6 +132,15 @@ Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggeda
 hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
 enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
 
+### Timere og alarmer
+
+Timere er vanlige logghendelser: `timer_started` `{ label, durationMin, dueAt }` (serveren regner ut
+`dueAt` fra tidspunktet) og `timer_cancelled` `{ timerId }` (må peke på en timer i samme batch). Alle ser
+samme nedtelling via pollingen. `dueAlarms` gir forfalte timere, ferdige meske-/koke-/whirlpoolsteg og
+tilsetninger (forvarsel 1 min) med faste nøkler; hvilke som er kvittert lagres per enhet i localStorage.
+Lyd (Web Audio) låses opp ved første trykk; vibrasjon der nettleseren støtter det. Varsler når appen er
+lukket (Web Push) er ikke bygget.
+
 ### Resultater
 
 `batch_outcomes` har ett resultat per variant (`split_id`, NULL = hele batchen; unik indeks på

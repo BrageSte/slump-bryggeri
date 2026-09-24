@@ -578,3 +578,28 @@ describe("batch results", () => {
     expect((await brewer.put(url, { ...empty, tastingNotes: "Ikke målt, men god" })).status).toBe(200);
   });
 });
+
+describe("shared timers", () => {
+  it("keeps the due time on the server and cancels only timers in the same batch", async () => {
+    const brewer = await createUser("Brage");
+    const brewery = await createBrewery(brewer);
+    const base = `/breweries/${brewery}`;
+    const recipeId = (await brewer.post(`${base}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const a = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+    const b = (await brewer.post(`${base}/batches`, { recipeId })).body.id;
+
+    // A dueAt sent by the client is ignored; the server derives it from the event time.
+    const started = await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { label: "Humle", durationMin: 15, dueAt: 1 } });
+    expect(started.status).toBe(201);
+    const timeline = await brewer.get<TimelineItem[]>(`${base}/batches/${a}/timeline`);
+    const timer = timeline.body.find((e) => e.id === started.body.id)!;
+    expect(timer.data).toEqual({ label: "Humle", durationMin: 15, dueAt: timer.occurredAt + 15 * 60_000 });
+
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { label: "Null", durationMin: 0 } })).status).toBe(400);
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_started", data: { durationMin: 5 } })).status).toBe(400);
+
+    const other = await brewer.post(`${base}/batches/${b}/events`, { type: "timer_started", data: { label: "B", durationMin: 5 } });
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_cancelled", data: { timerId: other.body.id } })).status).toBe(400);
+    expect((await brewer.post(`${base}/batches/${a}/events`, { type: "timer_cancelled", data: { timerId: started.body.id } })).status).toBe(201);
+  });
+});

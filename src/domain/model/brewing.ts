@@ -193,7 +193,19 @@ export const eventTypeLabels: Record<string, string> = {
   fermentation_started: "Gjæring startet",
   conditioning_started: "Modning startet",
   packaging_started: "Pakking startet",
+  timer_started: "Timer startet",
+  timer_cancelled: "Timer stoppet",
 };
+
+/** Payload of `timer_started`; the server adds `dueAt` from the event time and the duration. */
+export const timerStartedDataSchema = z.object({
+  label: z.string().trim().min(1, "Gi timeren et navn").max(80),
+  /** Up to two days, e.g. a cold crash. */
+  durationMin: z.number().positive().max(2880),
+});
+
+/** Payload of `timer_cancelled`: the id of the `timer_started` event. */
+export const timerCancelledDataSchema = z.object({ timerId: z.string().min(1).max(64) });
 
 export const ingredientKinds = ["fermentable", "hop", "culture", "misc"] as const;
 export type IngredientKind = (typeof ingredientKinds)[number];

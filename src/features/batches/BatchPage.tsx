@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
+import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
 import { buildFermentationSeries } from "../../domain/brew-day/fermentation.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
@@ -31,7 +32,8 @@ import {
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
 import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
-import { useBatch, useCreateSplit, useDeleteBatch, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
+import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
+import { AlarmBanner, TimerCard } from "./BrewTimers.tsx";
 import { BrewLog } from "./BrewLog.tsx";
 import { FermentationCard } from "./FermentationCard.tsx";
 import { FermentationChart } from "./FermentationChart.tsx";
@@ -39,6 +41,7 @@ import { ResultSummary } from "./ResultSummary.tsx";
 import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
 import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
+import { useBrewAlarms } from "./useBrewAlarms.ts";
 import { useScreenWakeLock } from "./useScreenWakeLock.ts";
 
 function useNow(intervalMs: number): number {
@@ -85,13 +88,16 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   const navigate = useNavigate();
   const startStage = useStartStage(batch.id);
   const updateBatch = useUpdateBatch(batch.id);
+  const logEvent = useLogEvent(batch.id);
   const [intent, setIntent] = useState<LogIntent | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [showAll, setShowAll] = useState(false);
   const [screenOn, setScreenOn] = useState(true);
   useScreenWakeLock(batch.status === "brewing" && screenOn);
 
-  const hasTimer = batch.currentStage !== null && ["mash", "boil", "whirlpool"].includes(batch.currentStage);
+  const log = useMemo(() => toBrewDayLog(timeline), [timeline]);
+  const timers = useMemo(() => (batch.status === "completed" ? [] : activeTimers(log)), [log, batch.status]);
+  const hasTimer = timers.length > 0 || (batch.currentStage !== null && ["mash", "boil", "whirlpool"].includes(batch.currentStage));
   const now = useNow(hasTimer ? 1000 : 30_000);
   const state = useMemo(
     () =>
@@ -99,17 +105,18 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         recipe: batch.recipeSnapshot,
         stage: batch.currentStage,
         stageStartedAt: batch.stageStartedAt,
-        log: toBrewDayLog(timeline),
+        log,
         now,
         wcf: batch.equipmentSnapshot.values.refractometer_wcf,
         completed: batch.status === "completed",
       }),
-    [batch, timeline, now],
+    [batch, log, now],
   );
+  const alarms = useBrewAlarms(batch.id, batch.status === "completed" ? [] : dueAlarms({ state, timers, now }));
   const fermenting = batch.currentStage === "fermentation" || batch.currentStage === "conditioning";
   const variants = useMemo(
-    () => buildFermentationSeries({ log: toBrewDayLog(timeline), splits: batch.splits, wcf: batch.equipmentSnapshot.values.refractometer_wcf }),
-    [batch, timeline],
+    () => buildFermentationSeries({ log, splits: batch.splits, wcf: batch.equipmentSnapshot.values.refractometer_wcf }),
+    [batch, log],
   );
 
   const user = me.data?.user ?? { id: "", name: "" };
@@ -119,6 +126,28 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   // The planned amount is prefilled but can be changed: dry hops are adjusted to taste.
   function addIngredient(addition: PlannedAddition) {
     setIntent({ kind: "addition", addition });
+  }
+
+  // One tap from the alarm: the planned amount at the planned time, like the brew sheet says.
+  function registerFromAlarm(alarm: Alarm) {
+    const addition = alarm.addition;
+    if (!addition) return;
+    logEvent.mutate(
+      {
+        type: "ingredient_added",
+        stage: batch.currentStage,
+        data: { ingredientKind: addition.ingredientKind, ingredientId: addition.ingredientId, name: addition.name, amount: addition.amount, unit: addition.unit },
+      },
+      { onSuccess: () => (alarms.acknowledge(alarm.key), toast(`${addition.name} registrert`)) },
+    );
+  }
+
+  function startTimer(label: string, durationMin: number) {
+    logEvent.mutate({ type: "timer_started", stage: batch.currentStage, data: { label, durationMin } }, { onSuccess: () => toast(`Timer startet: ${label}`) });
+  }
+
+  function cancelTimer(timerId: string) {
+    logEvent.mutate({ type: "timer_cancelled", stage: batch.currentStage, data: { timerId } });
   }
 
   function goToStage(stage: BrewStage, occurredAt?: number) {
@@ -140,6 +169,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
 
   return (
     <div className="space-y-5">
+      <AlarmBanner alarms={alarms.current} onAcknowledge={alarms.acknowledge} onRegister={registerFromAlarm} registering={logEvent.isPending} />
       <PageHeader
         back="/brygg"
         eyebrow={
@@ -159,7 +189,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
                 aria-pressed={screenOn}
                 onClick={() => setScreenOn((value) => !value)}
               >
-                {screenOn ? "Skjerm på" : "Skjerm av"}
+                {/* Icon only on phones, so the batch name keeps its width. */}
+                <span className="sr-only md:not-sr-only">{screenOn ? "Skjerm på" : "Skjerm av"}</span>
               </Button>
             )}
             <IconButton icon="dots" label="Flere valg" onClick={() => setMenuOpen(true)} />
@@ -199,6 +230,19 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
             {state.nextAction.kind === "add_ingredient" ? "Registrer tilsatt" : state.nextAction.label}
           </Button>
         </Card>
+      )}
+
+      {batch.status !== "completed" && (batch.status === "brewing" || timers.length > 0) && (
+        <TimerCard
+          timers={timers}
+          now={now}
+          onStart={startTimer}
+          onCancel={cancelTimer}
+          busy={logEvent.isPending}
+          error={logEvent.error?.message}
+          soundOn={alarms.soundOn}
+          onSoundChange={alarms.setSoundOn}
+        />
       )}
 
       <ResultSummary batch={batch} />
