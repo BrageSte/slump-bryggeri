@@ -194,10 +194,10 @@ tilsetning og notat.
 
 ## M3 — Bryggedagsmodus (B5)
 
-- [ ] **Planlagte steg:** vis neste meske-, skylle-, koke-, humle- og gjæringssteg fra batchens
+- [x] **Planlagte steg:** vis neste meske-, skylle-, koke-, humle- og gjæringssteg fra batchens
       oppskriftssnapshot; vis mål, tid og neste handling. Funger med manuelle oppskrifter og bruker
       importerte planer etter M5. Manglende plan gir tom tilstand, ikke oppdiktede steg.
-- [ ] **Skjermen på:** Screen Wake Lock (`navigator.wakeLock.request("screen")`) mens en batch i status «brygger nå» er åpen;
+- [x] **Skjermen på:** Screen Wake Lock (`navigator.wakeLock.request("screen")`) mens en batch i status «brygger nå» er åpen;
       hentes på nytt ved `visibilitychange`. Bryter i batch-headeren («Skjerm på»), standard på. Faller stille tilbake der API-et mangler.
 - [ ] **Delte timere:** hendelsestyper `timer_started` `{ label, durationMin, dueAt }` og `timer_cancelled`. Alle i bryggeriet ser
       samme nedtelling (polling finnes). Kort «Timere» på bryggedagen med hurtigvalg (5/10/15/20/30/60 min + egendefinert).
@@ -212,6 +212,10 @@ tilsetning og notat.
       varmekapasitet. Resultat er forslag; logg først ved brukertrykk. BeerSmith Mash Adjust-bildet
       (67,8 °C mål, 65,6 °C nå, 18,93 L, 4,54 kg, 100 °C tilsetningsvann → 1,41 L) er
       referansescenario med dokumentert toleranse/modellavvik, ikke en historisk bryggmåling.
+
+Gjort 2026-09-24. Batchens aktive steg viser bare planlagte punkter fra det uforanderlige
+oppskriftssnapshotet, med en kort foreslått handling og en tom tilstand uten plan. Skjermlås er på som
+standard mens et brygg pågår, kan slås av i batch-headeren og gjenopptas når fanen blir synlig igjen.
 
 Varsler når appen er lukket (Web Push) er en senere utvidelse, ikke en blokkering for bryggedagsmodus.
 
