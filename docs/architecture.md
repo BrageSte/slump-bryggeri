@@ -148,16 +148,19 @@ npm run dev                      # http://localhost:5173 — innloggingskoder sk
 
 ## Deploy (Cloudflare)
 
-Første gang:
+Produksjon: **https://slump-bryggeri.brage-steen.workers.dev** (konto brage.steen@gmail.com, D1 `slump-bryggeri` i EEUR).
+
+`npm run deploy` bygger med `CLOUDFLARE_ENV=production` og bruker `env.production` i `wrangler.jsonc`.
+Den er lik toppnivået, men **uten R2** fordi R2 ikke er aktivert på kontoen ennå — bildeopplasting
+svarer 503 til da. For å slå på bilder: aktiver R2 i Cloudflare-dashboardet, kjør
+`npx wrangler r2 bucket create slump-bryggeri-files`, kopier `r2_buckets`-blokken inn i
+`env.production` og deploy på nytt.
 
 ```bash
-npx wrangler d1 create slump-bryggeri          # lim inn database_id i wrangler.jsonc
-npx wrangler r2 bucket create slump-bryggeri-files
-npx wrangler secret put BETTER_AUTH_SECRET
-# e-post: se «E-post for innloggingskoder» under
-npm run db:migrate:remote
-npm run db:seed:library:remote
+npm run db:migrate:remote        # nye migrasjoner
+npm run db:seed:library:remote   # etter at oppskriftsbiblioteket er bygget på nytt
 npm run deploy
+npx wrangler secret put BETTER_AUTH_SECRET --env production   # kun første gang (er satt)
 ```
 
 ### E-post for innloggingskoder

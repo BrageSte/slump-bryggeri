@@ -53,3 +53,17 @@ describe("authentication", () => {
     expect(res.body.user.name).toBe("Brage");
   });
 });
+
+describe("email provider", () => {
+  it("refuses to pretend a code was sent when no provider is configured", async () => {
+    const { app } = await import("../../worker/app.ts");
+    const { env, createExecutionContext } = await import("cloudflare:test");
+    const res = await app.request(
+      "https://slump.example/api/auth/email-otp/send-verification-otp",
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "x@example.com", type: "sign-in" }) },
+      { ...env, APP_URL: "https://slump.example", RESEND_API_KEY: "" },
+      createExecutionContext(),
+    );
+    expect(res.status).toBe(503);
+  });
+});

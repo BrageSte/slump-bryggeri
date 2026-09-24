@@ -11,6 +11,7 @@ type AuthError = { status?: number; code?: string; message?: string } | null;
 function describe(error: AuthError, fallback: string): string {
   if (!error) return fallback;
   if (error.status === 429) return "For mange forsøk. Vent litt og prøv igjen.";
+  if (error.status === 503) return "Innlogging med e-post er ikke satt opp på denne serveren ennå. Kontakt den som drifter appen.";
   switch (error.code) {
     case "INVALID_OTP":
       return "Feil kode. Sjekk e-posten og prøv igjen.";

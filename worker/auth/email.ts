@@ -26,6 +26,11 @@ function isLocal(baseURL: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]";
 }
 
+/** Whether sign-in codes can actually be delivered from this deployment. */
+export function canSendEmail(env: Env, baseURL: string): boolean {
+  return Boolean((env as Env & { EMAIL?: EmailBinding }).EMAIL) || Boolean(env.RESEND_API_KEY) || isLocal(baseURL);
+}
+
 export async function sendEmail(env: Env, baseURL: string, email: OutgoingEmail): Promise<void> {
   const binding = (env as Env & { EMAIL?: EmailBinding }).EMAIL;
   if (binding) {
