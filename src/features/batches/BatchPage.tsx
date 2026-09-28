@@ -169,14 +169,28 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         actions={
           <div className="flex items-center gap-1">
             {batch.status === "brewing" && (
-              <Button
-                variant={screenOn ? "secondary" : "ghost"}
-                icon={screenOn ? "sun" : "moon"}
-                aria-pressed={screenOn}
-                onClick={() => setScreenOn((value) => !value)}
-              >
-                {screenOn ? "Skjerm på" : "Skjerm av"}
-              </Button>
+              <>
+                {/* Icon only on phones, so the batch name keeps the width it needs. */}
+                <span className="sm:hidden">
+                  <IconButton
+                    icon={screenOn ? "sun" : "moon"}
+                    label={screenOn ? "Skjermen holdes på" : "Skjermen kan slukke"}
+                    variant={screenOn ? "secondary" : "ghost"}
+                    aria-pressed={screenOn}
+                    onClick={() => setScreenOn((value) => !value)}
+                  />
+                </span>
+                <span className="hidden sm:block">
+                  <Button
+                    variant={screenOn ? "secondary" : "ghost"}
+                    icon={screenOn ? "sun" : "moon"}
+                    aria-pressed={screenOn}
+                    onClick={() => setScreenOn((value) => !value)}
+                  >
+                    {screenOn ? "Skjerm på" : "Skjerm av"}
+                  </Button>
+                </span>
+              </>
             )}
             <IconButton icon="dots" label="Flere valg" onClick={() => setMenuOpen(true)} />
           </div>

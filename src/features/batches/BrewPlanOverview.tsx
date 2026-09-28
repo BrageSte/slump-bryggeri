@@ -10,7 +10,7 @@ import {
   type PlanQuantity,
 } from "../../domain/brew-day/brew-plan.ts";
 import type { PlannedAddition } from "../../domain/brew-day/state.ts";
-import type { BrewStage } from "../../domain/model/brewing.ts";
+import { fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import { Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
 
@@ -63,7 +63,7 @@ export function BrewPlanOverview({
 
   return (
     <Section title="Bryggeplan">
-      <KeyFigures summary={plan.summary} />
+      <KeyFigures summary={plan.summary} currentStage={currentStage} />
 
       <nav aria-label="Faser i bryggeplanen" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
         {plan.phases.map((phase) => {
@@ -103,6 +103,7 @@ export function BrewPlanOverview({
                 : undefined}
               liveAdditions={status === "current" ? liveAdditions : []}
               countdownFrom={status === "current" && currentStage !== "fermentation" && currentStage !== "conditioning" ? elapsedMin : null}
+              canRegister={currentStage !== null}
               onAdd={onAdd}
               busy={busy}
             />
@@ -119,8 +120,10 @@ export function BrewPlanOverview({
   );
 }
 
-function KeyFigures({ summary }: { summary: BrewPlan["summary"] }) {
-  const figures = [
+function KeyFigures({ summary, currentStage }: { summary: BrewPlan["summary"]; currentStage: BrewStage | null }) {
+  // Once the wort is in the fermenter, strike water and boil times are history.
+  const brewDayDone = fermentationHasStarted(currentStage);
+  const brewDayFigures = brewDayDone ? [] : [
     summary.strikeVolumeL || summary.strikeTemperatureC
       ? { label: "Innmesking", value: quantity(summary.strikeTemperatureC, "°C") ?? "–", detail: quantity(summary.strikeVolumeL, "L") }
       : null,
@@ -143,6 +146,10 @@ function KeyFigures({ summary }: { summary: BrewPlan["summary"] }) {
       : null,
     summary.grainKg > 0 ? { label: "Malt", value: `${formatNumber(summary.grainKg, 2)} kg`, detail: null } : null,
     summary.hopTotalG > 0 ? { label: "Humle totalt", value: formatAmount(summary.hopTotalG, "g"), detail: null } : null,
+  ];
+  const figures = [
+    ...brewDayFigures,
+    brewDayDone && summary.dryHopTotalG > 0 ? { label: "Tørrhumling", value: formatAmount(summary.dryHopTotalG, "g"), detail: null } : null,
     summary.pitchTemperatureC !== undefined
       ? { label: "Gjærtilsetting", value: `${formatNumber(summary.pitchTemperatureC, 1)} °C`, detail: null }
       : null,
@@ -173,6 +180,7 @@ function PhaseCard({
   hint,
   liveAdditions,
   countdownFrom,
+  canRegister,
   onAdd,
   busy,
 }: {
@@ -183,6 +191,7 @@ function PhaseCard({
   hint?: string;
   liveAdditions: PlannedAddition[];
   countdownFrom: number | null;
+  canRegister: boolean;
   onAdd: (addition: PlanAddition) => void;
   busy: boolean;
 }) {
@@ -228,6 +237,7 @@ function PhaseCard({
                 item={item}
                 live={item.addition ? liveAdditions.find((a) => a.ingredientId === item.addition?.ingredientId) : undefined}
                 countdownFrom={countdownFrom}
+                canRegister={canRegister}
                 onAdd={onAdd}
                 busy={busy}
               />
@@ -243,12 +253,15 @@ function PlanItemRow({
   item,
   live,
   countdownFrom,
+  canRegister,
   onAdd,
   busy,
 }: {
   item: BrewPlanItem;
   live?: PlannedAddition;
   countdownFrom: number | null;
+  /** Additions can only be registered once the brew has started. */
+  canRegister: boolean;
   onAdd: (addition: PlanAddition) => void;
   busy: boolean;
 }) {
@@ -293,16 +306,16 @@ function PlanItemRow({
           <StatusChip tone="success" icon="check">
             Tilsatt
           </StatusChip>
-        ) : (
+        ) : canRegister ? (
           <Button
             size="sm"
             variant={live?.status === "due" ? "primary" : "secondary"}
             disabled={busy}
             onClick={() => item.addition && onAdd(item.addition)}
           >
-            Tilsatt
+            Tilsett
           </Button>
-        ))}
+        ) : null)}
     </li>
   );
 }

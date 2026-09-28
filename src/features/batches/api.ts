@@ -177,6 +177,12 @@ export function useDeleteBatch() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (batchId: string) => api.delete(`/breweries/${breweryId}/batches/${batchId}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: batchesKey(breweryId) }),
+    onSuccess: (_, batchId) => {
+      // Drop the deleted batch instead of refetching it: a 404 would swap the open batch page
+      // for an error state and unmount it before the caller can navigate away.
+      queryClient.removeQueries({ queryKey: batchKey(breweryId, batchId) });
+      queryClient.removeQueries({ queryKey: timelineKey(breweryId, batchId) });
+      void queryClient.invalidateQueries({ queryKey: [...batchesKey(breweryId), "list"] });
+    },
   });
 }

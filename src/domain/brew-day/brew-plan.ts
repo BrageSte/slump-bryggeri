@@ -70,6 +70,7 @@ export interface BrewPlanSummary {
   boilTimeMin: number;
   grainKg: number;
   hopTotalG: number;
+  dryHopTotalG: number;
   pitchTemperatureC?: number;
   og: number | null;
   fg: number | null;
@@ -340,6 +341,7 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
       boilTimeMin: doc.boilTimeMin,
       grainKg,
       hopTotalG: doc.hops.reduce((sum, hop) => sum + hop.amountG, 0),
+      dryHopTotalG: hopsFor("dry_hop").reduce((sum, hop) => sum + hop.amountG, 0),
       pitchTemperatureC: pitchStep?.temperatureC,
       og,
       fg,

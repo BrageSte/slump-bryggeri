@@ -540,10 +540,17 @@ function chooseNextAction(
     const recentGravity = log.some(
       (e) => (e.measurement?.kind === "sg" || e.measurement?.kind === "brix") && e.stage === "fermentation" && now - e.occurredAt < DAY,
     );
-    if (!recentGravity) return { kind: "log_measurement", measurementKind: "sg", label: "Sjekk gravity" };
+    if (!recentGravity) return { kind: "log_measurement", measurementKind: "sg", label: "Mål SG" };
   }
 
   const next = followingStage(recipe, stage);
   if (next === null) return { kind: "complete", label: "Avslutt batch" };
+  if (next === "fermentation" && recipe.cultures.length > 0) {
+    // Once every planned yeast is registered, "Gjær tilsatt" would ask for something already done.
+    const registered = registeredIngredientIds(log);
+    if (recipe.cultures.every((culture) => registered.has(culture.id))) {
+      return { kind: "start_stage", stage: next, label: "Start gjæring" };
+    }
+  }
   return { kind: "start_stage", stage: next, label: startStageLabels[next] };
 }
