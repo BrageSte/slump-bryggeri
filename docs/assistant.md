@@ -6,7 +6,7 @@ spørsmålene som faktisk stilles.
 ## Slik virker den
 
 1. Appen lager **bryggedokumentet** for batchen (`src/domain/brew-document/brew-document.ts`): plan, utstyrssnapshot,
-   status nå og hele loggen. Det er det samme dokumentet som «Kopier bryggedokument» gir deg.
+   status nå og hele loggen. Det vises på batchsiden og er det samme dokumentet som «Kopier bryggedokument» gir deg.
 2. Workeren sender dokumentet og spørsmålet til Claude (`worker/services/assistant.ts`). Dokumentet mellomlagres
    (prompt caching), så gjentatte beregninger i samme spørsmål blir billige.
 3. Claude regner **aldri ut bryggetall selv**. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):

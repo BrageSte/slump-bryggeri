@@ -58,6 +58,7 @@ describe("brew document", () => {
 
   it("covers plan, equipment, status and the full log", () => {
     expect(doc).toContain("# Bryggedokument: Sunset IPA (#1)");
+    expect(doc).toContain("- Status: Brygger nå");
     expect(doc).toContain("### Kok (ferdig)");
     expect(doc).toContain("### Kjøling og gjærtilsetning (nå)");
     expect(doc).toContain("- Fordampning: 13,2 L/h");
@@ -70,7 +71,7 @@ describe("brew document", () => {
     // Water volumes come from the equipment snapshot and are flagged as calculated.
     expect(doc).toMatch(/Innmeskingsvann.*≈ [\d,]+ L/);
     // The pitch temperature target has no reading in this log and must say so.
-    expect(doc).toMatch(/gjærtilsetning: mål 18,0 °C, faktisk ikke målt → missing/);
+    expect(doc).toMatch(/gjærtilsetning: mål 18,0 °C, faktisk ikke målt → Ikke målt/);
     expect(doc).toContain("ikke registrert tilsatt");
   });
 

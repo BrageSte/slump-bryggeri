@@ -1,8 +1,8 @@
 import { buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatus, registeredIngredientIds, type BrewPlanItem, type PlanQuantity } from "../brew-day/brew-plan.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
-import { deriveBrewDayState, type BrewDayLogEntry, type TargetValue } from "../brew-day/state.ts";
+import { deriveBrewDayState, type BrewDayLogEntry, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
 import { packagingLabels, type BatchDetail, type TimelineItem } from "../model/api.ts";
-import { brewStageLabels, eventTypeLabels, formatMeasurementValue, measurementKindSpecs } from "../model/brewing.ts";
+import { batchStatusLabels, brewStageLabels, eventTypeLabels, formatMeasurementValue, measurementKindSpecs } from "../model/brewing.ts";
 import { getProfileParameter } from "../model/equipment-profile.ts";
 import { reviewCalibration } from "./tuning.ts";
 
@@ -14,6 +14,13 @@ import { reviewCalibration } from "./tuning.ts";
  */
 
 const TIME_ZONE = "Europe/Oslo";
+const targetStatusLabels: Record<TargetStatus, string> = {
+  ok: "OK",
+  low: "Lav",
+  high: "Høy",
+  uncertain: "Usikker",
+  missing: "Ikke målt",
+};
 
 const num = (value: number, decimals = 1) =>
   value.toLocaleString("nb-NO", { minimumFractionDigits: 0, maximumFractionDigits: decimals });
@@ -124,7 +131,7 @@ export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail
   lines.push(
     `- Oppskrift: ${recipe.name} v${batch.recipeVersion.version}${recipe.style ? `, ${recipe.style}` : ""}`,
     `- Batchstørrelse ${num(recipe.batchSizeL)} L, kok ${num(recipe.boilTimeMin, 0)} min, planlagt effektivitet ${num(recipe.efficiencyPct, 0)} %`,
-    `- Status: ${batch.status}${batch.currentStage ? `, steg ${brewStageLabels[batch.currentStage]}` : ", ikke startet"}${batch.brewDate ? `, bryggedato ${batch.brewDate}` : ""}`,
+    `- Status: ${batchStatusLabels[batch.status]}${batch.currentStage ? `, steg ${brewStageLabels[batch.currentStage]}` : ", ikke startet"}${batch.brewDate ? `, bryggedato ${batch.brewDate}` : ""}`,
   );
   if (batch.splits.length > 0) {
     lines.push(`- Varianter: ${batch.splits.map((s) => `${s.name}${s.vessel ? ` (${s.vessel}${s.volumeL ? `, ${num(s.volumeL)} L` : ""})` : ""}`).join("; ")}`);
@@ -172,7 +179,7 @@ export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail
       const actual = t.actual
         ? `${formatMeasurementValue(t.measurementKind, t.actual.value)}${t.actual.derivedFrom === "brix" ? " (fra Brix)" : ""}`
         : "ikke målt";
-      lines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${t.status}`);
+      lines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}`);
     }
     if (state.nextAction) lines.push(`- Neste handling: ${state.nextAction.label}`);
   }
