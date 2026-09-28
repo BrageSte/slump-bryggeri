@@ -8,6 +8,8 @@ import {
   calculateStrikeTemperature,
   calculateTemperatureOffset,
   calculateWaterVolumes,
+  calculateMashTemperatureAdjustment,
+  suggestStrikeOffsetFromMash,
   summarizeCalibrationObservations,
 } from "../../src/domain/brewing-calculations/index.ts";
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
@@ -112,5 +114,57 @@ describe("recipe metrics", () => {
     expect(metrics.totalFermentablesKg).toBeCloseTo(19.82, 6);
     expect(metrics.totalHopsG).toBeCloseTo(283.5 + 220 + 147, 6);
     expect(metrics.hopsMissingAlpha).toHaveLength(0);
+  });
+});
+
+describe("mash temperature adjustment", () => {
+  it("reproduces BeerSmith Mash Adjust: 18.93 L, 4.54 kg, 65.6 → 67.8 °C with 100 °C water ≈ 1.41 L", () => {
+    const result = calculateMashTemperatureAdjustment({
+      mashWaterL: 18.93,
+      grainKg: 4.54,
+      currentTempC: 65.6,
+      targetTempC: 67.8,
+      additionTempC: 100,
+    });
+    // BeerSmith rounds to 1.41 L; the heat balance gives 1.417 L.
+    expect(result?.additionL).toBeCloseTo(1.41, 1);
+    expect(Math.abs((result?.additionL ?? 0) - 1.41)).toBeLessThan(0.02);
+  });
+
+  it("includes the mash tun when its mass and specific heat are known", () => {
+    const bare = calculateMashTemperatureAdjustment({ mashWaterL: 37.3, grainKg: 14.3, currentTempC: 63, targetTempC: 64.4, additionTempC: 95 });
+    const withTun = calculateMashTemperatureAdjustment({
+      mashWaterL: 37.3,
+      grainKg: 14.3,
+      currentTempC: 63,
+      targetTempC: 64.4,
+      additionTempC: 95,
+      tunMassKg: 10,
+      tunSpecificHeat: 0.15,
+    });
+    expect(withTun!.additionL).toBeGreaterThan(bare!.additionL);
+  });
+
+  it("cools with cold water and refuses impossible additions", () => {
+    const cool = calculateMashTemperatureAdjustment({ mashWaterL: 20, grainKg: 5, currentTempC: 70, targetTempC: 67, additionTempC: 10 });
+    expect(cool?.additionL).toBeGreaterThan(0);
+    expect(calculateMashTemperatureAdjustment({ mashWaterL: 20, grainKg: 5, currentTempC: 65, targetTempC: 67, additionTempC: 60 })).toBeNull();
+  });
+});
+
+describe("strike offset from a mash reading", () => {
+  it("inverts Palmer: 1 °C low at 3 L/kg needs the strike water ≈ 1.14 °C hotter", () => {
+    const result = suggestStrikeOffsetFromMash({ targetMashTempC: 67, measuredMashTempC: 66, mashThicknessLPerKg: 3, currentOffsetC: 0 });
+    expect(result.strikeCorrectionC).toBeCloseTo(1.1367, 3);
+    // Round trip: the corrected strike temperature lands the mash on target.
+    const before = calculateStrikeTemperature({ targetMashTempC: 67, grainTempC: 18, mashThicknessLPerKg: 3 }).strikeTempC;
+    const after = calculateStrikeTemperature({ targetMashTempC: 67, grainTempC: 18, mashThicknessLPerKg: 3, systemOffsetC: result.suggestedOffsetC }).strikeTempC;
+    expect(after - before).toBeCloseTo(result.strikeCorrectionC, 6);
+  });
+
+  it("adds to the current offset and lowers it when the mash ran hot", () => {
+    const result = suggestStrikeOffsetFromMash({ targetMashTempC: 66.5, measuredMashTempC: 68, mashThicknessLPerKg: 2.6, currentOffsetC: 2 });
+    expect(result.suggestedOffsetC).toBeLessThan(2);
+    expect(result.suggestedOffsetC).toBeCloseTo(2 - 1.5 * (3.01 / 2.6), 6);
   });
 });
