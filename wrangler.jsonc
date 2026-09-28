@@ -21,7 +21,8 @@
   "kv_namespaces": [{ "binding": "FILES_KV", "id": "b94ed9e975c54c28a59c1fa561fe29a8" }],
   "ratelimits": [
     { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
-    { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+    { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+    { "name": "ASSISTANT_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
   ],
   "vars": {
     // Public URL of the app. Leave empty to derive it from the request (fine for local dev).
@@ -29,7 +30,10 @@
     "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
     // Brewery mode: no accounts, one brewery, optional shared code (secret BREWERY_ACCESS_CODE).
     "BREWERY_MODE": "on",
-    "BREWERY_NAME": "Slump Bryggeri"
+    "BREWERY_NAME": "Slump Bryggeri",
+    // Brewing assistant (secret ANTHROPIC_API_KEY). Questions per brewery per day (UTC).
+    "ASSISTANT_MODEL": "claude-sonnet-5",
+    "ASSISTANT_DAILY_LIMIT": "40"
   },
   "env": {
     // Bindings are not inherited by named environments, so repeat both file stores here.
@@ -47,13 +51,16 @@
       "kv_namespaces": [{ "binding": "FILES_KV", "id": "b94ed9e975c54c28a59c1fa561fe29a8" }],
       "ratelimits": [
         { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } },
-        { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } }
+        { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 30, "period": 60 } },
+        { "name": "ASSISTANT_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 10, "period": 60 } }
       ],
       "vars": {
         "APP_URL": "",
         "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
         "BREWERY_MODE": "on",
-        "BREWERY_NAME": "Slump Bryggeri"
+        "BREWERY_NAME": "Slump Bryggeri",
+        "ASSISTANT_MODEL": "claude-sonnet-5",
+        "ASSISTANT_DAILY_LIMIT": "40"
       }
     }
   }

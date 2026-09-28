@@ -62,7 +62,7 @@ function Report({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIte
   const recipe = batch.recipeSnapshot;
   const wcf = batch.equipmentSnapshot.values.refractometer_wcf ?? 1;
   const log = toBrewDayLog(timeline);
-  const variants = buildFermentationSeries({ log, splits: batch.splits, wcf });
+  const variants = buildFermentationSeries({ log, splits: batch.splits, wcf, recipe: batch.recipeSnapshot });
   const numbers = brewhouseNumbers({ recipe, log, splits: batch.splits, wcf });
   const plan = expectedGravities(recipe);
   const metrics = calculateRecipeMetrics(recipe);

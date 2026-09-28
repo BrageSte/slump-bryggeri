@@ -49,8 +49,11 @@ kan endres fra batchmenyen.
 | 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ inkl. BeerSmith-import (.bsmx) med originalfilen tatt vare på |
 | 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring, enheter, pH-strips, korrigering, gjæring per variant med graf, etterregistrering, resultater per variant, bryggerapport (PDF), delte timere og alarmer | ✅ |
 
-Inventar, AI-assistent, smart import, kalibreringsforslag, vannkjemi og innlogging for andre er strøket
-(2026-09-24). Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
+| 4 Assistant | Bryggeassistent med Claude API: bryggedokument som kontekst, bryggeriets egne beregninger som verktøy, kostnadstak | ✅ se [docs/assistant.md](docs/assistant.md) |
+
+Bryggedagen viser hele bryggeplanen samtidig (2026-09-28). Inventar, smart import, automatiske
+kalibreringsforslag, vannkjemi og innlogging for andre er strøket. Rekkefølgen videre står i
+[implementeringsplanen](docs/implementation-plan.md).
 
 ## Dokumentasjon
 

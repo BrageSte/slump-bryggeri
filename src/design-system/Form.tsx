@@ -1,9 +1,8 @@
 import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 import { cx } from "./cx.ts";
+import { fieldClasses } from "./field-classes.ts";
 
-export const inputClasses =
-  "w-full min-h-11 rounded-md border border-border bg-surface px-3 text-body text-text placeholder:text-muted/70 " +
-  "focus:border-primary-strong focus:outline-none focus:ring-2 focus:ring-primary-strong/30 aria-invalid:border-danger";
+export { fieldClasses, inputClasses } from "./field-classes.ts";
 
 export function Field({
   label,
@@ -40,19 +39,19 @@ export function Field({
 }
 
 export function TextInput({ className, ...props }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input className={cx(inputClasses, className)} {...props} />;
+  return <input className={fieldClasses(className)} {...props} />;
 }
 
 export function Select({ className, children, ...props }: SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <select className={cx(inputClasses, "appearance-none bg-[length:20px] pr-9", className)} {...props}>
+    <select className={fieldClasses(cx("appearance-none bg-[length:20px] pr-9", className))} {...props}>
       {children}
     </select>
   );
 }
 
 export function TextArea({ className, ...props }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea className={cx(inputClasses, "min-h-24 py-2", className)} {...props} />;
+  return <textarea className={fieldClasses(cx("min-h-24 py-2", className))} {...props} />;
 }
 
 /**

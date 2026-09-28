@@ -1,6 +1,6 @@
-# Implementeringsplan v0.4
+# Implementeringsplan v0.5
 
-Oppdatert 2026-09-24. Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
+Oppdatert 2026-09-28 (bryggeplan, bryggeassistent og BeerSmith som grunnlag for kalibrering, se B13–B15). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
 
 Grunnlag: [implementation-package.md](implementation-package.md) (produktprinsipper),
 [architecture.md](architecture.md) (implementerte beslutninger), [AGENTS.md](../AGENTS.md) og
@@ -42,7 +42,10 @@ før neste bryggedag.
 | B9 | Vann/pH | pH-strips som intervall. ✅ Salter og syre planlegges som vanlige tilsetninger; ingen vannkjemi-kalkulator. |
 | B10 | BeerSmith-målinger | `OG_MEASURED`, `FG_MEASURED`, `VOLUME_MEASURED`, `MASH_PH` o.l. er ikke historikk, **selv når `_SET = 1`**. |
 | B11 | Utstyr | Versjonerte utstyrsprofiler og uforanderlige batch-snapshots. Import overskriver aldri aktiv profil. |
-| B12 | Omfang | Enkel og konsis app: ingen plassholdere, AI, inventar eller automatiske kalibreringsforslag. |
+| B12 | Omfang | Enkel og konsis app: ingen plassholdere, inventar eller automatiske kalibreringsforslag. *AI: se B14.* |
+| B13 | Bryggedag (2026-09-28) | Bryggedagen skal ikke være «lukket» og stegvis: alt man lurer på (vann, temperaturer, humle, gjær) skal være synlig hele tiden, og tilsetninger kan registreres når de faktisk skjer. |
+| B14 | AI (2026-09-28) | Bryggeassistent med Claude API, betalt per bruk (Sonnet 5 som standard), som svarer om brygget og leser et bryggedokument. Den regner ikke selv og endrer ingenting. Erstatter strykningen av AI i B12. |
+| B15 | BeerSmith (2026-09-28) | BeerSmith-oppskriftene er tunet for anlegget og er grunnlaget for oppstart og tuning av kalibreringen. Utstyret kan brukes som *forslag* til ny profilversjon, som en admin ser over og lagrer selv (B11). |
 
 ---
 
@@ -92,6 +95,13 @@ variant, registrere faktisk tørrhumlemengde og se kurven.
 Gjort 2026-09-24. `src/domain/brew-day/fermentation.ts` gir OG, målinger og pitch-tid per variant; kortet og
 grafen bruker samme grunnlag. Tidspunkt frem i tid avvises av API-et (5 min slakk). En utført tilsetning viser
 faktisk mengde med planen ved siden av.
+
+Gjort 2026-09-28 (påbygning): grafen tegner nå også trykk, FG-mål som stiplet linje og gjæringsplanens
+temperaturvindu som et bånd — begge fra `buildFermentationSeries({ ..., recipe })`, ny valgfri
+`recipe`-parameter (`buildTemperatureBand` er egen, testet ren funksjon). Tom tilstand er nå `EmptyState`
+i stedet for ingenting. `FermentationChart.tsx` er allerede montert i `BatchPage.tsx`; å vise FG-mål og
+temperaturbånd i appen krever bare at kallet der får `recipe: batch.recipeSnapshot` — en egen liten
+oppfølging, siden denne PR-en ikke rører `BatchPage.tsx`.
 
 ### Steg 3 — Avslutt batch (tidl. M4, forenklet) ✅
 
@@ -166,14 +176,58 @@ holder seg godt innenfor CPU-grensen på gratisplanen.
 
 ---
 
+### Steg 7 — Bryggeplan (B13) ✅
+
+Gjort 2026-09-28. Samlet **Bryggeplan** på bryggedagen (`src/domain/brew-day/brew-plan.ts`, `BrewPlanOverview.tsx`):
+nøkkeltall (innmesking, mesk, skyllevann, kok, malt, humle, gjærtilsetting, OG → FG) og alle faser samtidig,
+med gjeldende fase uthevet og ferdige faser sammenfoldet. Den erstatter tilsetningskortet (ikke Neste), så ingenting
+vises dobbelt. «Tilsett» åpner det forhåndsutfylte tilsetningsarket; gjær registreres direkte. Vannmengder og
+innmeskingstemperatur tas fra oppskriften når kilden oppgir dem, ellers beregnet fra utstyrssnapshot og merket «≈».
+Mangler fordampning, sier planen det, og «Ny batch» varsler før profilen låses.
+
+Samtidig: «Start gjæring» når all gjær er registrert, «Mål SG» (ikke «Sjekk gravity»), slettet batch navigerer
+videre, forsiden sier hva siste måling er, og en kallers bredde erstatter feltenes standardbredde (`fieldClasses`).
+
+### Steg 8 — Bryggedokument og bryggeassistent (B14) ✅
+
+Gjort 2026-09-28. Oppsett og kostnad: [assistant.md](assistant.md).
+
+- **Bryggedokument** (`src/domain/brew-document/`): plan per fase, utstyrssnapshot, status nå, resultater og hele
+  loggen som tekst. «Kopier bryggedokument» på assistentsiden.
+- **Hva brygget sier om kalibreringen** (`tuning.ts`): fordampning og brygghuseffektivitet fra `brewhouseNumbers`,
+  og systemkorreksjon innmesking fra første mesketemperatur (`suggestStrikeOffsetFromMash`). Bare tekst med
+  grunnlag; ingenting lagres automatisk.
+- **Assistent** (`worker/services/assistant.ts`, `worker/assistant/`): Claude med bryggedokumentet som cachet
+  kontekst og åtte lesende beregningsverktøy (innmesking, vannmengder, mesketemperatur-justering, Brix → SG,
+  ABV, effektivitet, fordampning, enhetsomregning). Dagsgrense (`ASSISTANT_DAILY_LIMIT`, 40), 10 per minutt,
+  atomisk dagsreservasjon i `assistant_daily_requests` (migrering `0010`), tokenbruk i `assistant_usage`
+  (migrering `0009`) og anslag i appen. Assistent i bunnmenyen og i batchmenyen.
+- `calculateMashTemperatureAdjustment` (BeerSmith Mash Adjust: 1,417 L mot 1,41 L) brukes som verktøy for
+  assistenten. Et eget kort for mesketemperatur-korrigering på bryggedagen er fortsatt strøket.
+
+### Steg 9 — BeerSmith som startpunkt for kalibrering (B15) ✅
+
+Gjort 2026-09-28. Oppskriftssiden for en BeerSmith-oppskrift har «Bruk som startpunkt i kalibreringen»:
+`suggestProfileFromBsmx` fyller inn effektivitet, batchvolum, meskekar, dødvolum, trubtap, gjæringstap,
+fordampning, krymping og mesketykkelse (BeerSmiths innmeskingsvann ÷ korn). Kalibreringssiden viser
+gammel → ny, og en admin lagrer ny versjon. «Slumps BeerSmith-oppskrifter» under Importer legger inn Love in a
+canoe, Cascade Pale Ale – Kveik, Bitter 90l og Aasen Kölsch (dagens 90–100 L-anlegg) gjennom samme import.
+BSMX-filene ligger nå i `src/features/recipes/beersmith/`.
+
+**Brage må:** i produksjon, importer «Slumps BeerSmith-oppskrifter», åpne Love in a canoe → «Bruk som startpunkt i
+kalibreringen», sjekk verdiene mot anlegget i dag og lagre. Legg inn `ANTHROPIC_API_KEY` ([assistant.md](assistant.md)).
+
+---
+
 ## 4. Strøket (bygg ikke uten ny beslutning)
 
 - **Innlogging for andre** (tidl. M9): Google/e-post, kobling av personer til kontoer, flere bryggerier.
   E-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
 - **Vannkjemi** (tidl. M6): versjonert kildevannsprofil, salt-/syrekalkulator og pH-modell.
 - **Kalibreringsobservasjoner og automatiske forslag.** Kalibrering endres for hånd som ny profilversjon.
-- Mesketemperatur-korrigering, BeerXML-import/-eksport og CSV-eksport.
-- Inventar, AI-assistent, smart import (bilde/nettadresse/tekst), push-varsler, full generisk
+- Eget kort for mesketemperatur-korrigering på bryggedagen (beregningen finnes og brukes av assistenten),
+  BeerXML-import/-eksport og CSV-eksport.
+- Inventar, smart import (bilde/nettadresse/tekst), push-varsler, full generisk
   revisjonshistorikk og avanserte planrevisjoner.
 
 ## Tverrgående krav (hver oppgave)

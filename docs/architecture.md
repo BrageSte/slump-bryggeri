@@ -37,9 +37,12 @@ database eller AI.
 ```
 src/domain/brewing-calculations/  rene beregningsfunksjoner (docs/calculations.md)
 src/domain/brew-day/state.ts       utleder «hva skjer nå / mål / målt / neste» fra snapshot + logg
+src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk, kok, humle, gjær, gjæring)
+src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalibreringen
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
 worker/                            Hono-app, auth, middleware, services (én fil per domene)
+worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, priser
 db/migrations/                     D1-migrasjoner (wrangler d1 migrations)
 tests/                             calculations, domain, integration
 ```
@@ -193,8 +196,8 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
 
 ## Navigasjon (avvik fra §5)
 
-Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Mer.
-Brygg viser bare batcher. Inventar og assistent er strøket (2026-09-24), så de har ingen plassholdere.
+Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Assistent · Mer.
+Brygg viser bare batcher. Inventar er strøket, så det har ingen plassholder. Assistent kom tilbake 2026-09-28 (B14).
 
 ## Sanntid
 
@@ -258,4 +261,14 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 - Hovedbundelen er ~176 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
-- Assistent, inventar, smart import og kalibreringsforslag er strøket fra planen (2026-09-24).
+- Inventar, smart import og automatiske kalibreringsforslag er strøket fra planen (2026-09-24).
+
+## Bryggeassistent (B14)
+
+Claude via Anthropic-SDK-en i Workeren (`worker/services/assistant.ts`). Konteksten er bryggedokumentet
+(`src/domain/brew-document/`), sendt som cachet systemblokk. Alle tall kommer fra verktøy som kaller
+`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen regner ikke selv og kan ikke skrive
+til databasen. Batchen hentes scoped til `c.var.membership.breweryId` før noe annet, så andre bryggerier får 404.
+Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
+Forbruk per bryggeri og døgn ligger i `assistant_usage` (bare tall, ikke samtaler). Testene setter alltid en
+tom nøkkel. Oppsett og kostnad: [assistant.md](assistant.md).

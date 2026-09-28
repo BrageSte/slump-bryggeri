@@ -110,7 +110,8 @@ byte-lik nedlasting, hard importregel, fiendtlig/ødelagt XML, for store filer o
 
 ## Testfiler
 
-`tests/fixtures/beersmith/` (byte-like kopier fra `oppskrifter.zip`, uten `__MACOSX`), testet i
+`src/features/recipes/beersmith/` (byte-like kopier fra `oppskrifter.zip`, uten `__MACOSX`; appen bruker
+fire av dem til «Slumps BeerSmith-oppskrifter»), lastet i testene via `tests/fixtures/beersmith/index.ts` og testet i
 `tests/import/bsmx.test.ts`:
 
 | Fil | Dekker |

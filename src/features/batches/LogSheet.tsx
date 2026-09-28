@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
 import type { PlannedAddition, TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchDetail } from "../../domain/model/api.ts";
 import { eventTypeLabels, ingredientKinds, measurementKindSpecs, type BrewStage, type IngredientKind, type MeasurementKind } from "../../domain/model/brewing.ts";
@@ -139,14 +140,6 @@ export function LogSheet({
       )}
     </BottomSheet>
   );
-}
-
-/** The batch split a recipe variant belongs to, e.g. variant "Tropical" → split "Sunset Tropical". */
-function splitForVariant(batch: BatchDetail, variant: string | undefined): string | null {
-  if (!variant) return null;
-  const wanted = variant.trim().toLowerCase();
-  const exact = batch.splits.find((split) => split.name.trim().toLowerCase() === wanted);
-  return (exact ?? batch.splits.find((split) => split.name.toLowerCase().includes(wanted)))?.id ?? null;
 }
 
 function SplitChooser({ batch, value, onChange }: { batch: BatchDetail; value: string | null; onChange: (id: string | null) => void }) {
@@ -294,7 +287,7 @@ function AdditionForm({
   const [amount, setAmount] = useState(preset ? String(preset.amount).replace(".", ",") : "");
   const [unit, setUnit] = useState(preset?.unit ?? "g");
   const [note, setNote] = useState("");
-  const [splitId, setSplitId] = useState<string | null>(() => splitForVariant(batch, preset?.variant));
+  const [splitId, setSplitId] = useState<string | null>(() => splitIdForVariant(batch.splits, preset?.variant));
   const [time, setTime] = useState<string | null>(null);
 
   function pick(addition: PlannedAddition) {
@@ -303,7 +296,7 @@ function AdditionForm({
     setName(addition.name);
     setAmount(String(addition.amount).replace(".", ","));
     setUnit(addition.unit);
-    setSplitId(splitForVariant(batch, addition.variant));
+    setSplitId(splitIdForVariant(batch.splits, addition.variant));
   }
 
   const parsedAmount = parseDecimal(amount);

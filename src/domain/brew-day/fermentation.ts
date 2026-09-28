@@ -1,4 +1,4 @@
-import { brixToSg, calculateApparentAttenuation, refractometerFinalGravity } from "../brewing-calculations/index.ts";
+import { brixToSg, calculateApparentAttenuation, expectedGravities, refractometerFinalGravity } from "../brewing-calculations/index.ts";
 import { fermentationHasStarted, type BrewStage } from "../model/brewing.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 import { currentFermentationStep, temperatureTarget, type BrewDayLogEntry, type TargetValue } from "./state.ts";
@@ -24,6 +24,16 @@ export interface ReadingPoint {
   value: number;
 }
 
+/** A run of consecutive fermentation days sharing the same planned temperature target. */
+export interface TemperatureBandSegment {
+  /** Whole days since pitching, inclusive. */
+  fromDay: number;
+  /** Whole days since pitching, exclusive (the segment covers [fromDay, toDay)). */
+  toDay: number;
+  min: number;
+  max: number;
+}
+
 export interface FermentationVariant {
   /** null: the whole batch (no split, or readings logged for "Hele batchen"). */
   splitId: string | null;
@@ -35,6 +45,10 @@ export interface FermentationVariant {
   pitchedAt: number | null;
   /** Brix readings after pitching that could not be corrected (no Brix reading from before fermentation). */
   uncorrectedBrix: number;
+  /** Planned FG from the recipe snapshot; null when no recipe was given or the recipe sets no target. */
+  targetFg: number | null;
+  /** The recipe's fermentation temperature plan, laid out consecutively from day 0; empty without a recipe. */
+  temperatureBand: TemperatureBandSegment[];
 }
 
 export interface FermentationInput {
@@ -42,11 +56,48 @@ export interface FermentationInput {
   splits: { id: string; name: string }[];
   /** Refractometer wort correction factor from the equipment snapshot. */
   wcf?: number;
+  /** Recipe snapshot; when given, the chart's FG target line and temperature band are filled in. */
+  recipe?: RecipeDocument;
 }
 
 const DAY = 86_400_000;
 /** Readings from these stages describe the finished wort, i.e. the OG. */
 const HOT_SIDE: readonly BrewStage[] = ["boil", "whirlpool", "cooling"];
+
+/** Match a recipe's variant label ("Tropical") to its batch split ("Sunset Tropical"). */
+export function splitIdForVariant(splits: { id: string; name: string }[], variant: string | undefined): string | null {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  const wanted = variant ? normalize(variant) : "";
+  if (!wanted) return null;
+
+  const exact = splits.find((split) => normalize(split.name) === wanted);
+  const named = splits.find((split) => ` ${normalize(split.name)} `.includes(` ${wanted} `));
+  return (exact ?? named)?.id ?? null;
+}
+
+/**
+ * The recipe's fermentation plan as day-by-day temperature targets, merged into runs of consecutive
+ * days with the same target. Days without a temperature target (a step with neither `temperatureC`
+ * nor `temperatureMaxC`) are skipped rather than guessed.
+ */
+export function buildTemperatureBand(recipe: RecipeDocument): TemperatureBandSegment[] {
+  const totalDays = recipe.fermentationSteps.reduce((sum, step) => sum + (step.durationDays ?? 0), 0);
+  const segments: TemperatureBandSegment[] = [];
+  for (let day = 0; day < totalDays; day += 1) {
+    const step = currentFermentationStep(recipe, day);
+    const target = step ? temperatureTarget(step.temperatureC, step.temperatureMaxC) : null;
+    if (!target) continue;
+    const min = target.kind === "range" ? target.min : target.value;
+    const max = target.kind === "range" ? target.max : target.value;
+    const last = segments.at(-1);
+    if (last && last.toDay === day && last.min === min && last.max === max) {
+      last.toDay = day + 1;
+    } else {
+      segments.push({ fromDay: day, toDay: day + 1, min, max });
+    }
+  }
+  return segments;
+}
 
 const round3 = (value: number) => Math.round(value * 1000) / 1000;
 
@@ -55,6 +106,8 @@ export function buildFermentationSeries(input: FermentationInput): FermentationV
   const log = [...input.log].sort((a, b) => a.occurredAt - b.occurredAt);
   const splitOf = (entry: BrewDayLogEntry) => entry.splitId ?? null;
   const fermenting = log.filter((e) => fermentationHasStarted(e.stage));
+  const targetFg = input.recipe ? expectedGravities(input.recipe).fg : null;
+  const temperatureBand = input.recipe ? buildTemperatureBand(input.recipe) : [];
 
   const variant = (splitId: string | null, name: string): FermentationVariant => {
     // A reading for this fermenter wins over one for the whole batch.
@@ -92,7 +145,18 @@ export function buildFermentationSeries(input: FermentationInput): FermentationV
     const pitched = preferOwn((entries) => entries.find((e) => e.type === "yeast_pitched")?.occurredAt ?? null, log);
     const pitchedAt = pitched ?? log.find((e) => e.type === "fermentation_started")?.occurredAt ?? null;
 
-    return { splitId, name, og, gravity, temperature: series("temperature"), pressure: series("pressure"), pitchedAt, uncorrectedBrix };
+    return {
+      splitId,
+      name,
+      og,
+      gravity,
+      temperature: series("temperature"),
+      pressure: series("pressure"),
+      pitchedAt,
+      uncorrectedBrix,
+      targetFg,
+      temperatureBand,
+    };
   };
 
   if (input.splits.length === 0) return [variant(null, "Hele batchen")];

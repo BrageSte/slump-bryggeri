@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
-import type { FermentationVariant } from "../../domain/brew-day/fermentation.ts";
-import { cx, Section } from "../../design-system/index.ts";
+import type { FermentationVariant, TemperatureBandSegment } from "../../domain/brew-day/fermentation.ts";
+import { cx, EmptyState, Section } from "../../design-system/index.ts";
 import { formatLogTime, formatNumber, formatSg } from "../../lib/format.ts";
 
 /**
- * Gravity and temperature over time, one line per fermenter (docs/design-system.md → Grafer).
- * Two panels on a shared time axis — never two y-scales on one plot. Only real readings are drawn:
- * a hollow dot is SG derived from Brix, and the table under the chart holds every value.
+ * Gravity, temperature and pressure over time, one line per fermenter (docs/design-system.md → Grafer).
+ * Panels on a shared time axis — never two y-scales on one plot. Only real readings are drawn: a
+ * hollow dot is SG derived from Brix, the FG target is a dashed line, the planned temperature window
+ * is a shaded band, and the table under the chart holds every value.
  */
 
 const SERIES_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)"] as const;
@@ -29,9 +30,25 @@ interface ChartSeries {
   color: string;
   gravity: ChartPoint[];
   temperature: ChartPoint[];
+  pressure: ChartPoint[];
+  targetFg: number | null;
+  temperatureBand: TemperatureBandSegment[];
 }
 
-type Metric = "gravity" | "temperature";
+type Metric = "gravity" | "temperature" | "pressure";
+
+const METRIC_LABEL: Record<Metric, string> = { gravity: "SG", temperature: "Temperatur (°C)", pressure: "Trykk (bar)" };
+const METRIC_STEPS: Record<Metric, number[]> = {
+  gravity: [0.002, 0.005, 0.01, 0.02],
+  temperature: [0.5, 1, 2, 5],
+  pressure: [0.05, 0.1, 0.2, 0.5],
+};
+
+function formatMetricValue(metric: Metric, value: number): string {
+  if (metric === "gravity") return formatSg(value);
+  if (metric === "pressure") return `${formatNumber(value, 2)} bar`;
+  return `${formatNumber(value, 1)} °C`;
+}
 
 export function FermentationChart({
   variants,
@@ -52,6 +69,9 @@ export function FermentationChart({
         color: SERIES_COLORS[index] as string,
         gravity: [...(variant.og ? [variant.og] : []), ...variant.gravity].map((p) => ({ at: p.at, value: p.sg, derived: p.source === "brix" })),
         temperature: variant.temperature.map((p) => ({ at: p.at, value: p.value, derived: false })),
+        pressure: variant.pressure.map((p) => ({ at: p.at, value: p.value, derived: false })),
+        targetFg: variant.targetFg,
+        temperatureBand: variant.temperatureBand,
       })),
     [variants],
   );
@@ -60,12 +80,23 @@ export function FermentationChart({
   const [ref, width] = useElementWidth<HTMLDivElement>();
 
   const shown = selected === "all" ? all : all.filter((s) => s.key === selected);
-  const metrics = (["gravity", "temperature"] as const).filter((metric) => shown.some((s) => s[metric].length > 0));
-  const worthDrawing = all.some((s) => s.gravity.length >= 2 || s.temperature.length >= 2);
-  if (!worthDrawing) return null;
+  const metrics = (["gravity", "temperature", "pressure"] as const).filter((metric) => shown.some((s) => s[metric].length > 0));
+  const worthDrawing = all.some((s) => s.gravity.length >= 2 || s.temperature.length >= 2 || s.pressure.length >= 2);
+  if (!worthDrawing) {
+    if (printable) return null;
+    return (
+      <Section title="Gjæringsgraf">
+        <EmptyState icon="gauge" title="Ingen gjæringsgraf ennå">
+          Logg minst to SG-, temperatur- eller trykkmålinger for å se kurven.
+        </EmptyState>
+      </Section>
+    );
+  }
 
+  const targetFg = shown.find((s) => s.targetFg !== null)?.targetFg ?? null;
+  const temperatureBand = shown.find((s) => s.temperatureBand.length > 0)?.temperatureBand ?? [];
   const pitchTimes = variants.flatMap((v) => (v.pitchedAt === null ? [] : [v.pitchedAt]));
-  const pointTimes = shown.flatMap((s) => [...s.gravity, ...s.temperature].map((p) => p.at));
+  const pointTimes = shown.flatMap((s) => [...s.gravity, ...s.temperature, ...s.pressure].map((p) => p.at));
   const dayZero = pitchTimes.length > 0 ? Math.min(...pitchTimes) : pointTimes.length > 0 ? Math.min(...pointTimes) : until;
   const xMin = Math.min(dayZero, ...pointTimes);
   const xMax = Math.max(until, ...pointTimes, xMin + DAY);
@@ -128,10 +159,12 @@ export function FermentationChart({
             <div className="hidden break-inside-avoid print:block">
               {metrics.map((metric, index) => (
                 <figure key={metric} className="m-0">
-                  <figcaption className="text-caption font-semibold text-muted">{metric === "gravity" ? "SG" : "Temperatur (°C)"}</figcaption>
+                  <figcaption className="text-caption font-semibold text-muted">{METRIC_LABEL[metric]}</figcaption>
                   <Panel
                     metric={metric}
                     series={shown}
+                    targetFg={targetFg}
+                    temperatureBand={temperatureBand}
                     width={PRINT_WIDTH}
                     x={(at) => MARGIN.left + ((at - xMin) / (xMax - xMin)) * (PRINT_WIDTH - MARGIN.left - MARGIN.right)}
                     xMin={xMin}
@@ -150,10 +183,12 @@ export function FermentationChart({
           {width > 0 &&
             metrics.map((metric, index) => (
               <figure key={metric} className={cx("m-0", printable && "print:hidden")}>
-                <figcaption className="text-caption font-semibold text-muted">{metric === "gravity" ? "SG" : "Temperatur (°C)"}</figcaption>
+                <figcaption className="text-caption font-semibold text-muted">{METRIC_LABEL[metric]}</figcaption>
                 <Panel
                 metric={metric}
                 series={shown}
+                targetFg={targetFg}
+                temperatureBand={temperatureBand}
                 width={width}
                 x={x}
                 xMin={xMin}
@@ -168,7 +203,7 @@ export function FermentationChart({
             ))}
         </div>
 
-        {shown.length > 1 || derivedShown ? (
+        {shown.length > 1 || derivedShown || targetFg !== null || temperatureBand.length > 0 ? (
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-small text-muted" aria-label="Forklaring">
             {shown.length > 1 &&
               shown.map((s) => (
@@ -185,6 +220,22 @@ export function FermentationChart({
                 regnet fra Brix
               </li>
             )}
+            {targetFg !== null && metrics.includes("gravity") && (
+              <li className="flex items-center gap-2">
+                <svg width="16" height="8" aria-hidden="true">
+                  <line x1="1" x2="15" y1="4" y2="4" stroke="var(--text-muted)" strokeWidth="2" strokeDasharray="3 2" strokeLinecap="round" />
+                </svg>
+                FG-mål ({formatSg(targetFg)})
+              </li>
+            )}
+            {temperatureBand.length > 0 && metrics.includes("temperature") && (
+              <li className="flex items-center gap-2">
+                <svg width="16" height="8" aria-hidden="true">
+                  <rect x="1" y="1" width="14" height="6" fill="var(--info-soft)" />
+                </svg>
+                planlagt temperatur
+              </li>
+            )}
           </ul>
         ) : null}
 
@@ -197,6 +248,8 @@ export function FermentationChart({
 function Panel({
   metric,
   series,
+  targetFg,
+  temperatureBand,
   width,
   x,
   xMin,
@@ -210,6 +263,10 @@ function Panel({
 }: {
   metric: Metric;
   series: ChartSeries[];
+  /** Planned FG (dashed line), drawn only on the gravity panel. */
+  targetFg: number | null;
+  /** Planned fermentation temperature window (shaded band), drawn only on the temperature panel. */
+  temperatureBand: TemperatureBandSegment[];
   width: number;
   x: (at: number) => number;
   xMin: number;
@@ -222,17 +279,26 @@ function Panel({
   /** Scale to the container (print) instead of drawing at `width` pixels. */
   fluid?: boolean;
 }) {
-  const values = series.flatMap((s) => s[metric].map((p) => p.value));
-  const { ticks, min, max } = niceScale(values, metric === "gravity" ? [0.002, 0.005, 0.01, 0.02] : [0.5, 1, 2, 5]);
+  const band = metric === "temperature" ? temperatureBand : [];
+  const values = [
+    ...series.flatMap((s) => s[metric].map((p) => p.value)),
+    ...(metric === "gravity" && targetFg !== null ? [targetFg] : []),
+    ...band.flatMap((segment) => [segment.min, segment.max]),
+  ];
+  const { ticks, min, max } = niceScale(values, METRIC_STEPS[metric]);
   const y = (value: number) => MARGIN.top + (1 - (value - min) / (max - min)) * PLOT_HEIGHT;
+  const yClamped = (value: number) => Math.min(MARGIN.top + PLOT_HEIGHT, Math.max(MARGIN.top, y(value)));
   const height = MARGIN.top + PLOT_HEIGHT + (showAxis ? AXIS_BAND : 8);
-  const format = (value: number) => (metric === "gravity" ? formatSg(value) : formatNumber(value, 1));
+  const format = (value: number) => formatMetricValue(metric, value);
   const span = (xMax - dayZero) / DAY;
   const dayStep = span <= 8 ? 1 : span <= 16 ? 2 : 7;
   const dayTicks: number[] = [];
   for (let day = Math.ceil((xMin - dayZero) / DAY); dayZero + day * DAY <= xMax; day += 1) {
     if (day % dayStep === 0) dayTicks.push(day);
   }
+  const plotLeft = MARGIN.left;
+  const plotRight = width - MARGIN.right;
+  const xClamped = (at: number) => Math.min(plotRight, Math.max(plotLeft, x(at)));
 
   return (
     <svg
@@ -240,7 +306,7 @@ function Panel({
       height={fluid ? undefined : height}
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={metric === "gravity" ? "SG over tid" : "Temperatur over tid"}
+      aria-label={`${METRIC_LABEL[metric]} over tid`}
       className="block"
     >
       {ticks.map((tick) => (
@@ -251,6 +317,28 @@ function Panel({
           </text>
         </g>
       ))}
+      {band.map((segment) => (
+        <rect
+          key={`${segment.fromDay}-${segment.toDay}`}
+          x={xClamped(dayZero + segment.fromDay * DAY)}
+          y={yClamped(segment.max)}
+          width={Math.max(0, xClamped(dayZero + segment.toDay * DAY) - xClamped(dayZero + segment.fromDay * DAY))}
+          height={Math.max(0, yClamped(segment.min) - yClamped(segment.max))}
+          fill="var(--info-soft)"
+          aria-hidden="true"
+        />
+      ))}
+      {metric === "gravity" && targetFg !== null && (
+        <line
+          x1={MARGIN.left}
+          x2={width - MARGIN.right}
+          y1={yClamped(targetFg)}
+          y2={yClamped(targetFg)}
+          stroke="var(--text-muted)"
+          strokeWidth={2}
+          strokeDasharray="4 3"
+        />
+      )}
       {showAxis &&
         dayTicks.map((day) => (
           <text key={day} x={x(dayZero + day * DAY)} y={MARGIN.top + PLOT_HEIGHT + 18} textAnchor="middle" className="fill-[var(--text-muted)] text-[11px] tabular-nums">
@@ -317,9 +405,12 @@ function Readout({ series, metrics, at, dayZero }: { series: ChartSeries[]; metr
             {metrics.map((metric) => {
               const point = latestBefore(s[metric]);
               return (
-                <strong key={metric} className="tabular-nums">
-                  {point ? (metric === "gravity" ? formatSg(point.value) : `${formatNumber(point.value, 1)} °C`) : "–"}
-                </strong>
+                <span key={metric} className="flex items-baseline gap-1">
+                  <strong className="tabular-nums">{point ? formatMetricValue(metric, point.value) : "–"}</strong>
+                  {point && metric === "gravity" && (
+                    <span className="text-caption text-muted">{point.derived ? "fra Brix" : "målt"}</span>
+                  )}
+                </span>
               );
             })}
             {series.length > 1 && <span className="text-muted">{s.name}</span>}
@@ -331,10 +422,17 @@ function Readout({ series, metrics, at, dayZero }: { series: ChartSeries[]; metr
 }
 
 function ReadingsTable({ series, dayZero, open, absolute }: { series: ChartSeries[]; dayZero: number; open: boolean; absolute: boolean }) {
+  const hasPressure = series.some((s) => s.pressure.length > 0);
   const rows = series
     .flatMap((s) => {
-      const times = [...new Set([...s.gravity, ...s.temperature].map((p) => p.at))];
-      return times.map((at) => ({ at, name: s.name, gravity: s.gravity.find((p) => p.at === at), temperature: s.temperature.find((p) => p.at === at) }));
+      const times = [...new Set([...s.gravity, ...s.temperature, ...s.pressure].map((p) => p.at))];
+      return times.map((at) => ({
+        at,
+        name: s.name,
+        gravity: s.gravity.find((p) => p.at === at),
+        temperature: s.temperature.find((p) => p.at === at),
+        pressure: s.pressure.find((p) => p.at === at),
+      }));
     })
     .sort((a, b) => a.at - b.at);
   return (
@@ -346,7 +444,8 @@ function ReadingsTable({ series, dayZero, open, absolute }: { series: ChartSerie
             <th className="py-1 pr-2 font-semibold">Tid</th>
             {series.length > 1 && <th className="py-1 pr-2 font-semibold">Variant</th>}
             <th className="py-1 pr-2 text-right font-semibold">SG</th>
-            <th className="py-1 text-right font-semibold">°C</th>
+            <th className={cx("py-1 text-right font-semibold", hasPressure && "pr-2")}>°C</th>
+            {hasPressure && <th className="py-1 text-right font-semibold">Bar</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -357,9 +456,12 @@ function ReadingsTable({ series, dayZero, open, absolute }: { series: ChartSerie
               </td>
               {series.length > 1 && <td className="py-1.5 pr-2">{row.name}</td>}
               <td className="py-1.5 pr-2 text-right tabular-nums">
-                {row.gravity ? `${formatSg(row.gravity.value)}${row.gravity.derived ? " (Brix)" : ""}` : "–"}
+                {row.gravity ? `${formatSg(row.gravity.value)}${row.gravity.derived ? " (fra Brix)" : ""}` : "–"}
               </td>
-              <td className="py-1.5 text-right tabular-nums">{row.temperature ? formatNumber(row.temperature.value, 1) : "–"}</td>
+              <td className={cx("py-1.5 text-right tabular-nums", hasPressure && "pr-2")}>
+                {row.temperature ? formatNumber(row.temperature.value, 1) : "–"}
+              </td>
+              {hasPressure && <td className="py-1.5 text-right tabular-nums">{row.pressure ? formatNumber(row.pressure.value, 2) : "–"}</td>}
             </tr>
           ))}
         </tbody>

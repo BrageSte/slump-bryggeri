@@ -11,6 +11,7 @@ import { inviteEmail, sendEmail } from "../auth/email.ts";
 import type { AppEnv } from "../lib/context.ts";
 import { requireMember } from "../lib/middleware.ts";
 import { parseJsonBody } from "../lib/validate.ts";
+import { getAssistantStatus } from "../services/assistant.ts";
 import { exportBrewery } from "../services/brewery-export.ts";
 import { attachmentRoutes } from "./attachments.ts";
 import { batchRoutes } from "./batches.ts";
@@ -115,6 +116,9 @@ export const breweryRoutes = new Hono<AppEnv>()
     const id = await createProfileVersion(c.env.DB, c.var.db, c.var.membership, c.var.user, input);
     return c.json({ id }, 201);
   })
+
+  // Brewing assistant: whether it is set up, and today's/this month's usage.
+  .get("/:breweryId/assistant", async (c) => c.json(await getAssistantStatus(c.env, c.var.db, c.var.membership.breweryId)))
 
   // Everything below is guarded by the membership middleware above.
   .route("/:breweryId/recipes", recipeRoutes)

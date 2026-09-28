@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { useLocation, useNavigate } from "react-router";
+import type { ProfileSuggestion } from "../../domain/import/bsmx-equipment.ts";
 import { profileGroupLabels, profileGroups, profileParameters } from "../../domain/model/equipment-profile.ts";
 import { Button, Card, EmptyState, ErrorState, InlineError, inputClasses, LoadingState, PageHeader, parseDecimal, Section, StatusChip, TextInput, useToast } from "../../design-system/index.ts";
 import { formatDate, formatNumber } from "../../lib/format.ts";
@@ -15,7 +17,15 @@ export function CalibrationPage() {
   const profile = useEquipmentProfile();
   const versions = useProfileVersions();
   const { isAdmin } = useBrewery();
-  const [editing, setEditing] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // Set by the BeerSmith import; only an admin can turn it into a profile version.
+  const suggestion = isAdmin ? (location.state as { profileSuggestion?: ProfileSuggestion } | null)?.profileSuggestion : undefined;
+  const [editing, setEditing] = useState(Boolean(suggestion));
+  const finishEditing = () => {
+    setEditing(false);
+    if (suggestion) void navigate(location.pathname, { replace: true, state: null });
+  };
 
   if (profile.isPending) return <LoadingState />;
   if (profile.error) return <ErrorState error={profile.error} onRetry={() => void profile.refetch()} />;
@@ -39,7 +49,7 @@ export function CalibrationPage() {
       />
 
       {editing ? (
-        <ProfileForm initial={values} onDone={() => setEditing(false)} />
+        <ProfileForm initial={values} suggestion={suggestion} onDone={finishEditing} />
       ) : (
         profileGroups.map((group) => (
           <Section key={group} title={profileGroupLabels[group]}>
@@ -97,13 +107,28 @@ export function CalibrationPage() {
   );
 }
 
-function ProfileForm({ initial, onDone }: { initial: Record<string, { value: number }>; onDone: () => void }) {
+const plain = (value: number | undefined) => formatNumber(value, value !== undefined && Number.isInteger(value) ? 0 : 2);
+const decimalText = (value: number | undefined) => (value === undefined ? "" : String(value).replace(".", ","));
+
+function ProfileForm({
+  initial,
+  suggestion,
+  onDone,
+}: {
+  initial: Record<string, { value: number }>;
+  suggestion?: ProfileSuggestion;
+  onDone: () => void;
+}) {
   const save = useSaveProfileVersion();
   const toast = useToast();
+  const suggested = (key: string) => (suggestion?.values as Record<string, number | undefined> | undefined)?.[key];
   const [draft, setDraft] = useState<Record<string, string>>(() =>
-    Object.fromEntries(profileParameters.map((p) => [p.key, initial[p.key] ? String(initial[p.key]?.value).replace(".", ",") : ""])),
+    Object.fromEntries(profileParameters.map((p) => [p.key, decimalText(suggested(p.key) ?? initial[p.key]?.value)])),
   );
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(suggestion ? `Startpunkt fra BeerSmith: ${suggestion.sourceName}` : "");
+  const changes = suggestion
+    ? profileParameters.filter((p) => suggested(p.key) !== undefined && suggested(p.key) !== initial[p.key]?.value)
+    : [];
   const [error, setError] = useState<string | null>(null);
 
   function submit(event: FormEvent) {
@@ -123,6 +148,26 @@ function ProfileForm({ initial, onDone }: { initial: Record<string, { value: num
 
   return (
     <form onSubmit={submit} className="space-y-6">
+      {suggestion && (
+        <Card highlight className="space-y-2">
+          <p className="font-semibold">Forslag fra BeerSmith: {suggestion.sourceName}</p>
+          {changes.length === 0 ? (
+            <p className="text-small text-muted">Profilen har allerede disse verdiene.</p>
+          ) : (
+            <ul className="tabular space-y-1 text-small">
+              {changes.map((p) => (
+                <li key={p.key}>
+                  {p.label}: <span className="text-muted">{initial[p.key] ? plain(initial[p.key]?.value) : "ikke satt"}</span> →{" "}
+                  <strong>
+                    {plain(suggested(p.key))} {p.unit}
+                  </strong>
+                </li>
+              ))}
+            </ul>
+          )}
+          <p className="text-small text-muted">Verdiene er fylt inn under. Endre det som ikke stemmer med anlegget i dag, og lagre.</p>
+        </Card>
+      )}
       {profileGroups.map((group) => (
         <Section key={group} title={profileGroupLabels[group]}>
           <Card className="grid gap-3 sm:grid-cols-2">

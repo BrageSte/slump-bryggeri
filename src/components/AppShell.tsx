@@ -6,6 +6,7 @@ const navItems: { to: string; label: string; icon: IconName; matches: (path: str
   { to: "/", label: "Hjem", icon: "home", matches: (p) => p === "/" },
   { to: "/brygg", label: "Brygg", icon: "kettle", matches: (p) => /^\/(brygg|batcher)(\/|$)/.test(p) },
   { to: "/oppskrifter", label: "Oppskrifter", icon: "book", matches: (p) => p.startsWith("/oppskrifter") },
+  { to: "/assistent", label: "Assistent", icon: "sparkles", matches: (p) => p.startsWith("/assistent") },
   { to: "/mer", label: "Mer", icon: "menu", matches: (p) => p.startsWith("/mer") },
 ];
 
@@ -25,7 +26,7 @@ function MobileBottomNav() {
       aria-label="Hovedmeny"
       className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden print:hidden"
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {navItems.map((item) => (
           <li key={item.to}>
             <NavLink

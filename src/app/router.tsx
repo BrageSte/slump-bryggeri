@@ -35,6 +35,7 @@ const adaptRecipe = async () => ({ Component: (await import("../features/recipes
 const members = async () => ({ Component: (await import("../features/breweries/MembersPage.tsx")).MembersPage });
 const equipment = async () => ({ Component: (await import("../features/equipment/EquipmentPage.tsx")).EquipmentPage });
 const calibration = async () => ({ Component: (await import("../features/calibration/CalibrationPage.tsx")).CalibrationPage });
+const assistant = async () => ({ Component: (await import("../features/assistant/AssistantPage.tsx")).AssistantPage });
 const settings = async () => ({ Component: (await import("./SettingsPage.tsx")).SettingsPage });
 const batchResult = async () => ({ Component: (await import("../features/batches/BatchResultPage.tsx")).BatchResultPage });
 const batchReport = async () => ({ Component: (await import("../features/batches/BatchReportPage.tsx")).BatchReportPage });
@@ -63,6 +64,7 @@ export const router = createBrowserRouter([
           { path: "oppskrifter/:recipeId", element: <RecipeDetailPage /> },
           { path: "oppskrifter/:recipeId/rediger", lazy: recipeEditor },
           { path: "oppskrifter/:recipeId/tilpass", lazy: adaptRecipe },
+          { path: "assistent", lazy: assistant },
           { path: "mer", element: <MorePage /> },
           { path: "mer/medlemmer", lazy: members },
           { path: "mer/eksport", element: <ExportPage /> },
