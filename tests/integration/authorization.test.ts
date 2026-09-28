@@ -142,6 +142,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect((await download(bob, `/breweries/${breweryB}/recipes/${importedA}/source/file`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/timeline`)).status).toBe(404);
+    expect((await bob.get(`/breweries/${breweryA}/assistant`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
   });
 
@@ -165,6 +166,8 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.post(`/breweries/${breweryA}/equipment-profile/versions`, { values: {} }),
       bob.put(`/breweries/${breweryA}/batches/${batchA}/outcomes`, bobsResult),
       bob.put(`/breweries/${breweryB}/batches/${batchA}/outcomes`, bobsResult),
+      bob.post(`/breweries/${breweryA}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
+      bob.post(`/breweries/${breweryB}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
     expect((await alice.get(`/breweries/${breweryA}/recipes`)).body).toHaveLength(2);

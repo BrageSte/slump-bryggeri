@@ -562,6 +562,10 @@ function BatchMenu({
               <Icon name="file" size={20} />
               Rapport (PDF)
             </Link>
+            <Link to={`/assistent?batch=${batch.id}`} className={buttonClasses("secondary", "md", true)}>
+              <Icon name="sparkles" size={20} />
+              Spør assistenten
+            </Link>
             {batch.status === "completed" ? (
               <Button
                 block

@@ -6,6 +6,7 @@ const navItems: { to: string; label: string; icon: IconName; matches: (path: str
   { to: "/", label: "Hjem", icon: "home", matches: (p) => p === "/" },
   { to: "/brygg", label: "Brygg", icon: "kettle", matches: (p) => /^\/(brygg|batcher)(\/|$)/.test(p) },
   { to: "/oppskrifter", label: "Oppskrifter", icon: "book", matches: (p) => p.startsWith("/oppskrifter") },
+  { to: "/assistent", label: "Assistent", icon: "sparkles", matches: (p) => p.startsWith("/assistent") },
   { to: "/mer", label: "Mer", icon: "menu", matches: (p) => p.startsWith("/mer") },
 ];
 

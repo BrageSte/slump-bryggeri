@@ -5,3 +5,6 @@ BETTER_AUTH_SECRET=change-me
 RESEND_API_KEY=
 # Optional. Shared brewery code for brewery mode; leave empty for no code locally.
 BREWERY_ACCESS_CODE=
+# Optional. Anthropic API key for the brewing assistant (console.anthropic.com → API keys).
+# Without it the assistant shows how to set it up; the rest of the app works as before.
+ANTHROPIC_API_KEY=

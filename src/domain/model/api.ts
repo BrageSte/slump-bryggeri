@@ -522,6 +522,46 @@ export const createEventSchema = z.object({
 
 export { ingredientAddedDataSchema };
 
+// --- Brewing assistant -----------------------------------------------------------------
+
+export const assistantRequestSchema = z
+  .object({
+    /** The conversation so far, oldest first; the last message is the new question. */
+    messages: z
+      .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(4000) }))
+      .min(1)
+      .max(20),
+  })
+  .refine((input) => input.messages[0]?.role === "user" && input.messages.at(-1)?.role === "user", {
+    message: "Samtalen må starte og slutte med et spørsmål.",
+    path: ["messages"],
+  });
+
+export interface AssistantUsageSummary {
+  requests: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** Estimate from list prices; null for a model without a known price. */
+  estimatedUsd: number | null;
+}
+
+export interface AssistantStatus {
+  configured: boolean;
+  model: string;
+  dailyLimit: number;
+  today: AssistantUsageSummary;
+  month: AssistantUsageSummary;
+}
+
+export interface AssistantReply {
+  reply: string;
+  /** Calculations the assistant ran, by tool name, in order. */
+  toolCalls: string[];
+  usage: AssistantUsageSummary;
+}
+
 export interface CreatedResponse {
   id: string;
 }
