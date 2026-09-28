@@ -99,9 +99,8 @@ faktisk mengde med planen ved siden av.
 Gjort 2026-09-28 (påbygning): grafen tegner nå også trykk, FG-mål som stiplet linje og gjæringsplanens
 temperaturvindu som et bånd — begge fra `buildFermentationSeries({ ..., recipe })`, ny valgfri
 `recipe`-parameter (`buildTemperatureBand` er egen, testet ren funksjon). Tom tilstand er nå `EmptyState`
-i stedet for ingenting. `FermentationChart.tsx` er allerede montert i `BatchPage.tsx`; å vise FG-mål og
-temperaturbånd i appen krever bare at kallet der får `recipe: batch.recipeSnapshot` — en egen liten
-oppfølging, siden denne PR-en ikke rører `BatchPage.tsx`.
+i stedet for ingenting. `BatchPage.tsx` sender `recipe: batch.recipeSnapshot` til grafen, så FG-målet
+og temperaturbåndet vises i appen.
 
 ### Steg 3 — Avslutt batch (tidl. M4, forenklet) ✅
 
@@ -215,7 +214,8 @@ canoe, Cascade Pale Ale – Kveik, Bitter 90l og Aasen Kölsch (dagens 90–100 
 BSMX-filene ligger nå i `src/features/recipes/beersmith/`.
 
 **Brage må:** i produksjon, importer «Slumps BeerSmith-oppskrifter», åpne Love in a canoe → «Bruk som startpunkt i
-kalibreringen», sjekk verdiene mot anlegget i dag og lagre. Legg inn `ANTHROPIC_API_KEY` ([assistant.md](assistant.md)).
+kalibreringen», sjekk verdiene mot anlegget i dag og lagre. Production-secret `ANTHROPIC_API_KEY` er satt;
+sett et månedlig forbrukstak i Anthropic Console ([assistant.md](assistant.md)).
 
 ---
 
