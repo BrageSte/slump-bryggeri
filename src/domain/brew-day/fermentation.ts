@@ -64,6 +64,17 @@ const DAY = 86_400_000;
 /** Readings from these stages describe the finished wort, i.e. the OG. */
 const HOT_SIDE: readonly BrewStage[] = ["boil", "whirlpool", "cooling"];
 
+/** Match a recipe's variant label ("Tropical") to its batch split ("Sunset Tropical"). */
+export function splitIdForVariant(splits: { id: string; name: string }[], variant: string | undefined): string | null {
+  const normalize = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  const wanted = variant ? normalize(variant) : "";
+  if (!wanted) return null;
+
+  const exact = splits.find((split) => normalize(split.name) === wanted);
+  const named = splits.find((split) => ` ${normalize(split.name)} `.includes(` ${wanted} `));
+  return (exact ?? named)?.id ?? null;
+}
+
 /**
  * The recipe's fermentation plan as day-by-day temperature targets, merged into runs of consecutive
  * days with the same target. Days without a temperature target (a step with neither `temperatureC`

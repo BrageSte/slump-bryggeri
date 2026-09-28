@@ -72,4 +72,35 @@ describe("brewing assistant", () => {
     const tomorrow = await getAssistantStatus(limited, db, breweryId, now + 86_400_000);
     expect(tomorrow.today.requests).toBe(0);
   });
+
+  it("reserves the final daily slot atomically for concurrent questions", async () => {
+    const db = createDb(env.DB);
+    const limited = { ...env, ANTHROPIC_API_KEY: "", ASSISTANT_DAILY_LIMIT: "1" };
+    const now = Date.parse("2026-10-01T10:00:00Z");
+    let calls = 0;
+    const slowAnswer: MessagesClient = {
+      messages: {
+        create: async (params) => {
+          calls += 1;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+          return answer.messages.create(params);
+        },
+      },
+    };
+    const ask = () => askAssistant({
+      env: limited,
+      db,
+      breweryId,
+      batchId,
+      messages: [{ role: "user", content: "Hvordan går det?" }],
+      client: slowAnswer,
+      now,
+    });
+
+    const results = await Promise.allSettled([ask(), ask()]);
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    expect(calls).toBe(1);
+    expect(results.find((result) => result.status === "rejected")).toMatchObject({ reason: { status: 429, code: "assistant_daily_limit" } });
+    expect((await getAssistantStatus(limited, db, breweryId, now)).today.requests).toBe(1);
+  });
 });

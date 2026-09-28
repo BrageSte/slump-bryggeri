@@ -5,6 +5,7 @@ import {
   buildTemperatureBand,
   fermentationDayOf,
   plannedFermentationTemperature,
+  splitIdForVariant,
 } from "../../src/domain/brew-day/fermentation.ts";
 import type { BrewDayLogEntry } from "../../src/domain/brew-day/state.ts";
 import { sunsetIpaBrewLog, sunsetIpaRecipe, sunsetIpaSplits } from "../../src/domain/fixtures/sunset-ipa.ts";
@@ -102,6 +103,19 @@ describe("buildFermentationSeries", () => {
     expect(tropical?.targetFg).toBeCloseTo(1.01525, 5);
     expect(pine?.targetFg).toBe(tropical?.targetFg);
     expect(tropical?.temperatureBand).toEqual(buildTemperatureBand(sunsetIpaRecipe));
+  });
+});
+
+describe("splitIdForVariant", () => {
+  it("matches a recipe variant to its split by whole words", () => {
+    expect(splitIdForVariant(splits, "Tropical")).toBe("split-tropical");
+    expect(splitIdForVariant(splits, "Pine")).toBe("split-pine");
+    expect(splitIdForVariant(splits, "Sunset Pine")).toBe("split-pine");
+  });
+
+  it("does not guess when the variant is missing or does not match", () => {
+    expect(splitIdForVariant(splits, undefined)).toBeNull();
+    expect(splitIdForVariant(splits, "Pineapple")).toBeNull();
   });
 });
 

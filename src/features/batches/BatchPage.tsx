@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
 import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
-import { buildFermentationSeries } from "../../domain/brew-day/fermentation.ts";
+import { buildFermentationSeries, splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
@@ -139,7 +139,10 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   function addFromPlan(addition: PlanAddition) {
     if (addition.eventType === "yeast_pitched") {
       const { eventType: _type, variant: _variant, ...data } = addition;
-      logEvent.mutate({ type: "yeast_pitched", stage: batch.currentStage, data }, { onSuccess: () => toast(`${addition.name} registrert`) });
+      logEvent.mutate(
+        { type: "yeast_pitched", stage: batch.currentStage, splitId: splitIdForVariant(batch.splits, addition.variant), data },
+        { onSuccess: () => toast(`${addition.name} registrert`) },
+      );
       return;
     }
     const live = state.additions.find((a) => a.ingredientId === addition.ingredientId);

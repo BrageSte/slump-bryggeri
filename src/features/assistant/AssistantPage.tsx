@@ -21,12 +21,10 @@ import {
 import { ApiError } from "../../lib/api.ts";
 import { useBatch, useBatches, useTimeline } from "../batches/api.ts";
 import { useAskAssistant, useAssistantStatus, type ChatMessage } from "./api.ts";
+import { appendQuestion, prepareHistoryForRequest, retryHistory } from "./conversation.ts";
 
 /** Errors that retrying cannot fix; they need an admin or a new day. */
 const SETUP_ERRORS = new Set(["assistant_not_configured", "assistant_daily_limit", "assistant_key_rejected", "assistant_no_credit", "assistant_model_unavailable"]);
-
-/** The API accepts at most 20 messages; older turns are dropped, starting at a question. */
-const MAX_MESSAGES = 20;
 
 function starters(stage: BrewStage | null): string[] {
   const common = "Hva sier dette brygget om kalibreringen vår?";
@@ -214,22 +212,23 @@ function Conversation({ batchId, configured }: { batchId: string; configured: bo
     void endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
   }, [messages.length, ask.isPending]);
 
+  function submit(history: ChatMessage[]) {
+    ask.mutate(prepareHistoryForRequest(history), { onSuccess: (reply) => setMessages((current) => [...current, { role: "assistant", content: reply.reply }]) });
+  }
+
   function send(question: string) {
-    const text = question.trim();
-    if (!text || ask.isPending) return;
-    const next: ChatMessage[] = [...messages, { role: "user", content: text }];
+    if (ask.isPending) return;
+    const next = appendQuestion(messages, question);
+    if (!next) return;
     setMessages(next);
     setDraft("");
-    let recent = next.slice(-MAX_MESSAGES);
-    while (recent[0]?.role === "assistant") recent = recent.slice(1);
-    ask.mutate(recent, { onSuccess: (reply) => setMessages((current) => [...current, { role: "assistant", content: reply.reply }]) });
+    submit(next);
   }
 
   function retry() {
-    const last = messages.at(-1);
-    if (last?.role !== "user") return;
-    setMessages(messages.slice(0, -1));
-    send(last.content);
+    if (ask.isPending) return;
+    const history = retryHistory(messages);
+    if (history) submit(history);
   }
 
   async function copyDocument() {

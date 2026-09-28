@@ -26,7 +26,7 @@ function MobileBottomNav() {
       aria-label="Hovedmeny"
       className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-border bg-surface/95 backdrop-blur md:hidden print:hidden"
     >
-      <ul className="grid grid-cols-4">
+      <ul className="grid grid-cols-5">
         {navItems.map((item) => (
           <li key={item.to}>
             <NavLink

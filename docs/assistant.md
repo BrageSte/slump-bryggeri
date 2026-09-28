@@ -14,8 +14,8 @@ spørsmålene som faktisk stilles.
    observert fordampning og enhetsomregning. Standardverdiene kommer fra batchens utstyrssnapshot.
 4. Assistenten kan **ikke endre noe** i appen. Den sier hva som bør logges eller justeres i kalibreringen;
    en person gjør det.
-5. Spørsmål og svar lagres ikke på serveren (bare i fanen). Serveren lagrer bare antall spørsmål og tokens per dag
-   (`assistant_usage`) for dagsgrensen og kostnadsvisningen.
+5. Spørsmål og svar lagres ikke på serveren (bare i fanen). Serveren reserverer antall spørsmål atomisk per dag
+   (`assistant_daily_requests`) og lagrer tokenbruk per dag (`assistant_usage`) for kostnadsvisningen.
 
 ## Oppsett (én gang)
 

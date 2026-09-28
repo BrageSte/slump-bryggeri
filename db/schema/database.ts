@@ -97,6 +97,13 @@ export interface AssistantUsageTable {
   cache_write_tokens: number;
 }
 
+export interface AssistantDailyRequestsTable {
+  brewery_id: string;
+  /** YYYY-MM-DD (UTC). */
+  day: string;
+  requests: number;
+}
+
 export interface RecipeSourcesTable {
   id: string;
   recipe_id: string;
@@ -297,6 +304,7 @@ export interface Database {
   recipes: RecipesTable;
   recipe_sources: RecipeSourcesTable;
   assistant_usage: AssistantUsageTable;
+  assistant_daily_requests: AssistantDailyRequestsTable;
   recipe_versions: RecipeVersionsTable;
   batches: BatchesTable;
   batch_recipe_snapshots: BatchRecipeSnapshotsTable;

@@ -49,19 +49,34 @@ function summarize(model: string, rows: { requests: number; input_tokens: number
 export async function getAssistantStatus(env: AssistantEnv, db: DB, breweryId: string, now = Date.now()): Promise<AssistantStatus> {
   const model = assistantModel(env);
   const day = today(now);
-  const rows = await db
-    .selectFrom("assistant_usage")
-    .selectAll()
-    .where("brewery_id", "=", breweryId)
-    .where("day", "like", `${day.slice(0, 7)}-%`)
-    .execute();
+  const monthPrefix = `${day.slice(0, 7)}-%`;
+  const [usageRows, requestRows] = await Promise.all([
+    db.selectFrom("assistant_usage").selectAll().where("brewery_id", "=", breweryId).where("day", "like", monthPrefix).execute(),
+    db.selectFrom("assistant_daily_requests").selectAll().where("brewery_id", "=", breweryId).where("day", "like", monthPrefix).execute(),
+  ]);
+  const todayUsage = summarize(model, usageRows.filter((row) => row.day === day));
+  todayUsage.requests = requestRows.find((row) => row.day === day)?.requests ?? 0;
+  const monthUsage = summarize(model, usageRows);
+  monthUsage.requests = requestRows.reduce((total, row) => total + row.requests, 0);
   return {
     configured: Boolean(env.ANTHROPIC_API_KEY?.trim()),
     model,
     dailyLimit: dailyLimit(env),
-    today: summarize(model, rows.filter((row) => row.day === day)),
-    month: summarize(model, rows),
+    today: todayUsage,
+    month: monthUsage,
   };
+}
+
+/** Reserves a daily slot atomically, including across simultaneous requests and model changes. */
+async function reserveDailyRequest(db: DB, breweryId: string, day: string, limit: number): Promise<boolean> {
+  const result = await sql<{ requests: number }>`
+    INSERT INTO assistant_daily_requests (brewery_id, day, requests)
+    VALUES (${breweryId}, ${day}, 1)
+    ON CONFLICT (brewery_id, day) DO UPDATE SET requests = requests + 1
+    WHERE requests < ${limit}
+    RETURNING requests
+  `.execute(db);
+  return result.rows.length > 0;
 }
 
 async function recordUsage(db: DB, breweryId: string, model: string, usage: AssistantUsage, day: string): Promise<void> {
@@ -137,12 +152,11 @@ export async function askAssistant(input: {
   if (!apiKey && !input.client) {
     throw new HttpError(503, "assistant_not_configured", "Assistenten er ikke satt opp: ANTHROPIC_API_KEY mangler.");
   }
-  const status = await getAssistantStatus(env, db, breweryId, now);
-  if (status.today.requests >= status.dailyLimit) {
-    throw new HttpError(429, "assistant_daily_limit", `Dagens grense på ${status.dailyLimit} spørsmål er nådd. Den nullstilles ved midnatt (UTC).`);
+  const document = buildBrewDocument({ batch, timeline, now });
+  if (!(await reserveDailyRequest(db, breweryId, day, dailyLimit(env)))) {
+    throw new HttpError(429, "assistant_daily_limit", `Dagens grense på ${dailyLimit(env)} spørsmål er nådd. Den nullstilles ved midnatt (UTC).`);
   }
 
-  const document = buildBrewDocument({ batch, timeline, now });
   const client = input.client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
 
   const usage: AssistantUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };

@@ -200,7 +200,8 @@ Gjort 2026-09-28. Oppsett og kostnad: [assistant.md](assistant.md).
 - **Assistent** (`worker/services/assistant.ts`, `worker/assistant/`): Claude med bryggedokumentet som cachet
   kontekst og åtte lesende beregningsverktøy (innmesking, vannmengder, mesketemperatur-justering, Brix → SG,
   ABV, effektivitet, fordampning, enhetsomregning). Dagsgrense (`ASSISTANT_DAILY_LIMIT`, 40), 10 per minutt,
-  forbruk i `assistant_usage` (migrering `0009`) og anslag i appen. Assistent i bunnmenyen og i batchmenyen.
+  atomisk dagsreservasjon i `assistant_daily_requests` (migrering `0010`), tokenbruk i `assistant_usage`
+  (migrering `0009`) og anslag i appen. Assistent i bunnmenyen og i batchmenyen.
 - `calculateMashTemperatureAdjustment` (BeerSmith Mash Adjust: 1,417 L mot 1,41 L) brukes som verktøy for
   assistenten. Et eget kort for mesketemperatur-korrigering på bryggedagen er fortsatt strøket.
 
