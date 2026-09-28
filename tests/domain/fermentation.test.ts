@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   apparentAttenuationSoFar,
   buildFermentationSeries,
+  buildTemperatureBand,
   fermentationDayOf,
   plannedFermentationTemperature,
 } from "../../src/domain/brew-day/fermentation.ts";
@@ -87,6 +88,37 @@ describe("buildFermentationSeries", () => {
     const log = [reading("sg", 1.048, pitchTropical - 3 * HOUR, null, "lauter"), reading("sg", 1.062, pitchTropical - HOUR, null, "cooling")];
     expect(buildFermentationSeries({ log, splits: [] })[0]?.og?.sg).toBe(1.062);
     expect(buildFermentationSeries({ log: log.slice(0, 1), splits: [] })[0]?.og).toBeNull();
+  });
+
+  it("has no chart targets without a recipe, and no variants without any data", () => {
+    const [batch] = buildFermentationSeries({ log: [], splits: [] });
+    expect(batch).toMatchObject({ targetFg: null, temperatureBand: [] });
+    expect(buildFermentationSeries({ log: [], splits: [] })).toHaveLength(1);
+  });
+
+  it("fills in the FG target and the temperature band from the recipe snapshot, the same for every variant", () => {
+    const [tropical, pine] = buildFermentationSeries({ log: sunsetLog, splits, recipe: sunsetIpaRecipe });
+    // og 1.061 target, 75 % default attenuation (no culture gives its own %): 1 + 0.061 × 0.25 ≈ 1.01525.
+    expect(tropical?.targetFg).toBeCloseTo(1.01525, 5);
+    expect(pine?.targetFg).toBe(tropical?.targetFg);
+    expect(tropical?.temperatureBand).toEqual(buildTemperatureBand(sunsetIpaRecipe));
+  });
+});
+
+describe("buildTemperatureBand", () => {
+  it("lays the recipe's fermentation steps out from day 0, merging consecutive days with the same target", () => {
+    // Sunset: day 0 at 18 °C, days 1–2 at 18–19 °C, days 3–11 at 20–21 °C (three consecutive 20–21 steps
+    // merge into one run), days 12–13 the 1–3 °C cold crash.
+    expect(buildTemperatureBand(sunsetIpaRecipe)).toEqual([
+      { fromDay: 0, toDay: 1, min: 18, max: 18 },
+      { fromDay: 1, toDay: 3, min: 18, max: 19 },
+      { fromDay: 3, toDay: 12, min: 20, max: 21 },
+      { fromDay: 12, toDay: 14, min: 1, max: 3 },
+    ]);
+  });
+
+  it("is empty for a recipe with no fermentation plan", () => {
+    expect(buildTemperatureBand({ ...sunsetIpaRecipe, fermentationSteps: [] })).toEqual([]);
   });
 });
 

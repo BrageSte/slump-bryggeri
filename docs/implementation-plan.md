@@ -93,6 +93,13 @@ Gjort 2026-09-24. `src/domain/brew-day/fermentation.ts` gir OG, målinger og pit
 grafen bruker samme grunnlag. Tidspunkt frem i tid avvises av API-et (5 min slakk). En utført tilsetning viser
 faktisk mengde med planen ved siden av.
 
+Gjort 2026-09-28 (påbygning): grafen tegner nå også trykk, FG-mål som stiplet linje og gjæringsplanens
+temperaturvindu som et bånd — begge fra `buildFermentationSeries({ ..., recipe })`, ny valgfri
+`recipe`-parameter (`buildTemperatureBand` er egen, testet ren funksjon). Tom tilstand er nå `EmptyState`
+i stedet for ingenting. `FermentationChart.tsx` er allerede montert i `BatchPage.tsx`; å vise FG-mål og
+temperaturbånd i appen krever bare at kallet der får `recipe: batch.recipeSnapshot` — en egen liten
+oppfølging, siden denne PR-en ikke rører `BatchPage.tsx`.
+
 ### Steg 3 — Avslutt batch (tidl. M4, forenklet) ✅
 
 - [x] «Avslutt batch» blir et skjema per variant: FG, pakket volum, pakkedato, pakning (boks/fat/flaske),
