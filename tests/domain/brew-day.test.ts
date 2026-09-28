@@ -148,6 +148,20 @@ describe("deriveBrewDayState", () => {
     expect(state.nextAction).toMatchObject({ kind: "start_stage", stage: "fermentation", label: "Gjær tilsatt" });
   });
 
+  it("offers to start fermentation once every planned yeast is registered", () => {
+    const start = Date.parse("2026-09-23T13:25:00+02:00");
+    const pitched = sunsetIpaRecipe.cultures.map((culture) => ({
+      type: "yeast_pitched",
+      stage: "cooling" as const,
+      occurredAt: start + MIN,
+      data: { ingredientId: culture.id },
+      measurement: null,
+    }));
+    const log = [...sunsetLog.filter((e) => e.occurredAt <= start), ...pitched];
+    const state = deriveBrewDayState({ recipe: sunsetIpaRecipe, stage: "cooling", stageStartedAt: start, log, now: start + 5 * MIN });
+    expect(state.nextAction).toMatchObject({ kind: "start_stage", stage: "fermentation", label: "Start gjæring" });
+  });
+
   it("asks for a gravity reading on fermentation day 0 after replaying the whole log", () => {
     const pitch = Date.parse("2026-09-23T14:30:00+02:00");
     const state = deriveBrewDayState({
@@ -161,7 +175,7 @@ describe("deriveBrewDayState", () => {
     expect(state.step?.label).toBe("Dag 0");
     // Fermentation readings are summarized per variant (tests/domain/fermentation.test.ts), not as stage targets.
     expect(state.targets).toEqual([]);
-    expect(state.nextAction).toEqual({ kind: "log_measurement", measurementKind: "sg", label: "Sjekk gravity" });
+    expect(state.nextAction).toEqual({ kind: "log_measurement", measurementKind: "sg", label: "Mål SG" });
   });
 
   it("prompts the dry hop on day 4", () => {

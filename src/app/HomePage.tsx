@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { Link } from "react-router";
 import { deriveBrewDayState } from "../domain/brew-day/state.ts";
 import type { BatchSummary } from "../domain/model/api.ts";
-import { brewStageLabels } from "../domain/model/brewing.ts";
+import { brewStageLabels, measurementKindSpecs } from "../domain/model/brewing.ts";
 import { buttonClasses, Card, EmptyState, ErrorState, Icon, LoadingState, Measurement, Section, SectionLabel, StatusChip, type IconName } from "../design-system/index.ts";
 import { useMe } from "../features/auth/session.ts";
 import { ACTIVE_STATUSES, useBatch, useBatches, useTimeline } from "../features/batches/api.ts";
@@ -68,7 +68,7 @@ export function HomePage() {
             {(
               [
                 { to: "/oppskrifter", label: "Oppskrifter", icon: "book" },
-                { to: "/mer/kalibrering", label: "Utstyr", icon: "wrench" },
+                { to: "/mer/kalibrering", label: "Kalibrering", icon: "wrench" },
                 { to: "/mer/omregner", label: "Omregner", icon: "sliders" },
                 { to: "/brygg", label: "Historikk", icon: "history" },
               ] satisfies { to: string; label: string; icon: IconName }[]
@@ -146,7 +146,9 @@ function ActiveBatchCard({ summary }: { summary: BatchSummary }) {
           {latest.slice(0, 2).map((m) => (
             <div key={m.kind}>
               <Measurement value={formatMeasurement(m.kind, m.value)} unit={m.kind === "sg" ? null : m.unit} size="title" />
-              <p className="text-caption text-muted">{formatLogTime(m.at)}</p>
+              <p className="text-caption text-muted">
+                {measurementKindSpecs[m.kind].label} · {formatLogTime(m.at)}
+              </p>
             </div>
           ))}
         </div>

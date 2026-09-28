@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
+import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
 import { buildFermentationSeries } from "../../domain/brew-day/fermentation.ts";
 import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
@@ -35,6 +36,7 @@ import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
 import { AlarmBanner, TimerCard } from "./BrewTimers.tsx";
 import { BrewLog } from "./BrewLog.tsx";
+import { BrewPlanOverview } from "./BrewPlanOverview.tsx";
 import { FermentationCard } from "./FermentationCard.tsx";
 import { FermentationChart } from "./FermentationChart.tsx";
 import { ResultSummary } from "./ResultSummary.tsx";
@@ -115,8 +117,13 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   const alarms = useBrewAlarms(batch.id, batch.status === "completed" ? [] : dueAlarms({ state, timers, now }));
   const fermenting = batch.currentStage === "fermentation" || batch.currentStage === "conditioning";
   const variants = useMemo(
-    () => buildFermentationSeries({ log, splits: batch.splits, wcf: batch.equipmentSnapshot.values.refractometer_wcf }),
+    () => buildFermentationSeries({ log, splits: batch.splits, wcf: batch.equipmentSnapshot.values.refractometer_wcf, recipe: batch.recipeSnapshot }),
     [batch, log],
+  );
+
+  const plan = useMemo(
+    () => buildBrewPlan({ recipe: batch.recipeSnapshot, equipment: batch.equipmentSnapshot.values, doneIngredientIds: registeredIngredientIds(log) }),
+    [batch.recipeSnapshot, batch.equipmentSnapshot.values, log],
   );
 
   const user = me.data?.user ?? { id: "", name: "" };
@@ -126,6 +133,17 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   // The planned amount is prefilled but can be changed: dry hops are adjusted to taste.
   function addIngredient(addition: PlannedAddition) {
     setIntent({ kind: "addition", addition });
+  }
+
+  // From the brew plan, any planned addition can be registered whenever it actually happens.
+  function addFromPlan(addition: PlanAddition) {
+    if (addition.eventType === "yeast_pitched") {
+      const { eventType: _type, variant: _variant, ...data } = addition;
+      logEvent.mutate({ type: "yeast_pitched", stage: batch.currentStage, data }, { onSuccess: () => toast(`${addition.name} registrert`) });
+      return;
+    }
+    const live = state.additions.find((a) => a.ingredientId === addition.ingredientId);
+    addIngredient(live ?? { ...addition, dueAt: 0, dueLabel: "", status: "due" });
   }
 
   // One tap from the alarm: the planned amount at the planned time, like the brew sheet says.
@@ -209,9 +227,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
           ) : (
             <StageCard state={state} onLog={setIntent} timeline={timeline} />
           )}
-          {state.additions.length > 0 && (
-            <AdditionsCard additions={state.additions} elapsedMin={state.elapsedMin ?? 0} stage={batch.currentStage} onAdd={addIngredient} />
-          )}
         </>
       )}
 
@@ -242,6 +257,17 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
           error={logEvent.error?.message}
           soundOn={alarms.soundOn}
           onSoundChange={alarms.setSoundOn}
+        />
+      )}
+
+      {batch.status !== "completed" && (
+        <BrewPlanOverview
+          plan={plan}
+          currentStage={batch.currentStage}
+          liveAdditions={state.additions}
+          elapsedMin={state.elapsedMin}
+          onAdd={addFromPlan}
+          busy={logEvent.isPending}
         />
       )}
 
@@ -401,54 +427,6 @@ function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (in
           ))}
         </div>
       )}
-    </Card>
-  );
-}
-
-function AdditionsCard({
-  additions,
-  elapsedMin,
-  stage,
-  onAdd,
-}: {
-  additions: PlannedAddition[];
-  elapsedMin: number;
-  stage: BrewStage;
-  onAdd: (addition: PlannedAddition) => void;
-}) {
-  return (
-    <Card>
-      <SectionLabel>{stage === "fermentation" || stage === "conditioning" ? "Tørrhumling" : "Tilsetninger"}</SectionLabel>
-      <ul className="mt-2 divide-y divide-border">
-        {additions.map((addition) => (
-          <li key={addition.ingredientId} className="flex items-center gap-3 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">
-                {formatAmount(addition.actual?.amount ?? addition.amount, addition.actual?.unit ?? addition.unit)} {addition.name}
-              </p>
-              <p className="text-small text-muted">
-                {addition.actual && (addition.actual.amount !== addition.amount || addition.actual.unit !== addition.unit)
-                  ? `Plan ${formatAmount(addition.amount, addition.unit)} · `
-                  : ""}
-                {addition.dueLabel}
-                {addition.variant ? ` · ${addition.variant}` : ""}
-                {addition.status === "upcoming" && stage !== "fermentation" && stage !== "conditioning"
-                  ? ` · om ${formatDuration(addition.dueAt - elapsedMin)}`
-                  : ""}
-              </p>
-            </div>
-            {addition.status === "done" ? (
-              <StatusChip tone="success" icon="check">
-                Tilsatt
-              </StatusChip>
-            ) : (
-              <Button size="sm" variant={addition.status === "due" ? "primary" : "secondary"} onClick={() => onAdd(addition)}>
-                Tilsatt
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
     </Card>
   );
 }
