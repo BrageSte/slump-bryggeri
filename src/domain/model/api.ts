@@ -181,7 +181,7 @@ export interface RecipeDetail {
   source: { kind: string; url: string | null; originalText: string | null } | null;
 }
 
-export const recipeSourceKinds = ["manual", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
+export const recipeSourceKinds = ["manual", "example", "library", "bsmx", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
 
 export const createRecipeSchema = z.object({
   recipe: recipeDocumentSchema,

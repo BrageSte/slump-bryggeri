@@ -1,28 +1,84 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { BSMX_MAX_CHARS } from "../../domain/import/bsmx.ts";
 import { sunsetIpaRecipe } from "../../domain/fixtures/sunset-ipa.ts";
-import { Icon, InlineError, PageHeader, StatusChip, useToast, type IconName } from "../../design-system/index.ts";
+import { Icon, InlineError, PageHeader, useToast } from "../../design-system/index.ts";
 import { useCreateRecipe } from "./api.ts";
+import { BsmxReview, type BsmxFile } from "./BsmxReview.tsx";
+import { loadSlumpBeerSmithFiles } from "./beersmith/slump.ts";
 
-const upcoming: { label: string; icon: IconName; phase: string }[] = [
-  { label: "Ta bilde av oppskrift", icon: "camera", phase: "Fase 5" },
-  { label: "Last opp bilde", icon: "image", phase: "Fase 5" },
-  { label: "PDF / BeerXML / BeerJSON", icon: "file", phase: "Fase 2" },
-  { label: "Nettadresse", icon: "link", phase: "Fase 5" },
-  { label: "Lim inn tekst", icon: "clipboard", phase: "Fase 5" },
-];
-
-/** Import entry point (wireframe §36). Methods not built yet are listed so the roadmap is visible. */
+/** Import entry point (wireframe §36). */
 export function ImportRecipePage() {
   const create = useCreateRecipe();
   const navigate = useNavigate();
   const toast = useToast();
+  const [review, setReview] = useState<BsmxFile[] | null>(null);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [loadingSlump, setLoadingSlump] = useState(false);
 
   const row = "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left";
+
+  async function readFiles(list: FileList | null) {
+    if (!list || list.length === 0) return;
+    setFileError(null);
+    const files: BsmxFile[] = [];
+    for (const file of Array.from(list)) {
+      if (file.size > BSMX_MAX_CHARS) return setFileError(`${file.name} er for stor.`);
+      files.push({ name: file.name, text: await file.text() });
+    }
+    setReview(files);
+  }
+
+  if (review) {
+    return (
+      <>
+        <PageHeader back="/oppskrifter" title="Importer fra BeerSmith" subtitle="Velg hva som skal inn i Slump" />
+        <BsmxReview files={review} onCancel={() => setReview(null)} />
+      </>
+    );
+  }
 
   return (
     <>
       <PageHeader back="/oppskrifter" title="Importer oppskrift" subtitle="Hvordan vil du legge inn oppskriften?" />
       <ul className="divide-y divide-border overflow-hidden rounded-card border border-border bg-surface">
+        <li>
+          <button
+            type="button"
+            className={`${row} hover:bg-surface-2 disabled:opacity-60`}
+            disabled={loadingSlump}
+            onClick={() => {
+              setLoadingSlump(true);
+              void loadSlumpBeerSmithFiles()
+                .then(setReview)
+                .finally(() => setLoadingSlump(false));
+            }}
+          >
+            <Icon name="history" className="text-primary-strong" />
+            <span className="flex-1">
+              <span className="block font-semibold">Slumps BeerSmith-oppskrifter</span>
+              <span className="block text-small text-muted">Fire oppskrifter tunet for 90–100 L-anlegget, med utstyret de ble laget for</span>
+            </span>
+            <Icon name="chevronRight" size={20} className="text-muted" />
+          </button>
+        </li>
+        <li>
+          <label className={`${row} cursor-pointer hover:bg-surface-2`}>
+            <Icon name="file" className="text-primary-strong" />
+            <span className="flex-1">
+              <span className="block font-semibold">BeerSmith-fil (.bsmx)</span>
+              <span className="block text-small text-muted">Én eller flere filer eksportert fra BeerSmith</span>
+            </span>
+            <Icon name="chevronRight" size={20} className="text-muted" />
+            <input
+              type="file"
+              accept=".bsmx,application/xml,text/xml"
+              multiple
+              className="sr-only"
+              onChange={(event) => void readFiles(event.target.files)}
+            />
+          </label>
+        </li>
         <li>
           <Link to="/oppskrifter?vis=bibliotek" className={`${row} hover:bg-surface-2`}>
             <Icon name="book" className="text-primary-strong" />
@@ -65,14 +121,13 @@ export function ImportRecipePage() {
             <Icon name="chevronRight" size={20} className="text-muted" />
           </button>
         </li>
-        {upcoming.map((item) => (
-          <li key={item.label} className={`${row} text-muted`} aria-disabled="true">
-            <Icon name={item.icon} />
-            <span className="flex-1 font-semibold">{item.label}</span>
-            <StatusChip>{item.phase}</StatusChip>
-          </li>
-        ))}
       </ul>
+      <p className="mt-3 text-small text-muted">Import fra bilde, PDF, BeerXML, nettadresse og innlimt tekst kommer senere.</p>
+      {fileError && (
+        <div className="mt-3">
+          <InlineError>{fileError}</InlineError>
+        </div>
+      )}
       {create.error && (
         <div className="mt-3">
           <InlineError>{create.error.message}</InlineError>

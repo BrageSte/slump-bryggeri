@@ -50,7 +50,7 @@ kan endres fra batchmenyen.
 | 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring | ✅ |
 | 4 Inventory | Lots, alfasyre, transaksjoner | ⏳ |
 | 5 Smart Import | Bilde/PDF/tekst/URL + AI-tolkning med gjennomgang | ⏳ |
-| 6 Assistant | Kontekstbevisst assistent med beregningsmotoren som verktøy | ⏳ (ligger under Mer til den er bygget) |
+| 6 Assistant | Kontekstbevisst assistent med beregningsmotoren som verktøy | ⏳ planlagt som M10 (bryggedokument) + M11 i implementeringsplanen |
 | 7 Calibration intelligence | Observasjoner → forslag → admin godkjenner | ⏳ (beregningen `summarizeCalibrationObservations` finnes) |
 
 ## Dokumentasjon

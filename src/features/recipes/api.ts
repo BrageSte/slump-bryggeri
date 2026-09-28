@@ -32,7 +32,7 @@ export function useCreateRecipe() {
   const { breweryId } = useBrewery();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { recipe: RecipeDocument; source?: { kind: string } }) =>
+    mutationFn: (input: { recipe: RecipeDocument; source?: { kind: string; originalText?: string } }) =>
       api.post<CreatedResponse>(`/breweries/${breweryId}/recipes`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: recipesKey(breweryId) }),
   });

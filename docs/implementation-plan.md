@@ -1,6 +1,7 @@
-# Implementeringsplan v0.3
+# Implementeringsplan v0.4
 
-Oppdatert 2026-09-24. Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
+Oppdatert 2026-09-28 (UX-gjennomgang og ny rekkefølge, se §2 og §3). Levende dokument: kryss av
+oppgaver i samme PR som gjør dem ferdige.
 
 Grunnlag: [implementation-package.md](implementation-package.md) (produktprinsipper),
 [architecture.md](architecture.md) (implementerte beslutninger), [AGENTS.md](../AGENTS.md) og
@@ -45,27 +46,83 @@ forbli ukjente, ikke fylles fra oppskriftsmål eller importerte kalkulatorverdie
 | B9 | Vann/pH | Må inn. Ingen utstyr for å måle salter, men **pH-strips**. |
 | B10 | BeerSmith-målinger | Brage bekrefter at **ingen faktiske historiske bryggemålinger** ble ført i BeerSmith. `OG_MEASURED`, `FG_MEASURED`, `VOLUME_MEASURED`, `MASH_PH` og tilsvarende felt er ikke historikk, **selv når `_SET = 1`**. |
 | B11 | Utstyr | Behold versjonerte equipment-profiler og uforanderlige batch-snapshots. Importert utstyr overskriver aldri aktiv profil automatisk. |
+| B12 | BeerSmith (2026-09-28) | BeerSmith-importen er ikke et mål i seg selv. Oppskriftene er tunet for anlegget (varmetap osv.) og brukes som **grunnlag for oppstart og tuning** av kalibreringen. Legg inn de som passer dagens anlegg. |
+| B13 | Bryggedagen (2026-09-28) | Bryggedagen skal ikke være «lukket» og stegvis: alt man lurer på (vann, temperaturer, humle, gjær) skal være synlig hele tiden, og tilsetninger skal kunne registreres når de faktisk skjer. |
+| B14 | AI (2026-09-28) | Målet er en assistent som svarer på spørsmål om brygget og holder et levende **bryggedokument** som tuner målinger mot bryggeriet. Kostnad avgjøres av Brage (se M11). |
 
 De to BeerSmith-kalkulatorbildene (Mash pH og Mash Adjust) er **referanse-/akseptansescenarier**, ikke
 historiske målinger. «Measured Mash pH 5.80» i bildet er et eksempelinput, ikke en Slump-loggføring.
 
 ---
 
-## 2. Rekkefølge
+## 2. Rekkefølge (oppdatert 2026-09-28)
 
-| Milepæl | Innhold | Størrelse | Avhenger av | Brage må |
+Målbildet er fire ting i denne rekkefølgen: **oppskrift inn i brygg → brygging med alt tilgjengelig
+(inkl. timere) → logging og oppfølging → AI-assistent med levende bryggedokument.**
+
+| # | Milepæl | Innhold | Størrelse | Status / Brage må |
 |---|---|---|---|---|
-| **M1** | Stabil drift, bildelagring og JSON-backup av hele bryggeriet | S–M | — | API-token for produksjonsdeploy |
-| **M2** | Enheter, pH-strips og trygg korrigering av feilregistreringer | M | — | — |
-| **M3** | Bryggedagsmodus: steg, Wake Lock, timere, alarmer og raske handlinger | M | M2.1 for enhetsvisning; ellers uavhengig | — |
-| **M4** | Avslutt batch og samle faktiske resultater | M | M2.1 for enhetsvisning; ellers uavhengig | — |
-| **M5** | Førsteklasses BSMX-import og BeerXML-import med kilde og utstyrssnapshot | L | — | Tilgang til de sju BSMX-filene i utviklingsmiljø/CI |
-| **M6** | Praktisk vann- og pH-støtte under brygging | M | M2.2; bruker M5-data når de finnes | Vannanalyse for eksakte kildevannverdier |
-| **M7** | Gjæringsgraf fra egne målinger | S–M | M2.1 | — |
-| **M8** | Rik bryggerapport og deling/eksport av oppskrift og batch | M | M4; inkluderer M5–M7-data når de finnes | — |
-| **M9** | Innlogging for andre bryggerier (Google/e-post), knytte personer til kontoer | M | — | Google OAuth-klient / domene |
+| 1 | **M1, M2** | Drift, backup, enheter, pH-strips, korrigering | — | ✅ ferdig |
+| 2 | **G1** | Rettelser fra UX-gjennomgangen (§3) | S | ✅ ferdig 2026-09-28 |
+| 3 | **G2** | Oppskrift inn i brygg: BeerSmith inn, utstyr → kalibrering, klar-sjekk (§3) | S–M | ✅ ferdig 2026-09-28 · Brage: gå gjennom kalibreringsforslaget i produksjon |
+| 4 | **M3 (rest)** | Timere, alarmer, mesketemperatur-korrigering, mål før kok, klokke fra faktisk start | M | — |
+| 5 | **M4** | Avslutt batch med faktiske tall, resultater og læring | M | — |
+| 6 | **M7** | Gjæringsgraf og visning per variant | S–M | — |
+| 7 | **M10** | Bryggedokument (deterministisk, uten AI) | M | — |
+| 8 | **M11** | AI-assistent oppå bryggedokumentet | M | **Velge alternativ og kostnadstak** |
+| 9 | **M6** | Vann og pH | M | Vannanalyse |
+| 10 | **M8** | Rapport og eksport (bygger på M10) | M | — |
+| 11 | **M5 (rest)** | BeerXML, full utstyrssnapshot per oppskrift | M | — |
+| 12 | **M9** | Innlogging for andre | M | Google OAuth-klient |
 
-M3, M4 og M5 trenger ikke vente på gjæringsgraf, avansert vannmodell eller full generisk historikk.
+Tidligere rekkefølge (M1–M9) er beholdt som milepælsnavn under; bare prioriteringen er endret.
+
+---
+
+## 3. UX-gjennomgang 2026-09-28
+
+Gjennomgått på mobil fra oppskrift til batch, mesk, kok og gjæring.
+
+### G1 — Rettelser (ferdig)
+
+- [x] Målingsfeltet var 0 px bredt ved enhetsvalg (temperatur, SG, volum, trykk): `w-24` tapte mot `w-full`.
+      Kallerens bredde erstatter nå standardbredden (`src/design-system/field-classes.ts`, test).
+- [x] Samlet **Bryggeplan** i stedet for stegvise planlagte steg (B13), se M3.
+- [x] Batchtittelen ble presset til fire linjer av «Skjerm på» på mobil; bryteren er et ikon under `sm`.
+- [x] Knappen i bryggeplanen het «Tilsatt» (leses som status) → «Tilsett». Skjult før brygget er startet.
+- [x] Nøkkeltallene i bryggeplanen følger fasen: under gjæring vises tørrhumling, gjærtemperatur og OG → FG.
+- [x] «Neste: Gjær tilsatt» når gjæren allerede var registrert → «Start gjæring». «Sjekk gravity» → «Mål SG».
+- [x] Sletting av batch ble stående på «Brygget finnes ikke»: slettet batch fjernes fra cachen i stedet for å hentes på nytt.
+- [x] Forsiden: siste måling viser hva den er («Temperatur · 13:45»); snarveien «Utstyr» som gikk til Kalibrering heter nå Kalibrering.
+
+### G2 — Oppskrift inn i brygg (ferdig)
+
+- [x] Import av `.bsmx` i appen med gjennomgang før lagring: navn, volum, koketid, innmesking, BeerSmith-utstyr,
+      advarsler og «Finnes allerede». Originalfilen lagres (`recipe_sources.kind = 'bsmx'`) og kan lastes ned fra oppskriften.
+- [x] «Slumps BeerSmith-oppskrifter» med ett trykk: Love in a canoe, Cascade Pale Ale – Kveik, Bitter 90l og
+      Aasen Kölsch (dagens 90–100 L-anlegg). Utelatt: IRA (2012, annet anlegg), KES Belgian Double (25 L-kjøler)
+      og Aasen Kölsch 60l (skalert duplikat); de kan lastes opp som fil.
+- [x] BeerSmith-utstyret som **forslag** til ny kalibreringsversjon (`suggestProfileFromBsmx`, test mot
+      «1My Equipment - 100l»): 80 %, 90 L, 75 L meskekar, 3,79 L dødvolum og trubtap, 5 L gjæringstap,
+      5 L/t fordampning, 4 % krymping og 2,61 L/kg mesketykkelse (BeerSmiths innmeskingsvann ÷ korn).
+      Admin ser gammel → ny verdi og lagrer selv (B11).
+- [x] «Ny batch» varsler når kalibreringen mangler fordampning, før profilen låses i batchen.
+
+**Brage må:** i produksjon, åpne Oppskrifter → Ny oppskrift → «Slumps BeerSmith-oppskrifter», legg dem inn og
+trykk «Se forslag til kalibrering». Sjekk verdiene mot anlegget i dag før du lagrer.
+
+### Funnet, men ikke gjort ennå (inngår i milepælene under)
+
+- Mesketiden starter når man trykker «Start mesking», ikke når man har meska inn; koketiden starter ikke ved
+  full kok; ingen pause eller justering → **M3**.
+- For lav mesketemperatur gir «Lav», men ingen hjelp → mesketemperatur-korrigering i **M3**.
+- Kokesteget viser ikke volum- eller SG-mål før kok → **M3**.
+- Ingen frie timere, lyd eller vibrasjon → **M3**.
+- «Avslutt batch» er bare en bekreftelse → **M4**.
+- Ingen gjæringsgraf eller visning per variant ved split → **M7**.
+- Inventar tar en plass i bunnmenyen selv om det er en plassholder; assistenten ligger gjemt under Mer.
+  Bytt Inventar ut med Assistent når **M11** finnes.
+- Importsiden: bilde, PDF, BeerXML, nettadresse og tekst er fortsatt ikke bygget (nå én linje i stedet for fem grå rader).
 
 ---
 
@@ -211,6 +268,13 @@ tilsetning og notat.
       varmekapasitet. Resultat er forslag; logg først ved brukertrykk. BeerSmith Mash Adjust-bildet
       (67,8 °C mål, 65,6 °C nå, 18,93 L, 4,54 kg, 100 °C tilsetningsvann → 1,41 L) er
       referansescenario med dokumentert toleranse/modellavvik, ikke en historisk bryggmåling.
+      Vis forslaget direkte når mesketemperaturen logges «Lav»/«Høy». Utvid utstyrsprofilen med
+      meskekarets masse og varmekapasitet (BeerSmith: 10 kg, 0,15 cal/g-°C) før denne tas.
+- [ ] **Klokka fra faktisk start (UX-gjennomgang):** «Start mesking» og «Start kok» starter i dag nedtellingen
+      med én gang. Skill mellom «varmer opp» og «meska inn» / «full kok», og la tiden kunne pauses og
+      justeres («startet for 5 min siden») uten å korrigere loggen.
+- [ ] **Mål før kok:** vis planlagt volum og SG før kok (fra bryggeplanen) som mål på kokesteget, med «Logg».
+- [x] **Samlet bryggeplan** (B13): se oppdateringen under.
 
 Gjort 2026-09-24. Batchens aktive steg viser bare planlagte punkter fra det uforanderlige
 oppskriftssnapshotet, med en kort foreslått handling og en tom tilstand uten plan. Skjermlås er på som
@@ -272,7 +336,8 @@ historiske bryggelogg.
       Brewer's Friend; bruk samme normaliserte modell og review-flyt. BeerJSON kan vente. Avvis
       `DOCTYPE`/entities, ugyldig XML og urimelige størrelser før parsing.
 - [ ] Importvisning: velg `.bsmx`/`.xml`, gjennomgå oppskrift, planer, utstyr og advarsler **før**
-      lagring. Behold rå XML uendret i `recipe_sources.original_text`, med filnavn og format, slik
+      lagring. *Delvis 2026-09-28 (G2): `.bsmx` med gjennomgang, originalfil lagret og nedlastbar; `.xml`
+      og byte-lik rundtur-test gjenstår.* Behold rå XML uendret i `recipe_sources.original_text`, med filnavn og format, slik
       at originalfilen kan lastes ned igjen. Test byte-lik rundtur for UTF-8-filene i arkivet;
       avvis filer over grensen eller bruk vedlegg for større kilder. Senere endringer lager ny
       immutable oppskriftsversjon; originalen beholdes.
@@ -283,7 +348,8 @@ historiske bryggelogg.
       eksplisitt opprette en **ny** profilversjon etter review; aldri overskriv aktiv profil eller
       historiske batch-snapshots.
 - [ ] Vis importert vann-/meskeplan på bryggedagen som kildens plan. Egen beregning er merket
-      kontroll/fallback; store avvik gir review-varsel.
+      kontroll/fallback; store avvik gir review-varsel. *Delvis 2026-09-28: bryggeplanen bruker kildens
+      innmesking og merker egne beregninger «≈»; avviksvarsel gjenstår.*
 - [ ] **Hard importregel:** Ignorer `OG_MEASURED`, `FG_MEASURED`, `VOLUME_MEASURED`, `MASH_PH` og
       tilsvarende measured-/kalkulatorfelt som historiske observasjoner, **også ved `_SET = 1`**.
       Opprett ingen batch, `measurements`, `brew_events`, `batch_outcomes` eller
@@ -365,6 +431,69 @@ Når appen skal brukes av andre enn Slump Bryggeri:
       Resend; `send_email`-binding `EMAIL` + `EMAIL_FROM`. Koden støtter det allerede.
 - [ ] Flere bryggerier per installasjon (bryggerimodus antar ett).
 
+## M10 — Bryggedokument (B14)
+
+Et levende dokument per batch som samler alt: plan (oppskrift + utstyrssnapshot), faktiske målinger
+og tilsetninger, avvik mot plan, beregnede størrelser og hva brygget lærer oss om anlegget. Bygges
+**uten AI**, så det alltid er etterprøvbart og fungerer gratis. AI-assistenten (M11) leser det.
+
+- [ ] Ren `buildBrewDocument(batch, timeline, equipment)` i `src/domain/brew-document/`: seksjoner for
+      vann, mesk, kok, kjøling, gjæring og resultat, hver med plan, faktisk, avvik og kilde. Manglende
+      målinger står som «ikke målt». Tester mot Sunset-fixturen.
+- [ ] **Tuning mot bryggeriet:** for hver måling som sier noe om anlegget (innmeskingstemperatur mot mål,
+      volum før/etter kok, OG mot forventet), vis observert avvik og hvilken kalibreringsverdi den peker på
+      (systemkorreksjon innmesking, fordampning, effektivitet). Beregninger i `brewing-calculations`.
+      Forslag til ny profilversjon krever admin-godkjenning, som G2.
+- [ ] Visning på batchsiden («Bryggedokument»), oppdateres fortløpende mens man logger. Utskriftsvennlig,
+      og grunnlaget for rapporten i M8.
+- [ ] «Kopier som tekst» (Markdown), så dokumentet kan limes inn i Claude-appen før M11 finnes.
+
+**Akseptanse:** Etter en bryggedag viser dokumentet plan mot faktisk for hvert steg og minst ett konkret,
+begrunnet kalibreringsforslag når målingene gir grunnlag for det.
+
+---
+
+## M11 — AI-assistent (B14)
+
+Assistenten svarer på spørsmål om brygget («hvorfor ble OG lav?», «hvor mye vann skal jeg tilsette?») med
+bryggedokumentet som kontekst. **Den regner aldri ut bryggetall selv:** den kaller appens egne
+beregningsfunksjoner som verktøy (AGENTS.md), og den endrer aldri data uten at en bruker trykker.
+
+### Alternativer (Brage velger)
+
+| Alternativ | Hva | Kostnad | Ulemper |
+|---|---|---|---|
+| **A. Kopier til Claude-appen** | «Kopier bryggedokument» (M10) og lim inn i claude.ai | 0 kr ekstra hvis dere har Claude-abonnement | Manuelt; assistenten ser ikke live data og kan ikke foreslå endringer i appen |
+| **B. Claude API i appen** | Chat på batchsiden; Worker kaller Claude med dokumentet og beregningsverktøy | Betal per bruk, se under | Krever API-nøkkel (Cloudflare secret) og forhåndsbetalt kreditt; bryter «gratis» (B1) i liten skala |
+| **C. Cloudflare Workers AI** | Samme som B, men med åpne modeller hos Cloudflare | Gratis daglig kvote | Merkbart svakere på norsk, verktøybruk og resonnering; mer arbeid for å få trygge svar |
+| **D. MCP-kobling** | Appen eksponeres som en connector som Claude-appen leser fra | 0 kr ekstra med abonnement | Mer arbeid (autentisering); fungerer i Claude-appen, ikke inne i Slump |
+
+**Kostnadsanslag for B** (listepris per million tokens, september 2026): Claude Haiku 4.5 $1 inn / $5 ut,
+Claude Sonnet 5 $2 / $10, Claude Opus 5 $5 / $25. Et spørsmål med bryggedokument og et par verktøykall er
+grovt 30–40 000 tokens inn og 1–2 000 ut:
+
+| Modell | Per spørsmål | 50 spørsmål i måneden (to bryggedager + oppfølging) |
+|---|---|---|
+| Haiku 4.5 | ca. 0,5 kr | ca. 25 kr |
+| Sonnet 5 | ca. 1 kr | ca. 50 kr |
+| Opus 5 | ca. 2,5–3 kr | ca. 130 kr |
+
+Prompt-caching av bryggedokumentet gjør gjentatte spørsmål i samme økt betydelig billigere. Anslagene er
+grove (dollarkurs ca. 10–11 kr) og må måles med `usage` i svarene når det er bygget. Sett et månedlig
+forbrukstak i Anthropic Console.
+
+**Anbefaling:** Bygg M10 først og start med **A** (gratis, nyttig med én gang). Legg til **B** med Sonnet 5
+og et lavt forbrukstak når dokumentet er på plass, hvis den manuelle kopieringen blir tungvint.
+
+- [ ] Etter Brages valg: `POST /api/breweries/:breweryId/batches/:batchId/assistant` bak `requireMember`,
+      scoped til batchen, med bryggedokumentet som (cachet) kontekst og beregningsfunksjonene som verktøy.
+- [ ] Forslag fra assistenten (logg dette, ny kalibrering) vises som knapper brukeren må trykke.
+- [ ] Assistent i bunnmenyen i stedet for Inventar-plassholderen.
+- [ ] Tester: verktøyene gir samme tall som `brewing-calculations`; ingen skriving uten brukerhandling;
+      andre bryggerier får 404.
+
+---
+
 ## Senere, når egne batchdata finnes
 
 - Avansert pH-/vannkjemimodell og syrekalkulator med dokumentert metode, test mot BeerSmith-
@@ -374,7 +503,7 @@ Når appen skal brukes av andre enn Slump Bryggeri:
 - Kalibreringsforslag fra gjentatte observasjoner: systematisk boil-off, effektivitet, volumtap,
   temperaturkorrigeringer og effekten av oppskriftsendringer. Vis antall batcher, spredning og
   usikkerhet. Admin godkjenner eventuell **ny profilversjon**; appen endrer aldri profilen selv.
-- Varsler når appen er lukket, inventar, AI-assistent og sosiale funksjoner bare ved ny prioritering.
+- Varsler når appen er lukket, inventar og sosiale funksjoner bare ved ny prioritering (AI-assistent er nå M11).
 
 ## Tverrgående krav (hver oppgave)
 
@@ -386,5 +515,5 @@ Når appen skal brukes av andre enn Slump Bryggeri:
 
 ## Utenfor scope nå
 
-Betaling, native apper, Bluetooth/Tilt/iSpindel, full offline-synk, sosiale funksjoner, AI-assistent,
+Betaling, native apper, Bluetooth/Tilt/iSpindel, full offline-synk, sosiale funksjoner,
 inventar og multi-brewery auth — med mindre Brage prioriterer om.

@@ -12,6 +12,7 @@ const sourceLabels: Record<string, string> = {
   manual: "Lagt inn manuelt",
   example: "Eksempeloppskrift",
   library: "Oppskriftsbiblioteket (BrewDog DIY Dog)",
+  bsmx: "BeerSmith (.bsmx)",
   beerxml: "BeerXML",
   beerjson: "BeerJSON",
   text: "Innlimt tekst",
@@ -102,6 +103,18 @@ export function RecipeDetailPage() {
                 {" · "}
                 <a href={recipe.data.source.url} target="_blank" rel="noreferrer" className="underline underline-offset-4">
                   original
+                </a>
+              </>
+            )}
+            {recipe.data.source.kind === "bsmx" && recipe.data.source.originalText && (
+              <>
+                {" · "}
+                <a
+                  href={`data:application/xml;charset=utf-8,${encodeURIComponent(recipe.data.source.originalText)}`}
+                  download={`${recipe.data.name}.bsmx`}
+                  className="underline underline-offset-4"
+                >
+                  last ned originalfilen
                 </a>
               </>
             )}
