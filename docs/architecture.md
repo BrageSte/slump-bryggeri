@@ -270,5 +270,6 @@ Claude via Anthropic-SDK-en i Workeren (`worker/services/assistant.ts`). Konteks
 `src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen regner ikke selv og kan ikke skrive
 til databasen. Batchen hentes scoped til `c.var.membership.breweryId` før noe annet, så andre bryggerier får 404.
 Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
-Forbruk per bryggeri og døgn ligger i `assistant_usage` (bare tall, ikke samtaler). Testene setter alltid en
-tom nøkkel. Oppsett og kostnad: [assistant.md](assistant.md).
+Dagskvoten reserveres atomisk per bryggeri i `assistant_daily_requests`; tokenbruk per modell og døgn ligger i
+`assistant_usage`. Bare tall lagres, ikke samtaler. Testene setter alltid en tom nøkkel. Oppsett og kostnad:
+[assistant.md](assistant.md).
