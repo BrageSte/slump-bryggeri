@@ -1,13 +1,42 @@
+import { useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { sunsetIpaRecipe } from "../../domain/fixtures/sunset-ipa.ts";
+import { parseBsmx } from "../../domain/import/bsmx.ts";
 import { Icon, InlineError, PageHeader, useToast } from "../../design-system/index.ts";
-import { useCreateRecipe } from "./api.ts";
+import { useCreateRecipe, useImportBsmx, useRecipes } from "./api.ts";
+import { loadSlumpBeerSmithFiles } from "./beersmith/slump.ts";
 
 /** Import entry point (wireframe §36). */
 export function ImportRecipePage() {
   const create = useCreateRecipe();
+  const importBsmx = useImportBsmx();
+  const recipes = useRecipes();
   const navigate = useNavigate();
   const toast = useToast();
+  const [importingSlump, setImportingSlump] = useState(false);
+  const [slumpError, setSlumpError] = useState<string | null>(null);
+
+  // Slump's own BeerSmith recipes, through the same server import as a picked file (original kept).
+  async function importSlumpRecipes() {
+    setImportingSlump(true);
+    setSlumpError(null);
+    const existing = new Set((recipes.data ?? []).map((r) => r.name.toLowerCase()));
+    let added = 0;
+    try {
+      for (const file of await loadSlumpBeerSmithFiles()) {
+        const name = parseBsmx(file.text)[0]?.recipe.name.toLowerCase();
+        if (!name || existing.has(name)) continue;
+        await importBsmx.mutateAsync({ filename: file.name, text: file.text, recipeIndex: 0 });
+        added += 1;
+      }
+      toast(added === 0 ? "Oppskriftene finnes allerede" : added === 1 ? "1 oppskrift er lagt inn" : `${added} oppskrifter er lagt inn`);
+      navigate("/oppskrifter");
+    } catch (error) {
+      setSlumpError(error instanceof Error ? error.message : "Kunne ikke importere oppskriftene.");
+    } finally {
+      setImportingSlump(false);
+    }
+  }
 
   const row = "flex min-h-16 w-full items-center gap-3 px-4 py-3 text-left";
 
@@ -24,6 +53,23 @@ export function ImportRecipePage() {
             </span>
             <Icon name="chevronRight" size={20} className="text-muted" />
           </Link>
+        </li>
+        <li>
+          <button
+            type="button"
+            className={`${row} hover:bg-surface-2 disabled:opacity-60`}
+            disabled={importingSlump || recipes.isPending}
+            onClick={() => void importSlumpRecipes()}
+          >
+            <Icon name="history" className="text-primary-strong" />
+            <span className="flex-1">
+              <span className="block font-semibold">{importingSlump ? "Legger inn …" : "Slumps BeerSmith-oppskrifter"}</span>
+              <span className="block text-small text-muted">
+                Love in a canoe, Cascade Pale Ale – Kveik, Bitter 90l og Aasen Kölsch, tunet for 90–100 L-anlegget
+              </span>
+            </span>
+            <Icon name="chevronRight" size={20} className="text-muted" />
+          </button>
         </li>
         <li>
           <Link to="/oppskrifter/importer/beersmith" className={`${row} hover:bg-surface-2`}>
@@ -68,6 +114,11 @@ export function ImportRecipePage() {
           </button>
         </li>
       </ul>
+      {slumpError && (
+        <div className="mt-3">
+          <InlineError>{slumpError}</InlineError>
+        </div>
+      )}
       {create.error && (
         <div className="mt-3">
           <InlineError>{create.error.message}</InlineError>

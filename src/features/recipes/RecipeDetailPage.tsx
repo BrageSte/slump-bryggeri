@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import {
   Button,
   buttonClasses,
+  Card,
   ConfirmDialog,
   ErrorState,
   Icon,
@@ -18,6 +19,7 @@ import { useMe } from "../auth/session.ts";
 import { NewBatchSheet } from "../batches/NewBatchSheet.tsx";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { downloadRecipeSourceFile, useDeleteRecipe, useRecipe } from "./api.ts";
+import { suggestProfileFromBsmx } from "../../domain/import/bsmx-equipment.ts";
 import { BsmxEquipmentCard, BsmxImportNotes } from "./BsmxSource.tsx";
 import { RecipeIngredients, RecipeMetrics } from "./RecipeView.tsx";
 
@@ -119,6 +121,9 @@ export function RecipeDetailPage() {
         >
           {downloadError && <InlineError>{downloadError}</InlineError>}
           <BsmxEquipmentCard source={source.bsmx} />
+          {isAdmin && source.bsmx.equipment && (
+            <CalibrationFromBeerSmith suggestion={suggestProfileFromBsmx([{ recipe: doc, ...source.bsmx }])} />
+          )}
           {(source.bsmx.warnings.length > 0 || source.bsmx.ignoredMeasuredFields.length > 0) && (
             <details className="group">
               <summary className="flex min-h-11 cursor-pointer items-center gap-1 text-small font-semibold">
@@ -191,5 +196,22 @@ export function RecipeDetailPage() {
         Batcher som allerede er brygget beholder sin kopi av oppskriften.
       </ConfirmDialog>
     </div>
+  );
+}
+
+/** Offers the BeerSmith equipment as the starting point for a new calibration version (never applied by itself). */
+function CalibrationFromBeerSmith({ suggestion }: { suggestion: ReturnType<typeof suggestProfileFromBsmx> }) {
+  if (!suggestion) return null;
+  return (
+    <Card className="space-y-2">
+      <p className="text-small text-muted">
+        Oppskriftene fra BeerSmith er tunet for anlegget. Fordampning, tap, meskekar og mesketykkelse herfra kan bli
+        startpunktet for kalibreringen. Du ser hver verdi før noe lagres.
+      </p>
+      <Link to="/mer/kalibrering" state={{ profileSuggestion: suggestion }} className={buttonClasses("secondary", "md", true)}>
+        <Icon name="sliders" size={20} />
+        Bruk som startpunkt i kalibreringen
+      </Link>
+    </Card>
   );
 }
