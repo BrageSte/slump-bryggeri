@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
-import { plannedStepsForStage, type PlannedBrewStep } from "../../domain/brew-day/planned-steps.ts";
-import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
+import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
+import { deriveBrewDayState, type BrewDayState, type NextAction } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import {
@@ -29,6 +29,7 @@ import {
   useToast,
 } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
+import { BrewPlanOverview } from "./BrewPlanOverview.tsx";
 import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
@@ -90,28 +91,39 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
 
   const hasTimer = batch.currentStage !== null && ["mash", "boil", "whirlpool"].includes(batch.currentStage);
   const now = useNow(hasTimer ? 1000 : 30_000);
+  const brewLog = useMemo(() => toBrewDayLog(timeline), [timeline]);
   const state = useMemo(
     () =>
       deriveBrewDayState({
         recipe: batch.recipeSnapshot,
         stage: batch.currentStage,
         stageStartedAt: batch.stageStartedAt,
-        log: toBrewDayLog(timeline),
+        log: brewLog,
         now,
         wcf: batch.equipmentSnapshot.values.refractometer_wcf,
         completed: batch.status === "completed",
       }),
-    [batch, timeline, now],
+    [batch, brewLog, now],
+  );
+
+  const plan = useMemo(
+    () =>
+      buildBrewPlan({
+        recipe: batch.recipeSnapshot,
+        equipment: batch.equipmentSnapshot.values,
+        doneIngredientIds: registeredIngredientIds(brewLog),
+      }),
+    [batch.recipeSnapshot, batch.equipmentSnapshot.values, brewLog],
   );
 
   const user = me.data?.user ?? { id: "", name: "" };
   const pendingAdditions = state.additions.filter((a) => a.status !== "done");
   const originalBrix = timeline.findLast((item) => item.measurement?.kind === "brix" && !fermentationHasStarted(item.stage))?.measurement?.value;
 
-  function addIngredient(addition: PlannedAddition) {
+  function addIngredient(addition: Omit<PlanAddition, "eventType"> & { eventType?: PlanAddition["eventType"] }) {
     logEvent.mutate(
       {
-        type: "ingredient_added",
+        type: addition.eventType ?? "ingredient_added",
         stage: batch.currentStage,
         data: {
           ingredientKind: addition.ingredientKind,
@@ -178,23 +190,10 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       ) : (
         <>
           <StageCard state={state} onLog={setIntent} timeline={timeline} />
-          {state.additions.length > 0 && (
-            <AdditionsCard
-              additions={state.additions}
-              elapsedMin={state.elapsedMin ?? 0}
-              stage={batch.currentStage}
-              onAdd={addIngredient}
-              busy={logEvent.isPending}
-            />
-          )}
         </>
       )}
 
-      {batch.status !== "completed" && (
-        <PlannedStepsCard recipe={batch.recipeSnapshot} stage={batch.currentStage ?? "mash"} />
-      )}
-
-      {state.nextAction && batch.currentStage !== null && (
+      {state.nextAction && batch.currentStage !== null && batch.status !== "completed" && (
         <Card highlight>
           <SectionLabel>Neste</SectionLabel>
           <NextActionBody action={state.nextAction} remainingMin={state.step?.remainingMin ?? null} />
@@ -209,6 +208,17 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
             {state.nextAction.kind === "add_ingredient" ? "Registrer tilsatt" : state.nextAction.label}
           </Button>
         </Card>
+      )}
+
+      {batch.status !== "completed" && (
+        <BrewPlanOverview
+          plan={plan}
+          currentStage={batch.currentStage}
+          liveAdditions={state.additions}
+          elapsedMin={state.elapsedMin}
+          onAdd={addIngredient}
+          busy={logEvent.isPending}
+        />
       )}
 
       <Section
@@ -278,53 +288,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       >
         Batchen flyttes til historikken. Du kan fortsatt legge til smaksnotater, og den kan gjenåpnes.
       </ConfirmDialog>
-    </div>
-  );
-}
-
-function PlannedStepsCard({ recipe, stage }: { recipe: BatchDetail["recipeSnapshot"]; stage: BrewStage }) {
-  const steps = plannedStepsForStage(recipe, stage);
-  if (steps.length === 0) {
-    return (
-      <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
-        <EmptyState icon="book" title="Ingen planlagte steg">
-          Oppskriften har ingen steg for dette bryggesteget.
-        </EmptyState>
-      </Section>
-    );
-  }
-
-  return (
-    <Section title={`Planlagte steg · ${brewStageLabels[stage]}`}>
-      <Card className="space-y-3">
-        {steps.map((step) => <PlannedStepRow key={step.id} step={step} />)}
-      </Card>
-    </Section>
-  );
-}
-
-function PlannedStepRow({ step }: { step: PlannedBrewStep }) {
-  const details = [
-    step.targetC !== undefined ? `Mål ${formatNumber(step.targetC, 1)} °C` : null,
-    step.durationMin !== undefined ? `${formatNumber(step.durationMin, 0)} min` : null,
-    step.durationDays !== undefined ? `${formatNumber(step.durationDays, 0)} dager` : null,
-    step.offsetMin !== undefined ? `${formatNumber(step.offsetMin, 0)} min før kokeslutt` : null,
-    step.fermentationDay !== undefined ? `Gjæringsdag ${formatNumber(step.fermentationDay, 0)}` : null,
-    step.amount ? `${formatNumber(step.amount.value, 1)} ${step.amount.unit}` : null,
-    step.variant ?? null,
-  ].filter(Boolean);
-  const actionLabel: Record<PlannedBrewStep["action"], string> = {
-    measure_temperature: "Neste handling: Logg temperatur",
-    start_boil: "Neste handling: Start kok",
-    add_ingredient: "Neste handling: Registrer tilsatt",
-    follow_fermentation: "Neste handling: Følg gjæringsplanen",
-  };
-
-  return (
-    <div className="border-b border-border pb-3 last:border-0 last:pb-0">
-      <h3 className="font-semibold">{step.title}</h3>
-      {details.length > 0 && <p className="text-small text-muted">{details.join(" · ")}</p>}
-      <p className="mt-1 text-caption font-semibold text-primary-strong">{actionLabel[step.action]}</p>
     </div>
   );
 }
@@ -422,53 +385,6 @@ function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (in
           ))}
         </div>
       )}
-    </Card>
-  );
-}
-
-function AdditionsCard({
-  additions,
-  elapsedMin,
-  stage,
-  onAdd,
-  busy,
-}: {
-  additions: PlannedAddition[];
-  elapsedMin: number;
-  stage: BrewStage;
-  onAdd: (addition: PlannedAddition) => void;
-  busy: boolean;
-}) {
-  return (
-    <Card>
-      <SectionLabel>{stage === "fermentation" || stage === "conditioning" ? "Tørrhumling" : "Tilsetninger"}</SectionLabel>
-      <ul className="mt-2 divide-y divide-border">
-        {additions.map((addition) => (
-          <li key={addition.ingredientId} className="flex items-center gap-3 py-3">
-            <div className="min-w-0 flex-1">
-              <p className="font-semibold">
-                {formatAmount(addition.amount, addition.unit)} {addition.name}
-              </p>
-              <p className="text-small text-muted">
-                {addition.dueLabel}
-                {addition.variant ? ` · ${addition.variant}` : ""}
-                {addition.status === "upcoming" && stage !== "fermentation" && stage !== "conditioning"
-                  ? ` · om ${formatDuration(addition.dueAt - elapsedMin)}`
-                  : ""}
-              </p>
-            </div>
-            {addition.status === "done" ? (
-              <StatusChip tone="success" icon="check">
-                Tilsatt
-              </StatusChip>
-            ) : (
-              <Button size="sm" variant={addition.status === "due" ? "primary" : "secondary"} onClick={() => onAdd(addition)} disabled={busy}>
-                Tilsatt
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
     </Card>
   );
 }

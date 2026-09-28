@@ -11,7 +11,7 @@ export default defineConfig(async () => {
           test: {
             name: "unit",
             environment: "node",
-            include: ["tests/calculations/**/*.test.ts", "tests/domain/**/*.test.ts", "tests/import/**/*.test.ts"],
+            include: ["tests/calculations/**/*.test.ts", "tests/domain/**/*.test.ts", "tests/import/**/*.test.ts", "tests/ui/**/*.test.ts"],
           },
         },
         {

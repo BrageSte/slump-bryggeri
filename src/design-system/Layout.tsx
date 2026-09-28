@@ -7,18 +7,22 @@ export function Card({
   children,
   className,
   highlight = false,
+  flush = false,
   as: Tag = "section",
 }: {
   children: ReactNode;
   className?: string;
   /** Tinted card for the single most important thing on a screen (e.g. NESTE). */
   highlight?: boolean;
+  /** No inner padding, for cards whose rows manage their own (e.g. a full-width toggle). */
+  flush?: boolean;
   as?: "section" | "div" | "article";
 }) {
   return (
     <Tag
       className={cx(
-        "rounded-card border p-4 md:p-5",
+        "rounded-card border",
+        !flush && "p-4 md:p-5",
         highlight ? "border-primary-strong/30 bg-primary-soft" : "border-border bg-surface",
         className,
       )}

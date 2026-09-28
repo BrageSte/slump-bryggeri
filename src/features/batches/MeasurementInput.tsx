@@ -258,7 +258,7 @@ export function MeasurementInput({
               <Select
                 id={unitId}
                 aria-label="Måleenhet"
-                className="w-24 shrink-0 px-2 text-small font-semibold"
+                className="w-24 shrink-0 text-small font-semibold"
                 value={unit}
                 onChange={(event) => setUnit(event.target.value)}
               >

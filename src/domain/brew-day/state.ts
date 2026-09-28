@@ -11,6 +11,7 @@ import {
   type MeasurementKind,
 } from "../model/brewing.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
+import { registeredIngredientIds } from "./brew-plan.ts";
 
 /**
  * Derives what the brew-day screen should show — current step, targets vs. measured values,
@@ -124,13 +125,7 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
 
   const stageStartedAt = input.stageStartedAt ?? findStageStart(log, stage);
   const elapsedMin = stageStartedAt === null ? null : Math.max(0, (now - stageStartedAt) / MINUTE);
-  const doneIngredientIds = new Set(
-    log.flatMap((e) =>
-      (e.type === "ingredient_added" || e.type === "yeast_pitched") && typeof e.data?.ingredientId === "string"
-        ? [e.data.ingredientId]
-        : [],
-    ),
-  );
+  const doneIngredientIds = registeredIngredientIds(log);
 
   const fermentationStart = findFermentationStart(log);
   const fermentationDay =

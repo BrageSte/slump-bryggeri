@@ -216,6 +216,16 @@ Gjort 2026-09-24. Batchens aktive steg viser bare planlagte punkter fra det ufor
 oppskriftssnapshotet, med en kort foreslått handling og en tom tilstand uten plan. Skjermlås er på som
 standard mens et brygg pågår, kan slås av i batch-headeren og gjenopptas når fanen blir synlig igjen.
 
+Oppdatert 2026-09-28 etter tilbakemelding fra Brage («for lukket og for mye steg for steg»): de
+stegvise «Planlagte steg» og tilsetningskortet er erstattet av en samlet **Bryggeplan**
+(`src/domain/brew-day/brew-plan.ts`, `BrewPlanOverview.tsx`). Den viser nøkkeltall (innmesking,
+mesk, skyllevann, kok, malt, humle totalt, gjærtilsetting, OG → FG) og alle faser samtidig — vann,
+mesk, skylling, kok, whirlpool, kjøling/gjærtilsetning, gjæring og pakking — med gjeldende fase
+uthevet og ferdige faser sammenfoldet. Alle planlagte tilsetninger kan registreres når de faktisk
+skjer, uavhengig av steg. Vannmengder og innmeskingstemperatur tas fra oppskriften når kilden oppgir
+dem; ellers beregnes de fra batchens utstyrssnapshot og merkes «≈». Mangler fordampning, sier planen
+det i stedet for å gjette.
+
 Varsler når appen er lukket (Web Push) er en senere utvidelse, ikke en blokkering for bryggedagsmodus.
 
 **Akseptanse:** Under kok holder skjermen seg våken når støttet, neste humletilsetning varsles,
