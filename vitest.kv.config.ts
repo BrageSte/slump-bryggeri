@@ -15,6 +15,7 @@ export default defineConfig(async () => {
             BETTER_AUTH_SECRET: "test-secret-that-is-long-enough-for-better-auth",
             RESEND_API_KEY: "",
             BREWERY_ACCESS_CODE: "",
+            ANTHROPIC_API_KEY: "",
             APP_URL: "http://localhost",
           },
         },

@@ -50,7 +50,7 @@ kan endres fra batchmenyen.
 | 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring | ✅ |
 | 4 Inventory | Lots, alfasyre, transaksjoner | ⏳ |
 | 5 Smart Import | Bilde/PDF/tekst/URL + AI-tolkning med gjennomgang | ⏳ |
-| 6 Assistant | Kontekstbevisst assistent med beregningsmotoren som verktøy | ⏳ planlagt som M10 (bryggedokument) + M11 i implementeringsplanen |
+| 6 Assistant | Kontekstbevisst assistent med beregningsmotoren som verktøy | ✅ Claude API, se [docs/assistant.md](docs/assistant.md) |
 | 7 Calibration intelligence | Observasjoner → forslag → admin godkjenner | ⏳ (beregningen `summarizeCalibrationObservations` finnes) |
 
 ## Dokumentasjon
@@ -60,3 +60,4 @@ kan endres fra batchmenyen.
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)
 - [BeerSmith-import (BSMX)](docs/import-bsmx.md)
+- [Bryggeassistenten (oppsett og kostnad)](docs/assistant.md)

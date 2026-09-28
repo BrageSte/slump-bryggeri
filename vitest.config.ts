@@ -11,7 +11,7 @@ export default defineConfig(async () => {
           test: {
             name: "unit",
             environment: "node",
-            include: ["tests/calculations/**/*.test.ts", "tests/domain/**/*.test.ts", "tests/import/**/*.test.ts", "tests/ui/**/*.test.ts"],
+            include: ["tests/calculations/**/*.test.ts", "tests/domain/**/*.test.ts", "tests/import/**/*.test.ts", "tests/ui/**/*.test.ts", "tests/assistant/**/*.test.ts"],
           },
         },
         {
@@ -25,6 +25,8 @@ export default defineConfig(async () => {
                   BETTER_AUTH_SECRET: "test-secret-that-is-long-enough-for-better-auth",
                   RESEND_API_KEY: "",
                   BREWERY_ACCESS_CODE: "",
+                  // Never call the real Anthropic API from tests, even with a key in .dev.vars.
+                  ANTHROPIC_API_KEY: "",
                   APP_URL: "http://localhost",
                 },
               },

@@ -93,3 +93,36 @@ export function calculateVolumeTransfer(input: {
     temperatureC: input.temperatureC === undefined ? undefined : input.temperatureC + (input.temperatureDeltaC ?? 0),
   };
 }
+
+/** Specific heat of grain relative to water (Palmer: 0.4 cal/g·°C). */
+export const GRAIN_SPECIFIC_HEAT = 0.4;
+
+/**
+ * Water to add to move the mash from its current to its target temperature (heat balance):
+ *   (m_grain·c_grain + m_water + m_tun·c_tun) · (T_target − T_now) = m_add · (T_add − T_target)
+ * with water at 1 kg/L and c = 1. Positive result = litres to add. Returns null when the added
+ * water cannot move the mash that way (e.g. 70 °C water to reach 72 °C).
+ * Reference: BeerSmith Mash Adjust, 18.93 L, 4.54 kg, 65.6 → 67.8 °C with 100 °C water → 1.41 L.
+ */
+export function calculateMashTemperatureAdjustment(input: {
+  mashWaterL: number;
+  grainKg: number;
+  currentTempC: number;
+  targetTempC: number;
+  additionTempC: number;
+  tunMassKg?: number;
+  tunSpecificHeat?: number;
+}): { additionL: number } | null {
+  const heatCapacity =
+    input.grainKg * GRAIN_SPECIFIC_HEAT + input.mashWaterL + (input.tunMassKg ?? 0) * (input.tunSpecificHeat ?? 0);
+  const needed = heatCapacity * (input.targetTempC - input.currentTempC);
+  const perLitre = input.additionTempC - input.targetTempC;
+  if (perLitre === 0 || Math.sign(needed) !== Math.sign(perLitre)) return needed === 0 ? { additionL: 0 } : null;
+  return { additionL: needed / perLitre };
+}
+
+/** Boil-off rate observed from volumes measured before and after the boil (L/h). */
+export function calculateObservedBoilOff(input: { preBoilVolumeL: number; postBoilVolumeL: number; boilTimeMin: number }): number {
+  if (input.boilTimeMin <= 0) throw new RangeError("boilTimeMin must be positive");
+  return (input.preBoilVolumeL - input.postBoilVolumeL) / (input.boilTimeMin / 60);
+}

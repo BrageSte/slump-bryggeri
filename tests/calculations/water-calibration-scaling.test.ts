@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calculateBoilOff,
   calculateGravityEstimate,
+  calculateMashTemperatureAdjustment,
+  calculateObservedBoilOff,
   calculateRecipeMetrics,
   calculateRecipeScaling,
   calculateStrikeTemperature,
@@ -105,5 +107,47 @@ describe("recipe metrics", () => {
     expect(metrics.totalFermentablesKg).toBeCloseTo(19.82, 6);
     expect(metrics.totalHopsG).toBeCloseTo(283.5 + 220 + 147, 6);
     expect(metrics.hopsMissingAlpha).toHaveLength(0);
+  });
+});
+
+describe("mash temperature adjustment", () => {
+  it("reproduces BeerSmith Mash Adjust: 18.93 L, 4.54 kg, 65.6 → 67.8 °C with 100 °C water ≈ 1.41 L", () => {
+    const result = calculateMashTemperatureAdjustment({
+      mashWaterL: 18.93,
+      grainKg: 4.54,
+      currentTempC: 65.6,
+      targetTempC: 67.8,
+      additionTempC: 100,
+    });
+    // BeerSmith rounds to 1.41 L; the heat balance gives 1.417 L.
+    expect(result?.additionL).toBeCloseTo(1.41, 1);
+    expect(Math.abs((result?.additionL ?? 0) - 1.41)).toBeLessThan(0.02);
+  });
+
+  it("includes the mash tun when its mass and specific heat are known", () => {
+    const bare = calculateMashTemperatureAdjustment({ mashWaterL: 37.3, grainKg: 14.3, currentTempC: 63, targetTempC: 64.4, additionTempC: 95 });
+    const withTun = calculateMashTemperatureAdjustment({
+      mashWaterL: 37.3,
+      grainKg: 14.3,
+      currentTempC: 63,
+      targetTempC: 64.4,
+      additionTempC: 95,
+      tunMassKg: 10,
+      tunSpecificHeat: 0.15,
+    });
+    expect(withTun!.additionL).toBeGreaterThan(bare!.additionL);
+  });
+
+  it("cools with cold water and refuses impossible additions", () => {
+    const cool = calculateMashTemperatureAdjustment({ mashWaterL: 20, grainKg: 5, currentTempC: 70, targetTempC: 67, additionTempC: 10 });
+    expect(cool?.additionL).toBeGreaterThan(0);
+    expect(calculateMashTemperatureAdjustment({ mashWaterL: 20, grainKg: 5, currentTempC: 65, targetTempC: 67, additionTempC: 60 })).toBeNull();
+  });
+});
+
+describe("observed boil-off", () => {
+  it("inverts calculateBoilOff (Sunset IPA: 75.7 L → 62.5 L in 60 min = 13.2 L/h)", () => {
+    expect(calculateObservedBoilOff({ preBoilVolumeL: 75.7, postBoilVolumeL: 62.5, boilTimeMin: 60 })).toBeCloseTo(13.2, 6);
+    expect(calculateObservedBoilOff({ preBoilVolumeL: 102.5, postBoilVolumeL: 95, boilTimeMin: 90 })).toBeCloseTo(5, 6);
   });
 });

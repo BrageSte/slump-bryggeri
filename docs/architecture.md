@@ -37,9 +37,12 @@ database eller AI.
 ```
 src/domain/brewing-calculations/  rene beregningsfunksjoner (docs/calculations.md)
 src/domain/brew-day/state.ts       utleder «hva skjer nå / mål / målt / neste» fra snapshot + logg
+src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk, kok, humle, gjær, gjæring)
+src/domain/brew-document/          bryggedokumentet: plan, snapshot, status og logg som tekst (M10)
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
 worker/                            Hono-app, auth, middleware, services (én fil per domene)
+worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, priser
 db/migrations/                     D1-migrasjoner (wrangler d1 migrations)
 tests/                             calculations, domain, integration
 ```
@@ -221,4 +224,14 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 - Hovedbundelen er ~176 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
-- Assistent (fase 6), inventar (fase 4), smart import (fase 5) og kalibreringsforslag (fase 7) er ikke bygget.
+- Inventar (fase 4), smart import (fase 5) og kalibreringsforslag fra egne målinger (fase 7) er ikke bygget.
+
+## Bryggeassistent (M11)
+
+Claude via Anthropic-SDK-en i Workeren (`worker/services/assistant.ts`). Konteksten er bryggedokumentet
+(`src/domain/brew-document/`), sendt som cachet systemblokk. Alle tall kommer fra verktøy som kaller
+`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen regner ikke selv og kan ikke skrive
+til databasen. Batchen hentes scoped til `c.var.membership.breweryId` før noe annet, så andre bryggerier får 404.
+Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
+Forbruk per bryggeri og døgn ligger i `assistant_usage` (bare tall, ikke samtaler). Oppsett og kostnad:
+[assistant.md](assistant.md).

@@ -127,6 +127,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect((await bob.get(`/breweries/${breweryB}/recipes/${recipeA}`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/timeline`)).status).toBe(404);
+    expect((await bob.get(`/breweries/${breweryA}/assistant`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
   });
 
@@ -143,6 +144,8 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.delete(`/breweries/${breweryB}/batches/${batchA}/events/${eventA}`),
       bob.post(`/breweries/${breweryA}/invites`, { email: bob.email, role: "admin" }),
       bob.post(`/breweries/${breweryA}/equipment-profile/versions`, { values: {} }),
+      bob.post(`/breweries/${breweryA}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
+      bob.post(`/breweries/${breweryB}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
 

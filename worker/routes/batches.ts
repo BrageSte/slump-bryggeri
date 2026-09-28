@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import {
+  assistantRequestSchema,
   createBatchSchema,
   createCommentSchema,
   createEventSchema,
@@ -17,6 +18,7 @@ import { clientIp, enforceRateLimit } from "../lib/middleware.ts";
 import { parse, parseJsonBody } from "../lib/validate.ts";
 import { addBatchAttachment } from "../services/attachments.ts";
 import { createBatch, createSplit, deleteBatch, getBatch, listBatches, startStage, updateBatch } from "../services/batches.ts";
+import { askAssistant } from "../services/assistant.ts";
 import { addComment, correctLogEntry, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
 
 /** Mounted under /breweries/:breweryId/batches — membership is already verified. */
@@ -51,6 +53,20 @@ export const batchRoutes = new Hono<AppEnv>()
     const input = await parseJsonBody(c, createSplitSchema);
     const id = await createSplit(c.var.db, c.var.membership.breweryId, c.req.param("batchId"), c.var.user, input);
     return c.json({ id }, 201);
+  })
+
+  // Brewing assistant: read-only questions about this batch (Anthropic API, billed per use).
+  .post("/:batchId/assistant", async (c) => {
+    const { messages } = await parseJsonBody(c, assistantRequestSchema);
+    await enforceRateLimit(c.env.ASSISTANT_RATE_LIMITER, `assistant:${c.var.membership.breweryId}`);
+    const reply = await askAssistant({
+      env: c.env,
+      db: c.var.db,
+      breweryId: c.var.membership.breweryId,
+      batchId: c.req.param("batchId"),
+      messages,
+    });
+    return c.json(reply);
   })
 
   // Brew log

@@ -48,7 +48,7 @@ forbli ukjente, ikke fylles fra oppskriftsmål eller importerte kalkulatorverdie
 | B11 | Utstyr | Behold versjonerte equipment-profiler og uforanderlige batch-snapshots. Importert utstyr overskriver aldri aktiv profil automatisk. |
 | B12 | BeerSmith (2026-09-28) | BeerSmith-importen er ikke et mål i seg selv. Oppskriftene er tunet for anlegget (varmetap osv.) og brukes som **grunnlag for oppstart og tuning** av kalibreringen. Legg inn de som passer dagens anlegg. |
 | B13 | Bryggedagen (2026-09-28) | Bryggedagen skal ikke være «lukket» og stegvis: alt man lurer på (vann, temperaturer, humle, gjær) skal være synlig hele tiden, og tilsetninger skal kunne registreres når de faktisk skjer. |
-| B14 | AI (2026-09-28) | Målet er en assistent som svarer på spørsmål om brygget og holder et levende **bryggedokument** som tuner målinger mot bryggeriet. Kostnad avgjøres av Brage (se M11). |
+| B14 | AI (2026-09-28) | Målet er en assistent som svarer på spørsmål om brygget og holder et levende **bryggedokument** som tuner målinger mot bryggeriet. **Valgt:** Claude API i appen med betaling per bruk (alternativ B), Sonnet 5 som standard, dagsgrense og forbrukstak i Anthropic Console. |
 
 De to BeerSmith-kalkulatorbildene (Mash pH og Mash Adjust) er **referanse-/akseptansescenarier**, ikke
 historiske målinger. «Measured Mash pH 5.80» i bildet er et eksempelinput, ikke en Slump-loggføring.
@@ -68,8 +68,8 @@ Målbildet er fire ting i denne rekkefølgen: **oppskrift inn i brygg → bryggi
 | 4 | **M3 (rest)** | Timere, alarmer, mesketemperatur-korrigering, mål før kok, klokke fra faktisk start | M | — |
 | 5 | **M4** | Avslutt batch med faktiske tall, resultater og læring | M | — |
 | 6 | **M7** | Gjæringsgraf og visning per variant | S–M | — |
-| 7 | **M10** | Bryggedokument (deterministisk, uten AI) | M | — |
-| 8 | **M11** | AI-assistent oppå bryggedokumentet | M | **Velge alternativ og kostnadstak** |
+| 7 | **M10** | Bryggedokument (deterministisk, uten AI) | M | ✅ grunnversjon 2026-09-28; tuning-seksjon gjenstår |
+| 8 | **M11** | AI-assistent oppå bryggedokumentet | M | ✅ 2026-09-28 · **Brage: API-nøkkel og forbrukstak** ([assistant.md](assistant.md)) |
 | 9 | **M6** | Vann og pH | M | Vannanalyse |
 | 10 | **M8** | Rapport og eksport (bygger på M10) | M | — |
 | 11 | **M5 (rest)** | BeerXML, full utstyrssnapshot per oppskrift | M | — |
@@ -437,16 +437,16 @@ Et levende dokument per batch som samler alt: plan (oppskrift + utstyrssnapshot)
 og tilsetninger, avvik mot plan, beregnede størrelser og hva brygget lærer oss om anlegget. Bygges
 **uten AI**, så det alltid er etterprøvbart og fungerer gratis. AI-assistenten (M11) leser det.
 
-- [ ] Ren `buildBrewDocument(batch, timeline, equipment)` i `src/domain/brew-document/`: seksjoner for
-      vann, mesk, kok, kjøling, gjæring og resultat, hver med plan, faktisk, avvik og kilde. Manglende
-      målinger står som «ikke målt». Tester mot Sunset-fixturen.
+- [x] Ren `buildBrewDocument({ batch, timeline, now })` i `src/domain/brew-document/`: plan per fase (fra
+      bryggeplanen, «≈» for beregnet), utstyrssnapshot, status nå med mål mot faktisk, og hele loggen.
+      Manglende målinger står som «ikke målt». Tester mot Sunset-fixturen. *Resultatseksjon kommer med M4.*
 - [ ] **Tuning mot bryggeriet:** for hver måling som sier noe om anlegget (innmeskingstemperatur mot mål,
       volum før/etter kok, OG mot forventet), vis observert avvik og hvilken kalibreringsverdi den peker på
       (systemkorreksjon innmesking, fordampning, effektivitet). Beregninger i `brewing-calculations`.
       Forslag til ny profilversjon krever admin-godkjenning, som G2.
 - [ ] Visning på batchsiden («Bryggedokument»), oppdateres fortløpende mens man logger. Utskriftsvennlig,
       og grunnlaget for rapporten i M8.
-- [ ] «Kopier som tekst» (Markdown), så dokumentet kan limes inn i Claude-appen før M11 finnes.
+- [x] «Kopier bryggedokument» (Markdown) på assistentsiden.
 
 **Akseptanse:** Etter en bryggedag viser dokumentet plan mot faktisk for hvert steg og minst ett konkret,
 begrunnet kalibreringsforslag når målingene gir grunnlag for det.
@@ -485,12 +485,21 @@ forbrukstak i Anthropic Console.
 **Anbefaling:** Bygg M10 først og start med **A** (gratis, nyttig med én gang). Legg til **B** med Sonnet 5
 og et lavt forbrukstak når dokumentet er på plass, hvis den manuelle kopieringen blir tungvint.
 
-- [ ] Etter Brages valg: `POST /api/breweries/:breweryId/batches/:batchId/assistant` bak `requireMember`,
-      scoped til batchen, med bryggedokumentet som (cachet) kontekst og beregningsfunksjonene som verktøy.
-- [ ] Forslag fra assistenten (logg dette, ny kalibrering) vises som knapper brukeren må trykke.
-- [ ] Assistent i bunnmenyen i stedet for Inventar-plassholderen.
-- [ ] Tester: verktøyene gir samme tall som `brewing-calculations`; ingen skriving uten brukerhandling;
-      andre bryggerier får 404.
+- [x] `POST /api/breweries/:breweryId/batches/:batchId/assistant` bak `requireMember`, scoped til batchen,
+      med bryggedokumentet som cachet systemkontekst og åtte beregningsverktøy (`worker/assistant/tools.ts`).
+      `GET /api/breweries/:breweryId/assistant` gir status og forbruk. Modell `ASSISTANT_MODEL`
+      (standard `claude-sonnet-5`), adaptiv tenkning med effort `medium`, maks 6 verktøyrunder.
+- [x] Kostnadskontroll: `assistant_usage` (migrasjon 0007) teller spørsmål og tokens per dag; dagsgrense
+      `ASSISTANT_DAILY_LIMIT` (40), 10 per minutt, og anslag for dag/måned i appen. Norske feilmeldinger for
+      manglende/avvist nøkkel, tom kreditt, ukjent modell og grenser.
+- [x] Ny kalkulator `calculateMashTemperatureAdjustment` (BeerSmith-referansen: 1,417 L mot 1,41 L) og
+      `calculateObservedBoilOff`, begge brukt som verktøy.
+- [x] Assistent i bunnmenyen i stedet for Inventar (Inventar ligger under Mer), og «Spør assistenten» i batchmenyen.
+- [x] Tester: verktøyene gir samme tall som `brewing-calculations`; løkka sender tenkeblokker og verktøysvar
+      riktig tilbake; tvunget svar etter siste runde; forbruk og dagsgrense; andre bryggerier får 404. Testene
+      kaller aldri det ekte API-et.
+- [ ] Forslag fra assistenten (logg dette, ny kalibrering) som knapper brukeren må trykke.
+- [ ] Vis svaret mens det skrives (streaming), hvis ventetiden oppleves lang.
 
 ---
 
