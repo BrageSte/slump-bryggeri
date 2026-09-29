@@ -1,9 +1,9 @@
 import { calculateMashTemperatureAdjustment } from "../brewing-calculations/water.ts";
-import type { ProfileValues } from "../model/equipment-profile.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 import type { BrewStage } from "../model/brewing.ts";
-import { buildBrewPlan } from "./brew-plan.ts";
+import { buildBrewPlan, type PlanSource } from "./brew-plan.ts";
 import { deriveBrewDayState, type BrewDayLogEntry } from "./state.ts";
+import type { ProfileValueSources, ProfileValues } from "../model/equipment-profile.ts";
 
 export interface MashTemperatureSuggestion {
   direction: "raise" | "lower";
@@ -12,7 +12,8 @@ export interface MashTemperatureSuggestion {
   additionTempC: number;
   additionL: number;
   mashWaterL: number;
-  mashWaterSource: "recipe" | "calculated";
+  mashWaterSource: PlanSource | "measured";
+  mashWaterAssumptions?: string[];
   grainKg: number;
 }
 
@@ -35,6 +36,7 @@ export type MashAdjustmentResult =
 export interface MashAdjustmentInput {
   recipe: RecipeDocument;
   equipment: ProfileValues;
+  equipmentSources?: ProfileValueSources;
   log: readonly BrewDayLogEntry[];
   stage: BrewStage | null;
   stageStartedAt: number | null;
@@ -56,6 +58,8 @@ export function suggestMashTemperatureAdjustment(input: MashAdjustmentInput): Ma
     stageStartedAt: input.stageStartedAt,
     log: [...input.log],
     now: input.now,
+    equipment: input.equipment,
+    equipmentSources: input.equipmentSources,
   });
   const target = state.targets.find((item) => item.key === "mash-temp");
   if (!target || target.target.kind !== "value") return { reason: "missing_mash_target" };
@@ -77,25 +81,39 @@ export function suggestMashTemperatureAdjustment(input: MashAdjustmentInput): Ma
       waterAddedL: afterReading.reduce((sum, entry) => sum + entry.volumeL, 0),
     };
   }
-  const addedBeforeReadingL = waterAdded.reduce((sum, entry) => sum + entry.volumeL, 0);
+  const mashVolumeMeasurement = input.log
+    .filter((entry) =>
+      entry.measurement?.kind === "volume" &&
+      entry.occurredAt >= mashStart &&
+      (entry.stage === "mash" || /mesk|mash/i.test(entry.measurement.label ?? "")),
+    )
+    .at(-1);
+  const addedAfterVolumeMeasurement = mashVolumeMeasurement
+    ? waterAdded.filter((entry) => entry.at > mashVolumeMeasurement.occurredAt && entry.at <= target.actual!.occurredAt)
+    : [];
+  const addedBeforeReadingL = mashVolumeMeasurement
+    ? addedAfterVolumeMeasurement.reduce((sum, entry) => sum + entry.volumeL, 0)
+    : waterAdded.reduce((sum, entry) => sum + entry.volumeL, 0);
 
-  const firstMashInfusion = input.recipe.mashSteps[0]?.infusionL;
   let mashWaterL: number | undefined;
   let mashWaterSource: MashTemperatureSuggestion["mashWaterSource"] | undefined;
-  if (firstMashInfusion !== undefined) {
-    mashWaterL = firstMashInfusion;
-    mashWaterSource = "recipe";
+  let mashWaterAssumptions: string[] | undefined;
+  if (mashVolumeMeasurement?.measurement) {
+    mashWaterL = mashVolumeMeasurement.measurement.value;
+    mashWaterSource = "measured";
   } else {
-    const planned = buildBrewPlan({ recipe: input.recipe, equipment: input.equipment }).summary.strikeVolumeL;
+    const planned = buildBrewPlan({ recipe: input.recipe, equipment: input.equipment, equipmentSources: input.equipmentSources }).summary.strikeVolumeL;
     if (planned) {
       mashWaterL = planned.value;
       mashWaterSource = planned.source;
+      mashWaterAssumptions = planned.assumptions;
     }
   }
   if (mashWaterL === undefined || !Number.isFinite(mashWaterL) || mashWaterL <= 0 || !mashWaterSource) {
     return { reason: "no_mash_water" };
   }
   mashWaterL += addedBeforeReadingL;
+  if (waterAdded.length > 0) mashWaterSource = "measured";
 
   const grainKg = input.recipe.fermentables
     .filter((fermentable) => fermentable.type === "grain" || fermentable.type === "adjunct")
@@ -124,6 +142,7 @@ export function suggestMashTemperatureAdjustment(input: MashAdjustmentInput): Ma
     additionL: adjustment.additionL,
     mashWaterL,
     mashWaterSource,
+    mashWaterAssumptions,
     grainKg,
   };
 }

@@ -1,29 +1,43 @@
 import { useState } from "react";
 import {
+  assumptionNames,
   brewPlanPhaseLabels,
   brewPlanPhaseStatus,
   type BrewPlan,
   type BrewPlanItem,
   type BrewPlanPhase,
+  type PlanAssumption,
   type PhaseStatus,
   type PlanAddition,
   type PlanQuantity,
 } from "../../domain/brew-day/brew-plan.ts";
-import type { PlannedAddition } from "../../domain/brew-day/state.ts";
+import type { BrewDayForecast, PlannedAddition } from "../../domain/brew-day/state.ts";
 import { fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import { Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
 
-/** "≈" marks values the app calculated from the equipment profile rather than read from the recipe. */
+/** Recipe values are unprefixed; calculations and assumptions remain visibly distinct. */
 function quantity(q: PlanQuantity | undefined, unit: string, decimals = 1): string | null {
   if (!q) return null;
-  return `${q.source === "calculated" ? "≈ " : ""}${formatNumber(q.value, decimals)} ${unit}`;
+  const prefix = q.source === "recipe" ? "" : q.source === "calculated" ? "≈ " : `≈ antatt${q.assumptions?.length ? ` (${assumptionNames(q.assumptions)})` : ""} `;
+  const formatted = unit === "SG" ? formatSg(q.value) : formatNumber(q.value, decimals);
+  return `${prefix}${formatted}${unit === "SG" ? "" : ` ${unit}`}`;
 }
 
 function temperature(q: PlanQuantity | undefined, maxC?: number): string | null {
   if (!q) return null;
-  if (maxC !== undefined && maxC !== q.value) return `${formatNumber(q.value, 1)}–${formatNumber(maxC, 1)} °C`;
+  if (maxC !== undefined && maxC !== q.value) {
+    const range = `${formatNumber(q.value, 1)}–${formatNumber(maxC, 1)} °C`;
+    return q.source === "recipe" ? range : q.source === "calculated" ? `≈ ${range}` : `≈ antatt${q.assumptions?.length ? ` (${assumptionNames(q.assumptions)})` : ""} ${range}`;
+  }
   return quantity(q, "°C");
+}
+
+function forecastValue(value: BrewDayForecast["postBoilVolumeL"], unit: string): string {
+  const formatted = unit === "SG" ? formatSg(value.value) : `${formatNumber(value.value, 1)} ${unit}`;
+  if (value.source === "measured") return `Målt ${formatted}`;
+  if (value.source === "assumed") return `≈ antatt${value.assumptions?.length ? ` (${assumptionNames(value.assumptions)})` : ""} ${formatted}`;
+  return `≈ ${formatted}`;
 }
 
 const statusChip: Record<PhaseStatus, { tone: "success" | "primary" | "neutral"; label: string }> = {
@@ -39,6 +53,7 @@ const statusChip: Record<PhaseStatus, { tone: "success" | "primary" | "neutral";
  */
 export function BrewPlanOverview({
   plan,
+  forecast,
   currentStage,
   liveAdditions,
   elapsedMin,
@@ -46,6 +61,7 @@ export function BrewPlanOverview({
   busy,
 }: {
   plan: BrewPlan;
+  forecast: BrewDayForecast | null;
   currentStage: BrewStage | null;
   /** Due/upcoming status for the current stage, from `deriveBrewDayState`. */
   liveAdditions: PlannedAddition[];
@@ -55,15 +71,12 @@ export function BrewPlanOverview({
   busy: boolean;
 }) {
   const [expanded, setExpanded] = useState<Partial<Record<string, boolean>>>({});
-  const hasCalculated = plan.phases.some((phase) =>
-    phase.items.some((item) => item.volumeL?.source === "calculated" || item.temperatureC?.source === "calculated"),
-  );
 
   if (plan.phases.length === 0) return null;
 
   return (
     <Section title="Bryggeplan">
-      <KeyFigures summary={plan.summary} currentStage={currentStage} />
+      <KeyFigures summary={plan.summary} currentStage={currentStage} forecast={forecast} />
 
       <nav aria-label="Faser i bryggeplanen" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
         {plan.phases.map((phase) => {
@@ -98,9 +111,7 @@ export function BrewPlanOverview({
               status={status}
               open={open}
               onToggle={() => setExpanded((current) => ({ ...current, [phase.key]: !open }))}
-              hint={phase.key === "water" && plan.summary.waterVolumesNeedBoilOff
-                ? "Vannmengder kan ikke beregnes fordi batchens utstyrsprofil mangler fordampning (L/h). Legg den inn under Mer → Kalibrering, så får neste batch volumer."
-                : undefined}
+              assumptions={phase.key === "water" ? plan.summary.assumptions : undefined}
               liveAdditions={status === "current" ? liveAdditions : []}
               countdownFrom={status === "current" && currentStage !== "fermentation" && currentStage !== "conditioning" ? elapsedMin : null}
               canRegister={currentStage !== null}
@@ -111,16 +122,14 @@ export function BrewPlanOverview({
         })}
       </div>
 
-      {hasCalculated && (
-        <p className="text-caption text-muted">
-          ≈ = beregnet fra batchens utstyrsprofil. Tall uten ≈ står i oppskriften.
-        </p>
-      )}
+      <p className="text-caption text-muted">
+        Oppskrift = oppgitt av oppskriften/importen · ≈ = beregnet fra oppskrifts- eller profilverdier · ≈ antatt = dokumentert standardverdi som fortsatt bør måles · Målt = loggført verdi.
+      </p>
     </Section>
   );
 }
 
-function KeyFigures({ summary, currentStage }: { summary: BrewPlan["summary"]; currentStage: BrewStage | null }) {
+function KeyFigures({ summary, currentStage, forecast }: { summary: BrewPlan["summary"]; currentStage: BrewStage | null; forecast: BrewDayForecast | null }) {
   // Once the wort is in the fermenter, strike water and boil times are history.
   const brewDayDone = fermentationHasStarted(currentStage);
   const brewDayFigures = brewDayDone ? [] : [
@@ -137,12 +146,16 @@ function KeyFigures({ summary, currentStage }: { summary: BrewPlan["summary"]; c
     summary.spargeVolumeL || summary.spargeTemperatureC !== undefined
       ? {
           label: "Skyllevann",
-          value: summary.spargeTemperatureC !== undefined ? `${formatNumber(summary.spargeTemperatureC, 1)} °C` : "–",
+          value: quantity(summary.spargeTemperatureC, "°C") ?? "–",
           detail: quantity(summary.spargeVolumeL, "L"),
         }
       : null,
     summary.boilTimeMin > 0
-      ? { label: "Kok", value: `${formatNumber(summary.boilTimeMin, 0)} min`, detail: summary.preBoilVolumeL ? `før kok ${quantity(summary.preBoilVolumeL, "L")}` : null }
+      ? {
+          label: "Kok",
+          value: `${formatNumber(summary.boilTimeMin, 0)} min`,
+          detail: [summary.preBoilVolumeL ? `før kok ${quantity(summary.preBoilVolumeL, "L")}` : null, summary.preBoilSg ? `SG før kok ${quantity(summary.preBoilSg, "SG")}` : null].filter(Boolean).join(" · ") || null,
+        }
       : null,
     summary.grainKg > 0 ? { label: "Malt", value: `${formatNumber(summary.grainKg, 2)} kg`, detail: null } : null,
     summary.hopTotalG > 0 ? { label: "Humle totalt", value: formatAmount(summary.hopTotalG, "g"), detail: null } : null,
@@ -154,7 +167,21 @@ function KeyFigures({ summary, currentStage }: { summary: BrewPlan["summary"]; c
       ? { label: "Gjærtilsetting", value: `${formatNumber(summary.pitchTemperatureC, 1)} °C`, detail: null }
       : null,
     summary.og !== null
-      ? { label: "OG → FG", value: formatSg(summary.og), detail: summary.fg !== null ? `→ ${formatSg(summary.fg)}` : null }
+      ? { label: "OG → FG", value: quantity(summary.og, "SG"), detail: summary.fg !== null ? `→ ${quantity(summary.fg, "SG")}` : null }
+      : null,
+    forecast
+      ? {
+          label: forecast.postBoilVolumeL.source === "measured" ? "Målt volum etter kok" : "Forventet volum etter kok",
+          value: forecastValue(forecast.postBoilVolumeL, "L"),
+          detail: summary.postBoilVolumeL ? `Plan ${quantity(summary.postBoilVolumeL, "L")}` : null,
+        }
+      : null,
+    forecast?.postBoilOg
+      ? {
+          label: forecast.postBoilOg.source === "measured" ? "Målt OG etter kok" : "Forventet OG etter kok",
+          value: forecastValue(forecast.postBoilOg, "SG"),
+          detail: forecast.plannedOg ? `Plan ${quantity(forecast.plannedOg, "SG")}` : null,
+        }
       : null,
   ].filter((figure) => figure !== null);
 
@@ -177,7 +204,7 @@ function PhaseCard({
   status,
   open,
   onToggle,
-  hint,
+  assumptions,
   liveAdditions,
   countdownFrom,
   canRegister,
@@ -188,7 +215,7 @@ function PhaseCard({
   status: PhaseStatus;
   open: boolean;
   onToggle: () => void;
-  hint?: string;
+  assumptions?: PlanAssumption[];
   liveAdditions: PlannedAddition[];
   countdownFrom: number | null;
   canRegister: boolean;
@@ -225,10 +252,19 @@ function PhaseCard({
         </button>
         {open && (
           <ul id={contentId} className="divide-y divide-border border-t border-border px-4 md:px-5">
-            {hint && (
+            {assumptions && assumptions.length > 0 && (
               <li className="flex gap-2 py-3 text-small text-muted">
                 <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
-                {hint}
+                <div>
+                  <p className="font-semibold">Antakelser i planen</p>
+                  <ul className="mt-1 space-y-2">
+                    {assumptions.map((assumption) => (
+                      <li key={assumption.key}>
+                        {assumption.label}: {formatNumber(assumption.value, 2)} {assumption.unit}. {assumption.explanation} {assumption.measureToReplace}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </li>
             )}
             {phase.items.map((item) => (
@@ -271,6 +307,7 @@ function PlanItemRow({
     item.durationMin !== undefined ? `${formatNumber(item.durationMin, 0)} min` : null,
     item.durationDays !== undefined ? `${formatNumber(item.durationDays, 0)} ${item.durationDays === 1 ? "dag" : "dager"}` : null,
     quantity(item.volumeL, "L"),
+    quantity(item.gravitySg, "SG"),
   ].filter(Boolean);
   const due = !live || live.status === "done" || item.done
     ? null

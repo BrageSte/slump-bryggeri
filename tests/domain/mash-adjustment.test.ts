@@ -73,7 +73,20 @@ describe("suggestMashTemperatureAdjustment", () => {
   it("uses calculated mash water when the recipe does not state an infusion volume", () => {
     const missingRecipeWater = recipe({ mashSteps: [{ ...recipe().mashSteps[0]!, infusionL: undefined }] });
     const result = suggest({ recipe: missingRecipeWater, equipment: { boil_off_l_per_h: 5 } });
-    expect(result).toMatchObject({ mashWaterSource: "calculated" });
+    expect(result).toMatchObject({ mashWaterSource: "assumed" });
+  });
+
+  it("uses a measured mash-water volume instead of the planned value", () => {
+    const missingRecipeWater = recipe({ mashSteps: [{ ...recipe().mashSteps[0]!, infusionL: undefined }] });
+    const mashVolume: BrewDayLogEntry = {
+      type: "measurement",
+      stage: "mash",
+      occurredAt: startedAt + 30_000,
+      data: null,
+      measurement: { kind: "volume", value: 21.5, label: "Meskevann" },
+    };
+    const result = suggest({ recipe: missingRecipeWater, log: [mashVolume, ...logTemperature(65.6)] });
+    expect(result).toMatchObject({ mashWaterL: 21.5, mashWaterSource: "measured" });
   });
 
   it("does not suggest an adjustment when the reading is within the state target tolerance", () => {
@@ -85,7 +98,10 @@ describe("suggestMashTemperatureAdjustment", () => {
   });
 
   it("returns a reason when neither the recipe nor brew plan knows mash water", () => {
-    const missingRecipeWater = recipe({ mashSteps: [{ ...recipe().mashSteps[0]!, infusionL: undefined }] });
+    const missingRecipeWater = recipe({
+      mashSteps: [{ ...recipe().mashSteps[0]!, infusionL: undefined }],
+      fermentables: [],
+    });
     expect(suggest({ recipe: missingRecipeWater })).toEqual({ reason: "no_mash_water" });
   });
 

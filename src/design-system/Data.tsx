@@ -100,7 +100,10 @@ export function TargetVsActual({
           {actual === null ? (
             <span className="text-section font-semibold text-muted">–</span>
           ) : (
-            <Measurement value={actual} unit={unit} size="title" />
+            <>
+              <span className="text-small font-semibold text-muted">Målt</span>
+              <Measurement value={actual} unit={unit} size="title" />
+            </>
           )}
           <TargetStatusChip status={status} />
         </div>

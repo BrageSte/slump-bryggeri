@@ -14,7 +14,7 @@ import {
   type BatchStatus,
   type BrewStage,
 } from "../../src/domain/model/brewing.ts";
-import type { ProfileValues } from "../../src/domain/model/equipment-profile.ts";
+import type { ProfileValueSources, ProfileValues } from "../../src/domain/model/equipment-profile.ts";
 import type { RecipeDocument } from "../../src/domain/model/recipe.ts";
 import type { SessionUser } from "../lib/context.ts";
 import { atomic, newId, parseJson, type DB } from "../lib/db.ts";
@@ -108,7 +108,19 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
     listSplits(db, breweryId, batchId),
     listOutcomes(db, breweryId, batchId),
   ]);
-  const equipment = parseJson<{ values: ProfileValues }>(equipmentSnapshot?.data ?? null);
+  const equipment = parseJson<{ values: ProfileValues; sources?: ProfileValueSources }>(equipmentSnapshot?.data ?? null);
+  const legacySources = !equipment?.sources && equipmentSnapshot?.equipment_profile_id
+    ? Object.fromEntries(
+        (await db
+          .selectFrom("equipment_profile_values as v")
+          .innerJoin("equipment_profiles as p", "p.id", "v.profile_id")
+          .select(["v.key", "v.source"])
+          .where("v.profile_id", "=", equipmentSnapshot.equipment_profile_id)
+          .where("p.brewery_id", "=", breweryId)
+          .execute())
+          .map((entry) => [entry.key, entry.source]),
+      ) as ProfileValueSources
+    : undefined;
   return {
     ...summary,
     recipeVersion: { id: version.id, version: version.version },
@@ -117,6 +129,7 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
       profileId: equipmentSnapshot?.equipment_profile_id ?? null,
       profileVersion: equipmentSnapshot?.profile_version ?? null,
       values: equipment?.values ?? {},
+      sources: equipment?.sources ?? legacySources,
     },
     splits,
     outcomes,
@@ -174,7 +187,11 @@ export async function createBatch(
       batch_id: batchId,
       equipment_profile_id: profile?.id ?? null,
       profile_version: profile?.version ?? null,
-      data: JSON.stringify({ values: profileValuesOf(profile), equipment }),
+      data: JSON.stringify({
+        values: profileValuesOf(profile),
+        sources: Object.fromEntries(Object.entries(profile?.values ?? {}).map(([key, entry]) => [key, entry.source])),
+        equipment,
+      }),
       created_at: now,
     }),
   ]);

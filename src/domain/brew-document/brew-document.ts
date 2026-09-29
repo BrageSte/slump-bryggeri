@@ -1,4 +1,4 @@
-import { buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatus, registeredIngredientIds, type BrewPlanItem, type PlanQuantity } from "../brew-day/brew-plan.ts";
+import { assumptionNames, buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatus, registeredIngredientIds, type BrewPlanItem, type PlanQuantity } from "../brew-day/brew-plan.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
 import { deriveBrewDayState, deviationFromTarget, type BrewDayLogEntry, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
 import { packagingLabels, type BatchDetail, type TimelineItem } from "../model/api.ts";
@@ -38,7 +38,9 @@ function time(timestamp: number): string {
 
 function quantity(q: PlanQuantity | undefined, unit: string): string | null {
   if (!q) return null;
-  return `${q.source === "calculated" ? "≈ " : ""}${num(q.value)} ${unit}`;
+  const value = unit === "SG" ? formatMeasurementValue("sg", q.value) : `${num(q.value)} ${unit}`;
+  const prefix = q.source === "recipe" ? "" : q.source === "calculated" ? "≈ " : `≈ antatt${q.assumptions?.length ? ` (${assumptionNames(q.assumptions)})` : ""} `;
+  return `${prefix}${value}${unit === "SG" ? " SG" : ""}`;
 }
 
 function target(kind: Parameters<typeof formatMeasurementValue>[0], value: TargetValue): string {
@@ -60,6 +62,7 @@ function planItem(item: BrewPlanItem): string {
         : quantity(item.temperatureC, "°C")
       : null,
     quantity(item.volumeL, "L"),
+    item.gravitySg ? quantity(item.gravitySg, "SG") : null,
     item.durationMin !== undefined ? `${num(item.durationMin, 0)} min` : null,
     item.durationDays !== undefined ? `${num(item.durationDays, 0)} d` : null,
     item.variant ? `variant ${item.variant}` : null,
@@ -133,11 +136,11 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
     occurredAt: item.occurredAt,
     data: item.data,
     measurement: item.measurement
-      ? { kind: item.measurement.kind, value: item.measurement.value, valueMin: item.measurement.valueMin, valueMax: item.measurement.valueMax }
+      ? { kind: item.measurement.kind, value: item.measurement.value, valueMin: item.measurement.valueMin, valueMax: item.measurement.valueMax, label: item.measurement.label }
       : null,
   }));
   const equipment = batch.equipmentSnapshot.values;
-  const plan = buildBrewPlan({ recipe, equipment, doneIngredientIds: registeredIngredientIds(log) });
+  const plan = buildBrewPlan({ recipe, equipment, equipmentSources: batch.equipmentSnapshot.sources, doneIngredientIds: registeredIngredientIds(log) });
   const state = deriveBrewDayState({
     recipe,
     stage: batch.currentStage,
@@ -145,6 +148,8 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
     log,
     now,
     wcf: equipment.refractometer_wcf,
+    equipment,
+    equipmentSources: batch.equipmentSnapshot.sources,
     completed: batch.status === "completed",
   });
 
@@ -163,15 +168,19 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
   const summary = plan.summary;
   const planLines: string[] = ["## Plan og mål", ""];
   const targets = [
-    summary.og !== null ? `OG ${formatMeasurementValue("sg", summary.og)}` : null,
-    summary.fg !== null ? `FG ${formatMeasurementValue("sg", summary.fg)}` : null,
+    summary.og !== null ? `${summary.og.source === "recipe" ? "Oppskriftsmål" : "≈ beregnet"} OG ${formatMeasurementValue("sg", summary.og.value)}` : null,
+    summary.fg !== null ? `${summary.fg.source === "recipe" ? "Oppskriftsmål" : "≈ beregnet"} FG ${formatMeasurementValue("sg", summary.fg.value)}` : null,
     recipe.targets.ibu !== undefined ? `IBU ${num(recipe.targets.ibu)}` : null,
     recipe.targets.abvPct !== undefined ? `ABV ${num(recipe.targets.abvPct)} %` : null,
     recipe.targets.colorEbc !== undefined ? `farge ${num(recipe.targets.colorEbc)} EBC` : null,
   ].filter(Boolean);
-  if (targets.length > 0) planLines.push(`Mål fra oppskriften: ${targets.join(", ")}.`, "");
-  if (summary.waterVolumesNeedBoilOff) {
-    planLines.push("Vannmengder kan ikke beregnes: batchens utstyrsprofil mangler fordampning.", "");
+  if (targets.length > 0) planLines.push(`${targets.join(", ")}.`, "");
+  if (summary.assumptions.length > 0) {
+    planLines.push("Antakelser brukt (ikke kalibrerte verdier):");
+    for (const assumption of summary.assumptions) {
+      planLines.push(`- ${assumption.label}: ${num(assumption.value, 2)} ${assumption.unit}. ${assumption.explanation} Mål for å erstatte: ${assumption.measureToReplace}`);
+    }
+    planLines.push("");
   }
   for (const phase of plan.phases) {
     const status = brewPlanPhaseStatus(phase, batch.currentStage);
@@ -179,7 +188,7 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
     for (const item of phase.items) planLines.push(planItem(item));
     planLines.push("");
   }
-  planLines.push("Verdier merket ≈ er beregnet fra utstyrsprofilen; andre står i oppskriften.", "");
+  planLines.push("Kilde: oppskrift/import = oppgitt verdi; ≈ = beregnet fra eksplisitt profilverdi; ≈ antatt = dokumentert standardverdi; faktisk/loggført = måling.", "");
 
   const equipmentLines: string[] = [`## Utstyrsprofil i batchen${batch.equipmentSnapshot.profileVersion ? ` (v${batch.equipmentSnapshot.profileVersion})` : ""}`, ""];
   const profileLines = Object.entries(equipment).flatMap(([key, value]) => {
@@ -205,7 +214,34 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
       const deviationText = deviation === null
         ? ""
         : ` (avvik ${deviation > 0 ? "+" : "−"}${formatMeasurementValue(t.measurementKind, Math.abs(deviation))} ${t.unit})`;
-      statusLines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}${deviationText}`);
+      const source = t.source === "recipe"
+        ? "oppskrift/import"
+        : t.source === "calculated"
+          ? "≈ beregnet"
+          : t.source === "assumed"
+            ? `≈ antatt${t.assumptions?.length ? ` (${assumptionNames(t.assumptions)})` : ""}`
+            : "";
+      statusLines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}${source ? ` (${source})` : ""}, faktisk ${actual} → ${targetStatusLabels[t.status]}${deviationText}`);
+    }
+    if (state.forecast) {
+      const volume = state.forecast.postBoilVolumeL;
+      const volumeText = `${num(volume.value)} L`;
+      const volumeValue = volume.source === "measured"
+        ? `Målt ${volumeText}`
+        : volume.source === "assumed"
+          ? `≈ antatt${volume.assumptions?.length ? ` (${assumptionNames(volume.assumptions)})` : ""} ${volumeText}`
+          : `≈ ${volumeText}`;
+      statusLines.push(`- ${volume.source === "measured" ? "Målt volum etter kok" : "Forventet volum etter kok"}: ${volumeValue}${state.forecast.plannedPostBoilVolumeL ? ` (plan ${quantity(state.forecast.plannedPostBoilVolumeL, "L")})` : ""}${volume.basis ? `; grunnlag: ${volume.basis}` : ""}`);
+      const gravity = state.forecast.postBoilOg;
+      if (gravity) {
+        const gravityText = formatMeasurementValue("sg", gravity.value);
+        const gravityValue = gravity.source === "measured"
+          ? `Målt ${gravityText}`
+          : gravity.source === "assumed"
+            ? `≈ antatt${gravity.assumptions?.length ? ` (${assumptionNames(gravity.assumptions)})` : ""} ${gravityText}`
+            : `≈ ${gravityText}`;
+        statusLines.push(`- ${gravity.source === "measured" ? "Målt OG etter kok" : "Forventet OG etter kok"}: ${gravityValue}${state.forecast.plannedOg ? ` (plan ${quantity(state.forecast.plannedOg, "SG")})` : ""}${gravity.basis ? `; grunnlag: ${gravity.basis}` : ""}`);
+      }
     }
     if (state.nextAction) statusLines.push(`- Neste handling: ${state.nextAction.label}`);
   }
@@ -270,17 +306,20 @@ export function buildBrewDocument(input: BrewDocumentInput): string {
 function assistantPlanLine(batch: BatchDetail): string {
   const recipe = batch.recipeSnapshot;
   const equipment = batch.equipmentSnapshot.values;
-  const { og, fg } = buildBrewPlan({ recipe, equipment }).summary;
+  const summary = buildBrewPlan({ recipe, equipment, equipmentSources: batch.equipmentSnapshot.sources }).summary;
   const figures = [
     `${num(recipe.batchSizeL)} L batch`,
     `${num(recipe.boilTimeMin, 0)} min kok`,
     `${num(recipe.efficiencyPct, 0)} % planlagt effektivitet`,
-    recipe.targets.og !== undefined ? `oppskriftsmål OG ${formatMeasurementValue("sg", recipe.targets.og)}` : null,
-    recipe.targets.fg !== undefined ? `oppskriftsmål FG ${formatMeasurementValue("sg", recipe.targets.fg)}` : null,
-    og !== null ? `≈ beregnet OG ${formatMeasurementValue("sg", og)}` : null,
-    fg !== null ? `≈ beregnet FG ${formatMeasurementValue("sg", fg)}` : null,
+    summary.og !== null ? `${summary.og.source === "recipe" ? "oppskriftsmål" : "≈ beregnet"} OG ${formatMeasurementValue("sg", summary.og.value)}` : null,
+    summary.fg !== null ? `${summary.fg.source === "recipe" ? "oppskriftsmål" : "≈ beregnet"} FG ${formatMeasurementValue("sg", summary.fg.value)}` : null,
+    summary.strikeVolumeL ? `${quantity(summary.strikeVolumeL, "L")} innmeskingsvann` : null,
+    summary.spargeVolumeL ? `${quantity(summary.spargeVolumeL, "L")} skyllevann` : null,
+    summary.spargeTemperatureC ? `${quantity(summary.spargeTemperatureC, "°C")} skyllevanntemperatur` : null,
+    summary.preBoilVolumeL ? `${quantity(summary.preBoilVolumeL, "L")} før kok` : null,
   ].filter(Boolean);
-  return `- Plan: ${figures.join(", ")}.`;
+  const assumptions = summary.assumptions.map((assumption) => `${assumption.label} ≈ antatt ${num(assumption.value, 2)} ${assumption.unit}`);
+  return [`- Plan: ${figures.join(", ")}.`, assumptions.length > 0 ? `- Antakelser (ikke kalibrert): ${assumptions.join("; ")}.` : null].filter(Boolean).join("\n");
 }
 
 export function buildAssistantBrief(input: BrewDocumentInput, sections = buildBrewDocumentSections(input)): string {

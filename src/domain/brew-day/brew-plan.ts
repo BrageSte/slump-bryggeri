@@ -1,6 +1,6 @@
-import { calculateStrikeTemperature, calculateWaterVolumes, expectedGravities, type WaterVolumeResult } from "../brewing-calculations/index.ts";
+import { calculateStrikeTemperature, calculateWaterVolumes, expectedGravities, pointsToSg, sgToPoints, type WaterVolumeResult } from "../brewing-calculations/index.ts";
 import { brewStages, type BrewStage, type IngredientKind } from "../model/brewing.ts";
-import { profileValue, type ProfileValues } from "../model/equipment-profile.ts";
+import { getProfileParameter, type ProfileValueSources, type ProfileValues } from "../model/equipment-profile.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 
 /**
@@ -8,16 +8,33 @@ import type { RecipeDocument } from "../model/recipe.ts";
  * equipment snapshot. Unlike the stage view it covers every phase at once, so the brewer
  * heating strike water can already see mash temperatures, hop amounts and pitch temperature.
  *
- * Values stated by the recipe (or its import source) are `recipe`; values the app derives
- * from the equipment profile via `brewing-calculations` are `calculated` and must be shown
- * as such. Nothing is invented: a value neither source can give is simply absent.
+ * Values stated by the recipe (or its import source) are `recipe`; values derived from explicit
+ * profile values are `calculated`; documented defaults are `assumed` and always name their basis.
  */
 
-export type PlanSource = "recipe" | "calculated";
+export type PlanSource = "recipe" | "calculated" | "assumed";
+
+export interface PlanAssumption {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  explanation: string;
+  measureToReplace: string;
+}
 
 export interface PlanQuantity {
   value: number;
   source: PlanSource;
+  /** Labels of assumed profile values that affect this quantity. */
+  assumptions?: string[];
+}
+
+/** Short, comma-joined display of assumption labels, collapsing extras to "+N". */
+export function assumptionNames(labels: string[] | undefined): string {
+  if (!labels || labels.length === 0) return "";
+  const shown = labels.slice(0, 2).join(", ");
+  return labels.length > 2 ? `${shown} +${labels.length - 2}` : shown;
 }
 
 export interface PlanAddition {
@@ -41,6 +58,7 @@ export interface BrewPlanItem {
   durationMin?: number;
   durationDays?: number;
   volumeL?: PlanQuantity;
+  gravitySg?: PlanQuantity;
   amount?: { value: number; unit: string };
   variant?: string;
   note?: string;
@@ -65,17 +83,19 @@ export interface BrewPlanSummary {
   mashTemperatureC?: number;
   mashDurationMin?: number;
   spargeVolumeL?: PlanQuantity;
-  spargeTemperatureC?: number;
+  spargeTemperatureC?: PlanQuantity;
   preBoilVolumeL?: PlanQuantity;
+  preBoilSg?: PlanQuantity;
+  postBoilVolumeL?: PlanQuantity;
   boilTimeMin: number;
   grainKg: number;
   hopTotalG: number;
   dryHopTotalG: number;
   pitchTemperatureC?: number;
-  og: number | null;
-  fg: number | null;
-  /** Water volumes need the boil-off rate, which the batch's equipment snapshot lacks. */
-  waterVolumesNeedBoilOff: boolean;
+  og: PlanQuantity | null;
+  fg: PlanQuantity | null;
+  assumptions: PlanAssumption[];
+  waterVolumesUseAssumptions: boolean;
 }
 
 export interface BrewPlan {
@@ -86,6 +106,8 @@ export interface BrewPlan {
 export interface BrewPlanInput {
   recipe: RecipeDocument;
   equipment: ProfileValues;
+  /** Source metadata is frozen with the batch; older snapshots infer explicit values as profile values. */
+  equipmentSources?: ProfileValueSources;
   /** Ingredient ids already registered as added or pitched. */
   doneIngredientIds?: ReadonlySet<string>;
 }
@@ -105,64 +127,170 @@ export const brewPlanPhaseLabels: Record<BrewPlanPhaseKey, string> = {
 };
 
 const recipe = (value: number): PlanQuantity => ({ value, source: "recipe" });
-const calculated = (value: number): PlanQuantity => ({ value, source: "calculated" });
+
+interface ResolvedProfileValue {
+  value?: number;
+  source: "calculated" | "assumed" | null;
+  assumption?: PlanAssumption;
+}
+
+function profileSetting(equipment: ProfileValues, sources: ProfileValueSources | undefined, key: keyof ProfileValues): ResolvedProfileValue {
+  const parameter = getProfileParameter(key);
+  const value = equipment[key];
+  const source = sources?.[key];
+  const assumed = source === "default" || value === undefined;
+  if (assumed && parameter?.defaultValue !== undefined) {
+    return {
+      value: value ?? parameter.defaultValue,
+      source: "assumed",
+      assumption: {
+        key,
+        label: parameter.label,
+        value: value ?? parameter.defaultValue,
+        unit: parameter.unit,
+        explanation: parameter.defaultExplanation ?? `Standardverdien ${parameter.defaultValue} ${parameter.unit} brukes fordi verdien ikke er kalibrert.`,
+        measureToReplace: parameter.measureToReplaceDefault ?? `Mål ${parameter.label.toLowerCase()} under bryggingen.`,
+      },
+    };
+  }
+  return value === undefined ? { source: null } : { value, source: "calculated" };
+}
+
+function quantityFrom(value: number, ...settings: ResolvedProfileValue[]): PlanQuantity {
+  const assumptions = [...new Set(settings.flatMap((setting) => setting.assumption ? [setting.assumption.label] : []))];
+  return { value, source: assumptions.length > 0 ? "assumed" : "calculated", assumptions: assumptions.length > 0 ? assumptions : undefined };
+}
+
+function assumptionsFrom(settings: ResolvedProfileValue[]): PlanAssumption[] {
+  return [...new Map(settings.flatMap((setting) => setting.assumption ? [[setting.assumption.key, setting.assumption] as const] : [])).values()];
+}
+
+function sourceFrom(inputs: PlanQuantity[]): PlanSource {
+  if (inputs.some((input) => input.source === "assumed")) return "assumed";
+  if (inputs.every((input) => input.source === "recipe")) return "recipe";
+  return "calculated";
+}
 
 /** Grain and adjuncts that go into the mash; sugars and extracts do not absorb water. */
 function mashedGrainKg(doc: RecipeDocument): number {
   return doc.fermentables.filter((f) => f.type === "grain" || f.type === "adjunct").reduce((sum, f) => sum + f.amountKg, 0);
 }
 
-function plannedWater(doc: RecipeDocument, equipment: ProfileValues, grainKg: number): WaterVolumeResult | null {
-  const boilOffLPerH = equipment.boil_off_l_per_h;
-  if (boilOffLPerH === undefined || grainKg <= 0) return null;
-  return calculateWaterVolumes({
+interface PlannedWater {
+  result: WaterVolumeResult;
+  source: PlanSource;
+  settings: ResolvedProfileValue[];
+}
+
+function plannedWater(doc: RecipeDocument, equipment: ProfileValues, sources: ProfileValueSources | undefined, grainKg: number): PlannedWater | null {
+  if (grainKg <= 0) return null;
+  const keys = [
+    "boil_off_l_per_h",
+    "grain_absorption_l_per_kg",
+    "mash_thickness_l_per_kg",
+    "mash_dead_space_l",
+    "pump_pipe_loss_l",
+    "kettle_loss_l",
+    "chiller_loss_l",
+    "transfer_loss_l",
+    "cooling_shrinkage_pct",
+  ] as const;
+  const settings = keys.map((key) => profileSetting(equipment, sources, key));
+  const byKey = Object.fromEntries(keys.map((key, index) => [key, settings[index]])) as Record<(typeof keys)[number], ResolvedProfileValue>;
+  if (keys.some((key) => byKey[key].value === undefined)) return null;
+  const result = calculateWaterVolumes({
     batchVolumeL: doc.batchSizeL,
     grainKg,
     boilTimeMin: doc.boilTimeMin,
-    boilOffLPerH,
-    grainAbsorptionLPerKg: profileValue(equipment, "grain_absorption_l_per_kg") ?? 0.8,
-    mashThicknessLPerKg: profileValue(equipment, "mash_thickness_l_per_kg") ?? 3,
-    mashDeadSpaceL: profileValue(equipment, "mash_dead_space_l"),
-    pumpPipeLossL: profileValue(equipment, "pump_pipe_loss_l"),
-    kettleLossL: profileValue(equipment, "kettle_loss_l"),
-    chillerLossL: profileValue(equipment, "chiller_loss_l"),
-    transferLossL: profileValue(equipment, "transfer_loss_l"),
-    coolingShrinkagePct: profileValue(equipment, "cooling_shrinkage_pct"),
+    boilOffLPerH: byKey.boil_off_l_per_h.value!,
+    grainAbsorptionLPerKg: byKey.grain_absorption_l_per_kg.value!,
+    mashThicknessLPerKg: byKey.mash_thickness_l_per_kg.value!,
+    mashDeadSpaceL: byKey.mash_dead_space_l.value,
+    pumpPipeLossL: byKey.pump_pipe_loss_l.value,
+    kettleLossL: byKey.kettle_loss_l.value,
+    chillerLossL: byKey.chiller_loss_l.value,
+    transferLossL: byKey.transfer_loss_l.value,
+    coolingShrinkagePct: byKey.cooling_shrinkage_pct.value,
   });
+  return { result, source: settings.some((setting) => setting.source === "assumed") ? "assumed" : "calculated", settings };
 }
 
-export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new Set() }: BrewPlanInput): BrewPlan {
+export function buildBrewPlan({ recipe: doc, equipment, equipmentSources, doneIngredientIds = new Set() }: BrewPlanInput): BrewPlan {
   const grainKg = mashedGrainKg(doc);
-  const water = plannedWater(doc, equipment, grainKg);
+  const planned = plannedWater(doc, equipment, equipmentSources, grainKg);
+  const water = planned?.result ?? null;
+  const spargeSetting = profileSetting(equipment, equipmentSources, "sparge_temperature_c");
+  const grainTemperatureSetting = profileSetting(equipment, equipmentSources, "grain_temperature_c");
+  const strikeOffsetSetting = profileSetting(equipment, equipmentSources, "strike_temp_offset_c");
+  const thicknessSetting = profileSetting(equipment, equipmentSources, "mash_thickness_l_per_kg");
   const firstMash = doc.mashSteps[0];
+  const planAssumptions = assumptionsFrom([
+    ...(planned?.settings ?? []),
+    ...(firstMash && firstMash.infusionTemperatureC === undefined ? [grainTemperatureSetting, strikeOffsetSetting] : []),
+    ...(doc.spargeTemperatureC === undefined && grainKg > 0 ? [spargeSetting] : []),
+  ]);
   const done = (id: string) => doneIngredientIds.has(id);
 
   // Strike water: the source's own plan wins; our calculation is the fallback.
   const strikeVolumeL = firstMash?.infusionL !== undefined
     ? recipe(firstMash.infusionL)
-    : water
-      ? calculated(water.mashWaterL)
+    : water && planned
+      ? quantityFrom(water.mashWaterL, ...planned.settings)
       : undefined;
   let strikeTemperatureC: PlanQuantity | undefined;
   if (firstMash?.infusionTemperatureC !== undefined) {
     strikeTemperatureC = recipe(firstMash.infusionTemperatureC);
   } else if (firstMash && grainKg > 0) {
-    const thickness = strikeVolumeL ? strikeVolumeL.value / grainKg : profileValue(equipment, "mash_thickness_l_per_kg") ?? 3;
-    strikeTemperatureC = calculated(
+    const thickness = strikeVolumeL ? strikeVolumeL.value / grainKg : thicknessSetting.value ?? 3;
+    const tempSettings = [
+      ...(strikeVolumeL?.source === "assumed" ? [thicknessSetting] : []),
+      grainTemperatureSetting,
+      strikeOffsetSetting,
+    ];
+    const tempSource = assumptionsFrom(tempSettings).length > 0 ? "assumed" : "calculated";
+    const tempAssumptions = assumptionsFrom(tempSettings).map((assumption) => assumption.label);
+    strikeTemperatureC = {
+      source: tempSource,
+      assumptions: tempAssumptions.length > 0 ? tempAssumptions : undefined,
+      value:
       calculateStrikeTemperature({
         targetMashTempC: firstMash.temperatureC,
-        grainTempC: profileValue(equipment, "grain_temperature_c") ?? 18,
+        grainTempC: grainTemperatureSetting.value ?? 18,
         mashThicknessLPerKg: thickness,
-        systemOffsetC: profileValue(equipment, "strike_temp_offset_c") ?? 0,
+        systemOffsetC: strikeOffsetSetting.value ?? 0,
       }).strikeTempC,
-    );
+    };
   }
 
   const infusedL = doc.mashSteps.reduce((sum, step) => sum + (step.infusionL ?? 0), 0);
-  const spargeVolumeL = water
-    ? calculated(infusedL > 0 && firstMash?.infusionL !== undefined ? Math.max(0, water.totalWaterL - infusedL) : water.spargeWaterL)
+  const spargeVolumeL = water && planned
+    ? quantityFrom(infusedL > 0 && firstMash?.infusionL !== undefined ? Math.max(0, water.totalWaterL - infusedL) : water.spargeWaterL, ...planned.settings)
     : undefined;
-  const preBoilVolumeL = water ? calculated(water.preBoilVolumeL) : undefined;
+  const preBoilVolumeL = water && planned ? quantityFrom(water.preBoilVolumeL, ...planned.settings) : undefined;
+  const postBoilVolumeL = water && planned ? quantityFrom(water.postBoilVolumeL, ...planned.settings) : undefined;
+  const { og: expectedOg, fg: expectedFg } = expectedGravities(doc);
+  const og = expectedOg === null
+    ? null
+    : { value: expectedOg, source: doc.targets.og !== undefined ? "recipe" as const : "calculated" as const };
+  const fg = expectedFg === null
+    ? null
+    : { value: expectedFg, source: doc.targets.fg !== undefined ? "recipe" as const : "calculated" as const };
+  const preBoilSg = og && preBoilVolumeL
+    ? {
+        value: pointsToSg((sgToPoints(og.value) * doc.batchSizeL) / preBoilVolumeL.value),
+        source: sourceFrom([og, preBoilVolumeL]),
+        assumptions: [...new Set(preBoilVolumeL.assumptions ?? [])],
+      }
+    : undefined;
+  const spargeTemperatureC = doc.spargeTemperatureC !== undefined
+    ? recipe(doc.spargeTemperatureC)
+    : grainKg > 0 && spargeSetting.value !== undefined
+      ? {
+          value: spargeSetting.value,
+          source: spargeSetting.source ?? "assumed",
+          assumptions: spargeSetting.assumption ? [spargeSetting.assumption.label] : undefined,
+        }
+      : undefined;
   const pitchStep = doc.fermentationSteps[0];
 
   const hopItem = (hop: RecipeDocument["hops"][number], timing?: string): BrewPlanItem => ({
@@ -219,16 +347,16 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
       done: false,
     });
   });
-  if (spargeVolumeL || doc.spargeTemperatureC !== undefined) {
+  if (spargeVolumeL || spargeTemperatureC) {
     waterItems.push({
       id: "water:sparge",
       title: "Skyllevann",
       volumeL: spargeVolumeL,
-      temperatureC: doc.spargeTemperatureC === undefined ? undefined : recipe(doc.spargeTemperatureC),
+      temperatureC: spargeTemperatureC,
       done: false,
     });
   }
-  if (water) waterItems.push({ id: "water:total", title: "Vann totalt", volumeL: calculated(water.totalWaterL), done: false });
+  if (water && planned) waterItems.push({ id: "water:total", title: "Vann totalt", volumeL: quantityFrom(water.totalWaterL, ...planned.settings), done: false });
 
   const mashItems: BrewPlanItem[] = [
     ...doc.mashSteps.map((step) => ({
@@ -247,10 +375,11 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
   ];
 
   const lauterItems: BrewPlanItem[] = [
-    ...(doc.spargeTemperatureC !== undefined
-      ? [{ id: "lauter:sparge", title: "Skyll", temperatureC: recipe(doc.spargeTemperatureC), volumeL: spargeVolumeL, done: false }]
+    ...(spargeTemperatureC || spargeVolumeL
+      ? [{ id: "lauter:sparge", title: "Skyll", temperatureC: spargeTemperatureC, volumeL: spargeVolumeL, done: false }]
       : []),
     ...(preBoilVolumeL ? [{ id: "lauter:pre-boil", title: "Volum før kok", volumeL: preBoilVolumeL, done: false }] : []),
+    ...(preBoilSg ? [{ id: "lauter:pre-boil-sg", title: "SG før kok", gravitySg: preBoilSg, done: false }] : []),
     ...hopsFor("first_wort").map((hop) => hopItem(hop, "First wort")),
   ];
 
@@ -328,7 +457,6 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
     { key: "packaging", stages: ["packaging"], items: packagingItems },
   ];
 
-  const { og, fg } = expectedGravities(doc);
   return {
     summary: {
       strikeVolumeL,
@@ -336,8 +464,10 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
       mashTemperatureC: firstMash?.temperatureC,
       mashDurationMin: doc.mashSteps.length > 0 ? doc.mashSteps.reduce((sum, step) => sum + step.durationMin, 0) : undefined,
       spargeVolumeL,
-      spargeTemperatureC: doc.spargeTemperatureC,
+      spargeTemperatureC,
       preBoilVolumeL,
+      preBoilSg,
+      postBoilVolumeL,
       boilTimeMin: doc.boilTimeMin,
       grainKg,
       hopTotalG: doc.hops.reduce((sum, hop) => sum + hop.amountG, 0),
@@ -345,7 +475,8 @@ export function buildBrewPlan({ recipe: doc, equipment, doneIngredientIds = new 
       pitchTemperatureC: pitchStep?.temperatureC,
       og,
       fg,
-      waterVolumesNeedBoilOff: water === null && grainKg > 0 && equipment.boil_off_l_per_h === undefined,
+      assumptions: planAssumptions,
+      waterVolumesUseAssumptions: planned?.source === "assumed",
     },
     phases: phases.filter((phase) => phase.items.length > 0 || (phase.key === "water" && grainKg > 0)),
   };

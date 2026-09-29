@@ -6,7 +6,7 @@ import {
   calculateStrikeTemperature,
   calculateWaterVolumes,
 } from "../../domain/brewing-calculations/index.ts";
-import { profileValue, type ProfileValues } from "../../domain/model/equipment-profile.ts";
+import { getProfileParameter, profileValue, type ProfileValueSources, type ProfileValues } from "../../domain/model/equipment-profile.ts";
 import { Button, Card, ErrorState, Field, InlineError, LoadingState, PageHeader, parseDecimal, Section, SectionLabel, TextInput, useToast } from "../../design-system/index.ts";
 import { formatAmount, formatNumber, formatSg } from "../../lib/format.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
@@ -37,6 +37,7 @@ export function AdaptRecipePage() {
   if (recipe.error || profile.error) return <ErrorState error={recipe.error ?? profile.error} />;
 
   const values = Object.fromEntries(Object.entries(profile.data?.values ?? {}).map(([k, v]) => [k, v.value])) as ProfileValues;
+  const sources = Object.fromEntries(Object.entries(profile.data?.values ?? {}).map(([k, v]) => [k, v.source])) as ProfileValueSources;
   return (
     <Adapt
       recipeId={recipe.data.id}
@@ -44,6 +45,7 @@ export function AdaptRecipePage() {
       original={recipe.data.current.data}
       profileVersion={profile.data?.version ?? null}
       values={values}
+      sources={sources}
     />
   );
 }
@@ -54,12 +56,14 @@ function Adapt({
   original,
   profileVersion,
   values,
+  sources,
 }: {
   recipeId: string;
   baseVersionId: string;
   original: Parameters<typeof calculateRecipeScaling>[0];
   profileVersion: number | null;
   values: ProfileValues;
+  sources: ProfileValueSources;
 }) {
   const { breweryName } = useBrewery();
   const save = useSaveRecipeVersion(recipeId);
@@ -86,9 +90,9 @@ function Adapt({
         })
       : null;
 
-  const boilOff = values.boil_off_l_per_h;
+  const boilOff = profileValue(values, "boil_off_l_per_h");
   const water =
-    scaled && after && boilOff !== undefined
+    scaled && after && after.totalFermentablesKg > 0 && boilOff !== undefined
       ? calculateWaterVolumes({
           batchVolumeL: scaled.recipe.batchSizeL,
           grainKg: after.totalFermentablesKg,
@@ -104,6 +108,30 @@ function Adapt({
           coolingShrinkagePct: profileValue(values, "cooling_shrinkage_pct"),
         })
       : null;
+
+  const waterKeys = [
+    "boil_off_l_per_h",
+    "grain_absorption_l_per_kg",
+    "mash_thickness_l_per_kg",
+    "mash_dead_space_l",
+    "pump_pipe_loss_l",
+    "kettle_loss_l",
+    "chiller_loss_l",
+    "transfer_loss_l",
+    "cooling_shrinkage_pct",
+  ] as const;
+  const waterAssumptions = waterKeys.flatMap((key) => {
+    const parameter = getProfileParameter(key);
+    return parameter && (sources[key] === "default" || (values[key] === undefined && parameter.defaultValue !== undefined)) ? [parameter] : [];
+  });
+  const waterSource = waterAssumptions.length > 0
+    ? `≈ antatt (${waterAssumptions.map((parameter) => parameter.label).join(", ")})`
+    : "≈ beregnet";
+  const strikeAssumptions = (["grain_temperature_c", "mash_thickness_l_per_kg", "strike_temp_offset_c"] as const)
+    .flatMap((key) => {
+      const parameter = getProfileParameter(key);
+      return parameter && (sources[key] === "default" || (values[key] === undefined && parameter.defaultValue !== undefined)) ? [parameter.label] : [];
+    });
 
   function saveAdaptation() {
     if (!scaled) return;
@@ -162,6 +190,9 @@ function Adapt({
             <Card>
               <SectionLabel>Innmeskingstemperatur</SectionLabel>
               <p className="tabular text-display font-bold">
+                <span className="mr-2 text-small font-semibold text-muted">
+                  {strikeAssumptions.length > 0 ? `≈ antatt (${strikeAssumptions.join(", ")})` : "≈ beregnet"}
+                </span>
                 {formatNumber(strike.strikeTempC, 1)}
                 <span className="ml-1 text-section text-muted">°C</span>
               </p>
@@ -189,18 +220,29 @@ function Adapt({
           <Card>
             <SectionLabel>Vannvolumer</SectionLabel>
             {water ? (
-              <dl className="tabular mt-2 grid grid-cols-[1fr_auto] gap-y-1.5">
-                <dt className="text-muted">Meskevann</dt>
-                <dd className="font-semibold">{formatNumber(water.mashWaterL, 1)} L</dd>
-                <dt className="text-muted">Skyllevann</dt>
-                <dd className="font-semibold">{formatNumber(water.spargeWaterL, 1)} L</dd>
-                <dt className="text-muted">Før kok</dt>
-                <dd className="font-semibold">{formatNumber(water.preBoilVolumeL, 1)} L</dd>
-                <dt className="text-muted">Etter kok (varmt)</dt>
-                <dd className="font-semibold">{formatNumber(water.postBoilVolumeL, 1)} L</dd>
-              </dl>
+              <div>
+                <dl className="tabular mt-2 grid grid-cols-[1fr_auto] gap-y-1.5">
+                  <dt className="text-muted">Meskevann</dt>
+                  <dd className="font-semibold">{waterSource} {formatNumber(water.mashWaterL, 1)} L</dd>
+                  <dt className="text-muted">Skyllevann</dt>
+                  <dd className="font-semibold">{waterSource} {formatNumber(water.spargeWaterL, 1)} L</dd>
+                  <dt className="text-muted">Før kok</dt>
+                  <dd className="font-semibold">{waterSource} {formatNumber(water.preBoilVolumeL, 1)} L</dd>
+                  <dt className="text-muted">Etter kok (varmt)</dt>
+                  <dd className="font-semibold">{waterSource} {formatNumber(water.postBoilVolumeL, 1)} L</dd>
+                </dl>
+                {waterAssumptions.length > 0 && (
+                  <ul className="mt-3 space-y-2 text-small text-muted">
+                    {waterAssumptions.map((parameter) => (
+                      <li key={parameter.key}>
+                        {parameter.label}: {parameter.defaultExplanation ?? "Standardverdi fordi kalibrering mangler."} {parameter.measureToReplaceDefault ?? "Mål verdien under bryggingen."}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             ) : (
-              <p className="mt-1 text-small text-muted">Legg inn fordampning (L/t) under Mer → Kalibrering for å beregne vannvolumer.</p>
+              <p className="mt-1 text-small text-muted">Vannvolumer krever meskede råvarer i oppskriften.</p>
             )}
           </Card>
 
