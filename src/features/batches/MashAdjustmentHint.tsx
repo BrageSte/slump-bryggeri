@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { BrewDayLogEntry } from "../../domain/brew-day/state.ts";
 import { suggestMashTemperatureAdjustment } from "../../domain/brew-day/mash-adjustment.ts";
-import type { ProfileValues } from "../../domain/model/equipment-profile.ts";
+import type { ProfileValueSources, ProfileValues } from "../../domain/model/equipment-profile.ts";
 import type { RecipeDocument } from "../../domain/model/recipe.ts";
 import type { BrewStage } from "../../domain/model/brewing.ts";
 import { Button } from "../../design-system/index.ts";
@@ -10,6 +10,7 @@ import { formatNumber, formatTime } from "../../lib/format.ts";
 export function MashAdjustmentHint({
   recipe,
   equipment,
+  equipmentSources,
   log,
   stage,
   stageStartedAt,
@@ -19,6 +20,7 @@ export function MashAdjustmentHint({
 }: {
   recipe: RecipeDocument;
   equipment: ProfileValues;
+  equipmentSources?: ProfileValueSources;
   log: readonly BrewDayLogEntry[];
   stage: BrewStage | null;
   stageStartedAt: number | null;
@@ -27,7 +29,7 @@ export function MashAdjustmentHint({
   busy: boolean;
 }) {
   const [chosenTemperatureC, setChosenTemperatureC] = useState<number | null>(null);
-  const input = { recipe, equipment, log, stage, stageStartedAt, now };
+  const input = { recipe, equipment, equipmentSources, log, stage, stageStartedAt, now };
   const baseline = suggestMashTemperatureAdjustment(input);
   if ("waterAddedAt" in baseline) {
     return (
@@ -77,7 +79,7 @@ export function MashAdjustmentHint({
         ))}
       </div>
       <p className="text-small text-muted">
-        Antar {mashWater} L meskevann ({suggestion.mashWaterSource === "recipe" ? "fra oppskriften" : "≈ beregnet"}) og {grain} kg korn.
+        {suggestion.mashWaterSource === "measured" ? "Bruker loggført" : suggestion.mashWaterSource === "recipe" ? "Bruker oppskriftens" : suggestion.mashWaterSource === "assumed" ? `Bruker antatt${suggestion.mashWaterAssumptions?.length ? ` (${suggestion.mashWaterAssumptions.join(", ")})` : ""}` : "Bruker beregnet"} {mashWater} L meskevann og {grain} kg korn.
         Varmetap i meskekaret er ikke medregnet.
       </p>
       <Button variant="primary" onClick={() => onAddWater(suggestion.additionL, suggestion.additionTempC)} loading={busy}>

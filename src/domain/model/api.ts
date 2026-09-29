@@ -11,7 +11,7 @@ import {
   type MeasurementKind,
 } from "./brewing.ts";
 import { BSMX_MAX_BYTES, type BsmxSourceData } from "../import/bsmx.ts";
-import { equipmentKinds, type ProfileValues } from "./equipment-profile.ts";
+import { equipmentKinds, type ProfileValueSources, type ProfileValues } from "./equipment-profile.ts";
 import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
 import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
 
@@ -303,7 +303,7 @@ export interface BatchSplit {
 export interface BatchDetail extends BatchSummary {
   recipeVersion: { id: string; version: number };
   recipeSnapshot: RecipeDocument;
-  equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues };
+  equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues; sources?: ProfileValueSources };
   splits: BatchSplit[];
   outcomes: BatchOutcome[];
 }

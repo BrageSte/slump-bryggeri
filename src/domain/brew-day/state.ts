@@ -1,4 +1,4 @@
-import { brixToSg, expectedGravities } from "../brewing-calculations/index.ts";
+import { brixToSg, calculateBoilOffRate, forecastBoilEnd } from "../brewing-calculations/index.ts";
 import {
   brewStageLabels,
   brewStages,
@@ -10,7 +10,8 @@ import {
   type MeasurementKind,
 } from "../model/brewing.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
-import { registeredIngredientIds } from "./brew-plan.ts";
+import type { ProfileValueSources, ProfileValues } from "../model/equipment-profile.ts";
+import { buildBrewPlan, registeredIngredientIds, type PlanQuantity, type PlanSource } from "./brew-plan.ts";
 
 /**
  * Derives what the brew-day screen should show — current step, targets vs. measured values,
@@ -27,7 +28,7 @@ export interface BrewDayLogEntry {
   splitId?: string | null;
   occurredAt: number;
   data: Record<string, unknown> | null;
-  measurement: { kind: MeasurementKind; value: number; valueMin?: number | null; valueMax?: number | null } | null;
+  measurement: { kind: MeasurementKind; value: number; valueMin?: number | null; valueMax?: number | null; label?: string | null } | null;
 }
 
 export type TargetValue = { kind: "value"; value: number } | { kind: "range"; min: number; max: number };
@@ -39,8 +40,24 @@ export interface StageTarget {
   label: string;
   target: TargetValue;
   unit: string;
-  actual: { value: number; occurredAt: number; valueMin?: number; valueMax?: number; derivedFrom?: "brix" } | null;
+  source?: PlanSource;
+  assumptions?: string[];
+  actual: { value: number; occurredAt: number; valueMin?: number; valueMax?: number; derivedFrom?: "brix"; label?: string } | null;
   status: TargetStatus;
+}
+
+export interface BrewForecastValue {
+  value: number;
+  source: PlanSource | "measured";
+  assumptions?: string[];
+  basis?: string;
+}
+
+export interface BrewDayForecast {
+  postBoilVolumeL: BrewForecastValue;
+  postBoilOg: BrewForecastValue | null;
+  plannedPostBoilVolumeL?: PlanQuantity;
+  plannedOg: PlanQuantity | null;
 }
 
 export interface PlannedAddition {
@@ -80,6 +97,7 @@ export interface BrewDayState {
   step: StageStep | null;
   fermentationDay: number | null;
   targets: StageTarget[];
+  forecast: BrewDayForecast | null;
   additions: PlannedAddition[];
   nextAction: NextAction | null;
 }
@@ -92,6 +110,8 @@ export interface BrewDayInput {
   now: number;
   /** Refractometer wort correction factor from the equipment snapshot. */
   wcf?: number;
+  equipment?: ProfileValues;
+  equipmentSources?: ProfileValueSources;
   completed?: boolean;
 }
 
@@ -102,6 +122,7 @@ const DEFAULT_WHIRLPOOL_MIN = 20;
 
 export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
   const { recipe, stage, now } = input;
+  const wcf = input.wcf ?? 1;
   const log = [...input.log].sort((a, b) => a.occurredAt - b.occurredAt);
 
   if (input.completed) {
@@ -112,6 +133,7 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
       step: null,
       fermentationDay: null,
       targets: [],
+      forecast: null,
       additions: [],
       nextAction: null,
     };
@@ -125,6 +147,7 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
       step: null,
       fermentationDay: null,
       targets: [],
+      forecast: null,
       additions: [],
       nextAction: { kind: "start_stage", stage: "mash", label: startStageLabels.mash },
     };
@@ -146,11 +169,13 @@ export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
       : null;
 
   const additions = plannedAdditions(recipe, stage, elapsedMin ?? 0, fermentationDay, doneIngredients);
-  const targets = stageTargets(input, log, stage, stageStartedAt);
+  const plan = buildBrewPlan({ recipe, equipment: input.equipment ?? {}, equipmentSources: input.equipmentSources });
+  const targets = stageTargets(input, log, stage, stageStartedAt, plan);
+  const forecast = deriveBoilForecast({ input, log, plan, wcf, elapsedMin, stageStartedAt });
   const step = stageStep(recipe, stage, elapsedMin, fermentationDay, stageStartedAt);
   const nextAction = chooseNextAction(recipe, stage, additions, log, elapsedMin ?? 0, now);
 
-  return { stage, stageStartedAt, elapsedMin, step, fermentationDay, targets, additions, nextAction };
+  return { stage, stageStartedAt, elapsedMin, step, fermentationDay, targets, forecast, additions, nextAction };
 }
 
 function stageIndex(stage: BrewStage): number {
@@ -329,6 +354,7 @@ function stageTargets(
   log: BrewDayLogEntry[],
   stage: BrewStage,
   stageStartedAt: number | null,
+  plan: ReturnType<typeof buildBrewPlan>,
 ): StageTarget[] {
   const { recipe } = input;
   const wcf = input.wcf ?? 1;
@@ -344,6 +370,8 @@ function stageTargets(
     label: string,
     target: TargetValue | null,
     actual: StageTarget["actual"],
+    source?: PlanSource,
+    assumptions?: string[],
   ) => {
     if (target === null) return;
     targets.push({
@@ -352,6 +380,8 @@ function stageTargets(
       label,
       target,
       unit: measurementKindSpecs[measurementKind].unit ?? "",
+      source,
+      assumptions,
       actual,
       status: actual === null ? "missing" : compareMeasurementToTarget(measurementKind, target, actual),
     });
@@ -363,13 +393,14 @@ function stageTargets(
           valueMin: entry.measurement.valueMin ?? undefined,
           valueMax: entry.measurement.valueMax ?? undefined,
           occurredAt: entry.occurredAt,
+          label: entry.measurement.label ?? undefined,
         }
       : null;
 
   switch (stage) {
     case "mash": {
       const step = currentMashStep(recipe, stageStartedAt === null ? 0 : (input.now - stageStartedAt) / MINUTE);
-      add("mash-temp", "temperature", "Mesketemperatur", step ? { kind: "value", value: step.temperatureC } : null, actualOf(latest(inStage, "temperature")));
+      add("mash-temp", "temperature", "Mesketemperatur", step ? { kind: "value", value: step.temperatureC } : null, actualOf(latest(inStage, "temperature")), "recipe");
       add(
         "mash-ph",
         "ph",
@@ -380,6 +411,8 @@ function stageTargets(
           max: recipe.targets.mashPhMax ?? DEFAULT_MASH_PH.max,
         },
         actualOf(latest(inStage, "ph")),
+        recipe.targets.mashPhMin !== undefined || recipe.targets.mashPhMax !== undefined ? "recipe" : "assumed",
+        recipe.targets.mashPhMin !== undefined || recipe.targets.mashPhMax !== undefined ? undefined : ["typisk meske-pH 5,2–5,4"],
       );
       break;
     }
@@ -388,9 +421,15 @@ function stageTargets(
         "sparge-temp",
         "temperature",
         "Skyllevann",
-        recipe.spargeTemperatureC === undefined ? null : { kind: "value", value: recipe.spargeTemperatureC },
+        plan.summary.spargeTemperatureC ? { kind: "value", value: plan.summary.spargeTemperatureC.value } : null,
         actualOf(latest(inStage, "temperature")),
+        plan.summary.spargeTemperatureC?.source,
+        plan.summary.spargeTemperatureC?.assumptions,
       );
+      addPreBoilTargets(add, log, plan, wcf);
+      break;
+    case "boil":
+      addPreBoilTargets(add, log, plan, wcf);
       break;
     case "whirlpool": {
       const temp = recipe.hops.find((h) => h.use === "whirlpool" && h.temperatureC !== undefined)?.temperatureC;
@@ -400,6 +439,7 @@ function stageTargets(
         "Whirlpool",
         temp === undefined ? null : { kind: "value", value: temp },
         actualOf(latest(inStage, "temperature")),
+        "recipe",
       );
       break;
     }
@@ -411,12 +451,13 @@ function stageTargets(
         "Temperatur ved gjærtilsetning",
         temperatureTarget(pitch?.temperatureC, pitch?.temperatureMaxC),
         actualOf(latest(inStage, "temperature")),
+        "recipe",
       );
-      const { og } = expectedGravities(recipe);
+      const og = plan.summary.og;
       const postBoil = log.filter(
         (e) => e.stage !== null && stageIndex(e.stage) >= stageIndex("boil") && stageIndex(e.stage) <= stageIndex("cooling"),
       );
-      add("og", "sg", "OG", og === null ? null : { kind: "value", value: round3(og) }, latestGravity(postBoil, wcf));
+      add("og", "sg", "OG", og === null ? null : { kind: "value", value: round3(og.value) }, latestGravity(postBoil, wcf), og?.source);
       break;
     }
     // Fermentation is summarized per variant in fermentation.ts; gravity is not judged against the FG
@@ -427,6 +468,191 @@ function stageTargets(
   return targets;
 }
 
+function addPreBoilTargets(
+  add: (
+    key: string,
+    measurementKind: MeasurementKind,
+    label: string,
+    target: TargetValue | null,
+    actual: StageTarget["actual"],
+    source?: PlanSource,
+    assumptions?: string[],
+  ) => void,
+  log: BrewDayLogEntry[],
+  plan: ReturnType<typeof buildBrewPlan>,
+  wcf: number,
+) {
+  const candidates = log.filter((entry) =>
+    entry.measurement &&
+    (entry.stage === "lauter" || entry.stage === "boil") &&
+    (entry.splitId === undefined || entry.splitId === null),
+  );
+  const volumeEntries = candidates.filter((entry) => entry.measurement?.kind === "volume");
+  const explicitPreBoil = volumeEntries.filter((entry) => /pre.?boil|før kok|før koking/i.test(entry.measurement?.label ?? ""));
+  const preBoilVolume = explicitPreBoil.at(-1) ?? volumeEntries.find((entry) => entry.stage === "lauter") ?? volumeEntries[0];
+  const gravityEntries = candidates.filter((entry) =>
+    (entry.measurement?.kind === "sg" || entry.measurement?.kind === "brix") &&
+    (entry.stage === "lauter" || /pre.?boil|før kok|før koking/i.test(entry.measurement.label ?? "")),
+  );
+  const explicitPreGravity = gravityEntries.filter((entry) => /pre.?boil|før kok|før koking/i.test(entry.measurement?.label ?? ""));
+  const preBoilGravity = explicitPreGravity.at(-1) ?? gravityEntries.at(-1);
+
+  const volumeTarget = plan.summary.preBoilVolumeL;
+  if (volumeTarget) {
+    add(
+      "pre-boil-volume",
+      "volume",
+      "Volum før kok",
+      { kind: "value", value: volumeTarget.value },
+      volumeActual(preBoilVolume),
+      volumeTarget.source,
+      volumeTarget.assumptions,
+    );
+  }
+  const gravityTarget = plan.summary.preBoilSg;
+  if (gravityTarget) {
+    const actual = preBoilGravity?.measurement
+      ? preBoilGravity.measurement.kind === "sg"
+        ? { value: preBoilGravity.measurement.value, occurredAt: preBoilGravity.occurredAt, label: preBoilGravity.measurement.label ?? undefined }
+        : { value: round3(brixToSg(preBoilGravity.measurement.value, wcf)), occurredAt: preBoilGravity.occurredAt, derivedFrom: "brix" as const, label: preBoilGravity.measurement.label ?? undefined }
+      : null;
+    add(
+      "pre-boil-gravity",
+      "sg",
+      "SG før kok",
+      { kind: "value", value: round3(gravityTarget.value) },
+      actual,
+      gravityTarget.source,
+      gravityTarget.assumptions,
+    );
+  }
+}
+
+function volumeActual(entry: BrewDayLogEntry | undefined): StageTarget["actual"] {
+  return entry?.measurement?.kind === "volume"
+    ? { value: entry.measurement.value, occurredAt: entry.occurredAt, label: entry.measurement.label ?? undefined }
+    : null;
+}
+
+function deriveBoilForecast(input: {
+  input: BrewDayInput;
+  log: BrewDayLogEntry[];
+  plan: ReturnType<typeof buildBrewPlan>;
+  wcf: number;
+  elapsedMin: number | null;
+  stageStartedAt: number | null;
+}): BrewDayForecast | null {
+  const wholeBatch = input.log.filter((entry) => entry.splitId === undefined || entry.splitId === null);
+  const labeledPreBoil = (entry: BrewDayLogEntry) => /pre.?boil|før kok|før koking/i.test(entry.measurement?.label ?? "");
+  const labeledPostBoil = (entry: BrewDayLogEntry) => /post.?boil|etter kok|etter koking/i.test(entry.measurement?.label ?? "");
+  const volumes = wholeBatch.filter((entry) => entry.measurement?.kind === "volume");
+  const boilVolumes = volumes.filter((entry) => entry.stage === "boil");
+  const explicitPreBoil = volumes.filter(labeledPreBoil);
+  const preBoilEntry = explicitPreBoil.at(-1) ?? volumes.filter((entry) => entry.stage === "lauter").at(-1) ?? boilVolumes[0];
+  const postBoilGravity = latestGravity(
+    wholeBatch.filter((entry) =>
+      entry.stage === "whirlpool" || entry.stage === "cooling" ||
+      ((entry.stage === "boil") && /post.?boil|etter kok|etter koking/i.test(entry.measurement?.label ?? "")),
+    ),
+    input.wcf,
+  );
+  const measuredPostVolume = volumes.filter(labeledPostBoil).at(-1);
+  const preBoilGravityEntry = wholeBatch
+    .filter((entry) =>
+      entry.measurement &&
+      (entry.measurement.kind === "sg" || entry.measurement.kind === "brix") &&
+      (entry.stage === "lauter" || labeledPreBoil(entry)) &&
+      !labeledPostBoil(entry) &&
+      (!measuredPostVolume || entry.occurredAt <= measuredPostVolume.occurredAt),
+    )
+    .at(-1);
+  const hasPreBoilReading = preBoilEntry !== undefined || preBoilGravityEntry !== undefined;
+  if (!hasPreBoilReading) return null;
+
+  const plannedPreBoilVolume = input.plan.summary.preBoilVolumeL;
+  const preBoilVolumeL = preBoilEntry?.measurement?.value ?? plannedPreBoilVolume?.value;
+  const preBoilSg = preBoilGravityEntry?.measurement
+    ? preBoilGravityEntry.measurement.kind === "sg"
+      ? preBoilGravityEntry.measurement.value
+      : brixToSg(preBoilGravityEntry.measurement.value, input.wcf)
+    : input.plan.summary.preBoilSg?.value;
+  if (preBoilVolumeL === undefined) return null;
+
+  const boilOffAssumption = input.plan.summary.assumptions.find((assumption) => assumption.key === "boil_off_l_per_h");
+  const boilOffLPerH = input.input.equipment?.boil_off_l_per_h ?? boilOffAssumption?.value;
+  if (boilOffLPerH === undefined) return null;
+
+  const boilStart = input.input.stage === "boil" ? input.stageStartedAt ?? findStageStart(input.log, "boil") : findStageStart(input.log, "boil");
+  const pairForObservedRate = measuredPostVolume ?? boilVolumes.filter((entry) => preBoilEntry && entry.occurredAt > preBoilEntry.occurredAt).at(-1);
+  let observedBoilOffLPerH: number | undefined;
+  let currentVolumeL: number | undefined;
+  let remainingBoilMin: number | undefined;
+  if (preBoilEntry && pairForObservedRate?.measurement && pairForObservedRate.occurredAt > preBoilEntry.occurredAt) {
+    const durationMin = pairForObservedRate.stage === "boil"
+      ? Math.max(0, (pairForObservedRate.occurredAt - Math.max(preBoilEntry.occurredAt, boilStart ?? preBoilEntry.occurredAt)) / MINUTE)
+      : input.input.recipe.boilTimeMin;
+    if (durationMin > 0 && pairForObservedRate.measurement.value < preBoilEntry.measurement!.value) {
+      observedBoilOffLPerH = calculateBoilOffRate({
+        preBoilVolumeL: preBoilEntry.measurement!.value,
+        postBoilVolumeL: pairForObservedRate.measurement.value,
+        boilTimeMin: durationMin,
+      });
+      if (pairForObservedRate.stage === "boil") {
+        currentVolumeL = pairForObservedRate.measurement.value;
+        const elapsed = input.input.stage === "boil"
+          ? input.elapsedMin ?? (boilStart === null ? durationMin : (input.input.now - boilStart) / MINUTE)
+          : durationMin;
+        remainingBoilMin = Math.max(0, input.input.recipe.boilTimeMin - elapsed);
+      }
+    }
+  }
+
+  const volumeAssumptions = [
+    ...(!preBoilEntry ? plannedPreBoilVolume?.assumptions ?? [] : []),
+    ...(observedBoilOffLPerH === undefined && boilOffAssumption ? [boilOffAssumption.label] : []),
+  ];
+  const volumeForecast = forecastBoilEnd({
+    preBoilVolumeL,
+    preBoilSg: preBoilSg ?? 1.001,
+    boilOffLPerH,
+    boilTimeMin: input.input.recipe.boilTimeMin,
+    observedBoilOffLPerH,
+    currentVolumeL,
+    remainingBoilMin,
+  });
+  const postBoilVolumeL: BrewForecastValue = measuredPostVolume?.measurement
+    ? { value: measuredPostVolume.measurement.value, source: "measured", basis: "loggført volum etter kok" }
+    : {
+        value: volumeForecast.postBoilVolumeL,
+        source: volumeAssumptions.length > 0 ? "assumed" : "calculated",
+        assumptions: [...new Set(volumeAssumptions)],
+        basis: observedBoilOffLPerH === undefined ? "batchens fordampningsverdi" : "målt volumendring under kok",
+      };
+
+  let postBoilOg: BrewForecastValue | null = null;
+  if (postBoilGravity) {
+    postBoilOg = { value: postBoilGravity.value, source: "measured", basis: postBoilGravity.derivedFrom === "brix" ? "målt Brix etter kok" : "målt SG etter kok" };
+  } else if (preBoilSg !== undefined) {
+    const gravityAssumptions = [
+      ...(!preBoilGravityEntry ? input.plan.summary.preBoilSg?.assumptions ?? [] : []),
+      ...volumeAssumptions,
+    ];
+    postBoilOg = {
+      value: volumeForecast.postBoilSg,
+      source: gravityAssumptions.length > 0 ? "assumed" : "calculated",
+      assumptions: [...new Set(gravityAssumptions)],
+      basis: preBoilGravityEntry?.measurement?.kind === "brix" ? "målt Brix før kok" : preBoilGravityEntry ? "målt SG før kok" : "oppskriftens OG fortynnet til planlagt volum før kok",
+    };
+  }
+
+  return {
+    postBoilVolumeL,
+    postBoilOg,
+    plannedPostBoilVolumeL: input.plan.summary.postBoilVolumeL,
+    plannedOg: input.plan.summary.og,
+  };
+}
+
 function round3(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
@@ -435,7 +661,7 @@ function latestGravity(entries: BrewDayLogEntry[], wcf: number): StageTarget["ac
   const entry = entries.findLast((e) => e.measurement?.kind === "sg" || e.measurement?.kind === "brix");
   if (!entry?.measurement) return null;
   if (entry.measurement.kind === "sg") return { value: entry.measurement.value, occurredAt: entry.occurredAt };
-  return { value: round3(brixToSg(entry.measurement.value, wcf)), occurredAt: entry.occurredAt, derivedFrom: "brix" };
+  return { value: round3(brixToSg(entry.measurement.value, wcf)), occurredAt: entry.occurredAt, derivedFrom: "brix", label: entry.measurement.label ?? undefined };
 }
 
 function currentMashStep(recipe: RecipeDocument, elapsedMin: number) {

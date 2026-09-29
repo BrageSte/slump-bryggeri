@@ -182,11 +182,15 @@ Gjort 2026-09-28. Samlet **Bryggeplan** på bryggedagen (`src/domain/brew-day/br
 nøkkeltall (innmesking, mesk, skyllevann, kok, malt, humle, gjærtilsetting, OG → FG) og alle faser samtidig,
 med gjeldende fase uthevet og ferdige faser sammenfoldet. Den erstatter tilsetningskortet (ikke Neste), så ingenting
 vises dobbelt. «Tilsett» åpner det forhåndsutfylte tilsetningsarket; gjær registreres direkte. Vannmengder og
-innmeskingstemperatur tas fra oppskriften når kilden oppgir dem, ellers beregnet fra utstyrssnapshot og merket «≈».
-Mangler fordampning, sier planen det, og «Ny batch» varsler før profilen låses.
+innmeskingstemperatur tas fra oppskriften når kilden oppgir dem, ellers beregnet fra utstyrssnapshot. Manglende
+kalibrering bruker navngitte standardantakelser som «≈ antatt»; målinger under bryggingen erstatter prognosen.
 
 Samtidig: «Start gjæring» når all gjær er registrert, «Mål SG» (ikke «Sjekk gravity»), slettet batch navigerer
 videre, forsiden sier hva siste måling er, og en kallers bredde erstatter feltenes standardbredde (`fieldClasses`).
+
+Gjort 2026-09-29: Bryggeplanen gir nå alltid vannmengder fra maltmengde og dokumenterte standardverdier når
+profilen mangler kalibrering. Oppskrift, beregnet, antatt og målt vises med egne kilder; førkokmålinger oppdaterer
+volum- og OG-prognosen, og faktisk meskevann brukes i senere temperaturforslag.
 
 ### Steg 8 — Bryggedokument og bryggeassistent (B14) ✅
 

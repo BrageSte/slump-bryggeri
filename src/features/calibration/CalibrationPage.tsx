@@ -63,7 +63,7 @@ export function CalibrationPage() {
                     <div key={p.key} className="flex items-center gap-3 px-4 py-3">
                       <dt className="min-w-0 flex-1">
                         <span className="block">{p.label}</span>
-                        {"description" in p && <span className="block text-small text-muted">{p.description}</span>}
+                        {"description" in p && p.description ? <span className="block text-small text-muted">{p.description}</span> : "defaultExplanation" in p ? <span className="block text-small text-muted">{p.defaultExplanation}</span> : null}
                       </dt>
                       <dd className="tabular flex shrink-0 items-center gap-2 text-right">
                         {entry ? (
@@ -185,6 +185,7 @@ function ProfileForm({
               .map((p) => (
                 <label key={p.key} className="block space-y-1">
                   <span className="block text-small font-semibold">{p.label}</span>
+                  {"defaultExplanation" in p && <span className="block text-caption text-muted">{p.defaultExplanation}</span>}
                   <span className="relative block">
                     <input
                       inputMode="decimal"

@@ -106,6 +106,7 @@ export function LogSheet({
         <MeasurementInput
           key={intent.measurementKind + (intent.label ?? "") + (intent.splitId ?? "")}
           kind={intent.measurementKind}
+          label={intent.label}
           stage={stage}
           target={intent.target}
           previous={intent.previous}

@@ -11,7 +11,7 @@ export function NewBatchSheet({ open, onClose, recipeId: presetRecipeId }: { ope
   const createBatch = useCreateBatch();
   const profile = useEquipmentProfile();
   // The batch freezes today's profile, so point out what the brew plan will miss before it is locked.
-  const missingBoilOff = profile.data !== undefined && profile.data?.values.boil_off_l_per_h === undefined;
+  const assumedBoilOff = profile.data != null && (!profile.data.values.boil_off_l_per_h || profile.data.values.boil_off_l_per_h.source === "default");
   const navigate = useNavigate();
   const toast = useToast();
   const [recipeId, setRecipeId] = useState(presetRecipeId ?? "");
@@ -52,14 +52,15 @@ export function NewBatchSheet({ open, onClose, recipeId: presetRecipeId }: { ope
         <p className="text-small text-muted">
           Oppskriften og bryggeriets kalibrering låses i batchen. Senere endringer påvirker ikke dette brygget.
         </p>
-        {missingBoilOff && (
+        {assumedBoilOff && (
           <div className="flex gap-2 rounded-md border border-border bg-surface-2/50 p-3 text-small">
             <Icon name="alert" size={18} className="mt-0.5 shrink-0 text-muted" />
             <p>
-              Kalibreringen mangler fordampning, så bryggeplanen kan ikke regne ut vannmengder.{" "}
+              Vannplanen starter med antatt fordampning på 5 L/t. Mål volum før og etter kok, så regnes fordampningen ut. Du kan lagre målingen under{" "}
               <Link to="/mer/kalibrering" onClick={onClose} className="font-semibold text-primary-strong underline underline-offset-4">
-                Legg den inn først
+                Kalibrering
               </Link>
+              {" "}for neste batch.
             </p>
           </div>
         )}

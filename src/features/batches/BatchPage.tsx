@@ -115,6 +115,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         log,
         now,
         wcf: batch.equipmentSnapshot.values.refractometer_wcf,
+        equipment: batch.equipmentSnapshot.values,
+        equipmentSources: batch.equipmentSnapshot.sources,
         completed: batch.status === "completed",
       }),
     [batch, log, now],
@@ -127,7 +129,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   );
 
   const plan = useMemo(
-    () => buildBrewPlan({ recipe: batch.recipeSnapshot, equipment: batch.equipmentSnapshot.values, doneIngredientIds: registeredIngredientIds(log) }),
+    () => buildBrewPlan({ recipe: batch.recipeSnapshot, equipment: batch.equipmentSnapshot.values, equipmentSources: batch.equipmentSnapshot.sources, doneIngredientIds: registeredIngredientIds(log) }),
     [batch.recipeSnapshot, batch.equipmentSnapshot.values, log],
   );
   const documentNow = Math.floor(now / 30_000) * 30_000;
@@ -249,6 +251,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
               timeline={timeline}
               recipe={batch.recipeSnapshot}
               equipment={batch.equipmentSnapshot.values}
+              equipmentSources={batch.equipmentSnapshot.sources}
               log={log}
               now={now}
               onAddMashWater={logMashWater}
@@ -291,6 +294,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       {batch.status !== "completed" && (
         <BrewPlanOverview
           plan={plan}
+          forecast={state.forecast}
           currentStage={batch.currentStage}
           liveAdditions={state.additions}
           elapsedMin={state.elapsedMin}
@@ -394,6 +398,7 @@ function StageCard({
   timeline,
   recipe,
   equipment,
+  equipmentSources,
   log,
   now,
   onAddMashWater,
@@ -404,6 +409,7 @@ function StageCard({
   timeline: TimelineItem[];
   recipe: BatchDetail["recipeSnapshot"];
   equipment: ProfileValues;
+  equipmentSources: BatchDetail["equipmentSnapshot"]["sources"];
   log: BrewDayLogEntry[];
   now: number;
   onAddMashWater: (volumeL: number, temperatureC: number) => void;
@@ -459,7 +465,14 @@ function StageCard({
                     : formatMeasurement(target.measurementKind, target.actual.value)
                   : null}
                 status={target.status}
-                detail={target.actual?.derivedFrom === "brix" ? "fra Brix" : undefined}
+                detail={
+                  [
+                    target.actual?.derivedFrom === "brix" ? "fra Brix" : null,
+                    target.source === "recipe" ? "oppskrift/import" : null,
+                    target.source === "calculated" ? "≈ beregnet" : null,
+                    target.source === "assumed" ? "≈ antatt" : null,
+                  ].filter(Boolean).join(" · ") || undefined
+                }
                 action={
                   <Button
                     size="sm"
@@ -467,6 +480,7 @@ function StageCard({
                       onLog({
                         kind: "measurement",
                         measurementKind: target.measurementKind,
+                        label: target.label,
                         target: target.target,
                         previous: previousOf(target.measurementKind),
                       })
@@ -480,6 +494,7 @@ function StageCard({
                 <MashAdjustmentHint
                   recipe={recipe}
                   equipment={equipment}
+                  equipmentSources={equipmentSources}
                   log={log}
                   stage={state.stage}
                   stageStartedAt={state.stageStartedAt}

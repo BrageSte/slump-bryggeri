@@ -136,6 +136,17 @@ Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggeda
 hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
 enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
 
+### Bryggeplan og verdikilder
+
+Bryggeplanen skiller oppskriftsverdier, beregninger fra batchens profil og dokumenterte standardantakelser.
+Profilkilden (`default`, `manual` eller `calibration`) fryses sammen med profilverdiene i batchsnapshotet;
+eldre snapshots henter kilden fra den uforanderlige profilversjonen de peker på. En standardverdi vises som
+«≈ antatt» og sier hva som bør måles. Mangler boil-off, starter planen på 5 L/t — et moderat startanslag for
+60–100 L elektriske eller gassfyrte kokekar (omtrent 5–8 % av kjelens volum per time, avhengig av kjel og
+kokestyrke). Mål varmt volum før og etter kok for å erstatte anslaget. Meskevann, skyllevann, skylletemperatur
+og førkokvolum beregnes også når profilen er ufullstendig. Logget førkokvolum eller SG/Brix oppdaterer
+prognosen for volum og OG ved kokeslutt; to volummålinger under kok gir observert fordampningsrate.
+
 ### Timere og alarmer
 
 Timere er vanlige logghendelser: `timer_started` `{ label, durationMin, dueAt }` (serveren regner ut

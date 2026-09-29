@@ -72,7 +72,8 @@ describe("brew document", () => {
     expect(brief).toContain("## Status nå");
     expect(brief).toContain("Neste handling:");
     expect(brief).toContain("planlagt effektivitet");
-    expect(brief).toContain("≈ beregnet OG");
+    expect(brief).toContain("oppskriftsmål OG");
+    expect(brief).toContain("Antakelser (ikke kalibrert)");
     expect(brief).toContain(latestLogLine);
     expect(brief).toContain(`Loggen har ${timeline.length} oppføringer`);
   });
@@ -88,17 +89,48 @@ describe("brew document", () => {
     expect(doc.match(/^- \d\d\.\d\d\.\d{4}/gm)?.length).toBe(timeline.length);
   });
 
-  it("marks calculated values and never invents measurements", () => {
-    // Water volumes come from the equipment snapshot and are flagged as calculated.
-    expect(doc).toMatch(/Innmeskingsvann.*≈ [\d,]+ L/);
+  it("marks recipe, calculated and assumed values while keeping measurements separate", () => {
+    expect(doc).toContain("oppskrift/import = oppgitt verdi");
+    expect(doc).toMatch(/Innmeskingsvann.*≈ antatt/);
+    expect(doc).toContain("Antakelser brukt (ikke kalibrerte verdier)");
+    expect(doc).toContain("Logg meskevann og maltmengde når dere brygger.");
     // The pitch temperature target has no reading in this log and must say so.
-    expect(doc).toMatch(/gjærtilsetning: mål 18,0 °C, faktisk ikke målt → Ikke målt/);
+    expect(doc).toContain("Temperatur ved gjærtilsetning: mål 18,0 °C (oppskrift/import), faktisk ikke målt → Ikke målt");
     expect(doc).toContain("ikke registrert tilsatt");
   });
 
-  it("says so when the equipment cannot give water volumes", () => {
+  it("keeps water volumes available with named assumptions when the profile lacks boil-off", () => {
     const withoutBoilOff = buildBrewDocument({ batch: { ...batch, equipmentSnapshot: { ...batch.equipmentSnapshot, values: {} } }, timeline: [], now: 0 });
-    expect(withoutBoilOff).toContain("mangler fordampning");
+    expect(withoutBoilOff).toContain("Fordampning: 5 L/h");
+    expect(withoutBoilOff).toContain("≈ antatt");
+    expect(withoutBoilOff).not.toContain("Vannmengder kan ikke beregnes");
     expect(withoutBoilOff).toContain("Ingenting logget ennå");
+  });
+
+  it("labels recipe and calibrated-profile quantities separately", () => {
+    const values = {
+      boil_off_l_per_h: 13.2,
+      grain_absorption_l_per_kg: 0.8,
+      mash_thickness_l_per_kg: 3,
+      mash_dead_space_l: 0,
+      pump_pipe_loss_l: 0,
+      kettle_loss_l: 0,
+      chiller_loss_l: 0,
+      transfer_loss_l: 0,
+      cooling_shrinkage_pct: 4,
+      grain_temperature_c: 18,
+      strike_temp_offset_c: 0,
+      refractometer_wcf: 1,
+    };
+    const sources = Object.fromEntries(Object.keys(values).map((key) => [key, "calibration"])) as typeof batch.equipmentSnapshot.sources;
+    const calibratedDoc = buildBrewDocument({
+      batch: { ...batch, equipmentSnapshot: { ...batch.equipmentSnapshot, values, sources } },
+      timeline: [],
+      now: 0,
+    });
+
+    expect(calibratedDoc).toContain("Oppskriftsmål OG 1.061");
+    expect(calibratedDoc).toMatch(/Innmeskingsvann.*≈ [\d,]+ °C.*≈ [\d,]+ L/);
+    expect(calibratedDoc).not.toContain("Antakelser brukt (ikke kalibrerte verdier)");
   });
 });

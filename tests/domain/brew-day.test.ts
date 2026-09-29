@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { deriveBrewDayState, followingStage, type BrewDayLogEntry } from "../../src/domain/brew-day/state.ts";
 import { sunsetIpaBrewLog, sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
 import { commonPhStripIntervals, type BrewStage } from "../../src/domain/model/brewing.ts";
+import { emptyRecipe } from "../../src/domain/model/recipe.ts";
 
 const MIN = 60_000;
 const DAY = 86_400_000;
@@ -42,6 +43,78 @@ describe("deriveBrewDayState", () => {
     expect(ph?.target).toEqual({ kind: "range", min: 5.2, max: 5.4 });
     expect(ph?.status).toBe("missing");
     expect(state.nextAction).toMatchObject({ kind: "start_stage", stage: "lauter", label: "Start overføring" });
+  });
+
+  it("shows planned pre-boil volume and SG as loggable lauter targets only when a water plan exists", () => {
+    const planned = deriveBrewDayState({
+      recipe: sunsetIpaRecipe,
+      stage: "lauter",
+      stageStartedAt: t0,
+      log: [],
+      now: t0 + MIN,
+      equipment: {},
+    });
+    expect(planned.targets).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: "pre-boil-volume", measurementKind: "volume", label: "Volum før kok", status: "missing", source: "assumed" }),
+      expect.objectContaining({ key: "pre-boil-gravity", measurementKind: "sg", label: "SG før kok", status: "missing", source: "assumed" }),
+    ]));
+
+    const withoutPlan = deriveBrewDayState({ recipe: emptyRecipe(), stage: "lauter", stageStartedAt: t0, log: [], now: t0 + MIN });
+    expect(withoutPlan.targets.filter((target) => target.key.startsWith("pre-boil"))).toEqual([]);
+  });
+
+  it("forecasts end-of-boil values from measured pre-boil volume and Brix", () => {
+    const lauterLog = [
+      entry({ stage: "lauter", occurredAt: t0 + MIN, measurement: { kind: "volume", value: 75.7 } }),
+      entry({ stage: "lauter", occurredAt: t0 + 2 * MIN, measurement: { kind: "brix", value: 12.1 } }),
+    ];
+    const state = deriveBrewDayState({
+      recipe: sunsetIpaRecipe,
+      stage: "lauter",
+      stageStartedAt: t0,
+      log: lauterLog,
+      now: t0 + 3 * MIN,
+      equipment: { boil_off_l_per_h: 13.2 },
+    });
+
+    expect(state.targets.find((target) => target.key === "pre-boil-volume")?.actual?.value).toBe(75.7);
+    expect(state.targets.find((target) => target.key === "pre-boil-gravity")?.actual).toMatchObject({ value: 1.049, derivedFrom: "brix" });
+    expect(state.forecast?.postBoilVolumeL).toMatchObject({ value: 62.5, source: "calculated" });
+    expect(state.forecast?.postBoilOg?.value).toBeCloseTo(1.059, 3);
+  });
+
+  it("recalculates the end-of-boil volume from two measured volumes and lets later readings win", () => {
+    const boilStartedAt = t0 + 10 * MIN;
+    const state = deriveBrewDayState({
+      recipe: sunsetIpaRecipe,
+      stage: "boil",
+      stageStartedAt: boilStartedAt,
+      log: [
+        entry({ stage: "lauter", occurredAt: t0, measurement: { kind: "volume", value: 75.7, label: "Volum før kok" } }),
+        entry({ stage: "lauter", occurredAt: t0 + MIN, measurement: { kind: "brix", value: 12.1, label: "Brix før kok" } }),
+        entry({ stage: "boil", occurredAt: boilStartedAt + 30 * MIN, measurement: { kind: "volume", value: 69.1 } }),
+      ],
+      now: boilStartedAt + 30 * MIN,
+      equipment: { boil_off_l_per_h: 5 },
+    });
+    expect(state.forecast?.postBoilVolumeL).toMatchObject({ source: "calculated", basis: "målt volumendring under kok" });
+    expect(state.forecast?.postBoilVolumeL.value).toBeCloseTo(62.5, 1);
+
+    const measured = deriveBrewDayState({
+      recipe: sunsetIpaRecipe,
+      stage: "cooling",
+      stageStartedAt: boilStartedAt + 60 * MIN,
+      log: [
+        entry({ stage: "lauter", occurredAt: t0, measurement: { kind: "volume", value: 75.7, label: "Volum før kok" } }),
+        entry({ stage: "lauter", occurredAt: t0 + MIN, measurement: { kind: "brix", value: 12.1, label: "Brix før kok" } }),
+        entry({ stage: "cooling", occurredAt: boilStartedAt + 61 * MIN, measurement: { kind: "volume", value: 62.1, label: "Volum etter kok" } }),
+        entry({ stage: "cooling", occurredAt: boilStartedAt + 62 * MIN, measurement: { kind: "sg", value: 1.057, label: "OG etter kok" } }),
+      ],
+      now: boilStartedAt + 63 * MIN,
+      equipment: { boil_off_l_per_h: 5 },
+    });
+    expect(measured.forecast?.postBoilVolumeL).toMatchObject({ value: 62.1, source: "measured" });
+    expect(measured.forecast?.postBoilOg).toMatchObject({ value: 1.057, source: "measured" });
   });
 
   it("flags readings outside the target", () => {

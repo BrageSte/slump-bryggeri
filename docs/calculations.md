@@ -20,6 +20,7 @@ Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skj
 | `dryHopDose` | g / L |
 | `calculateColorEbc` | MCU → SRM (Morey) → EBC |
 | `calculateBoilOff` | Før kok − fordampning · tid |
+| `forecastBoilEnd` | Prognose for varmt volum og SG ved kokeslutt; gravity points skaleres omvendt med volum |
 | `calculateWaterVolumes` | Baklengs fra volum i gjæringskar: tap → krymping ved kjøling → fordampning → absorpsjon/dødvolum |
 | `calculateStrikeTemperature` | Palmer (metrisk): Tw = (0,41 / r)(T₂ − T₁) + T₂, pluss bryggeriets kalibrerte systemkorreksjon |
 | `calculateTemperatureOffset`, `summarizeCalibrationObservations` | ΔT per observasjon; snitt, standardavvik og forslag (≥ 3 observasjoner). Foreslår bare — admin må godkjenne |
@@ -39,6 +40,9 @@ av målerens nøyaktighet og WCF-kalibrering.
 - IBU bruker oppskriftens batchvolum og estimert OG som kokegravitet.
 - Uten oppgitt utbytte antas 75 %; uten oppgitt forgjæring antas 75 %.
 - Kjølekrymping 4 % som standard (samme som BeerSmith).
+- Manglende boil-off starter på 5 L/t: et moderat anslag for 60–100 L elektriske eller gassfyrte kokekar,
+  omtrent 5–8 % av kjelens volum per time. Reell fordampning varierer med kjele og kokestyrke; mål varmt volum
+  før og etter kok. Planen merker derfor tallet «≈ antatt», aldri som kalibrert.
 
 ## Tester og toleranser
 
