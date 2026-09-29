@@ -11,7 +11,7 @@ export function Spinner({ size = 20, className }: { size?: number; className?: s
   );
 }
 
-export function Skeleton({ className }: { className?: string }) {
+function Skeleton({ className }: { className?: string }) {
   return <div className={cx("animate-pulse rounded-md bg-surface-2", className)} aria-hidden="true" />;
 }
 

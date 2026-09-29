@@ -71,10 +71,6 @@ export function requireMember(minimumRole: "member" | "admin" = "member") {
   });
 }
 
-export function requireAdmin(role: string): void {
-  if (role !== "admin") throw forbidden("Dette krever administrator-tilgang.");
-}
-
 /** Cloudflare rate limiting binding; a missing binding (e.g. misconfigured env) fails open. */
 export async function enforceRateLimit(limiter: RateLimit | undefined, key: string): Promise<void> {
   if (!limiter) return;
