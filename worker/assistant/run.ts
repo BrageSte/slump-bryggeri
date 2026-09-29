@@ -1,17 +1,19 @@
 import type Anthropic from "@anthropic-ai/sdk";
+import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import type { BatchDetail } from "../../src/domain/model/api.ts";
 import { assistantToolDefinitions, runAssistantTool } from "./tools.ts";
 
 /** Stable instructions; kept byte-identical between requests so the prompt cache holds. */
-export const ASSISTANT_SYSTEM_PROMPT = `You are the brewing assistant for Slump Bryggeri, a small Norwegian brewery. You help the brewers during brew day and with following up one specific batch, described in the brew document below.
+export const ASSISTANT_SYSTEM_PROMPT = `You are the brewing assistant for Slump Bryggeri. Answer in Norwegian bokmål.
 
-How to answer:
-- Answer in Norwegian (bokmål). Be short and practical: the brewer is often reading on a phone next to a hot kettle. Use metric units.
-- The brew document is the source of truth for the plan, the batch's equipment snapshot and everything logged. Keep planned values and measured values clearly apart. Values marked "≈" were calculated from the equipment profile, not stated by the recipe.
-- Never calculate brewing numbers yourself. Every temperature, volume, gravity, ABV, efficiency, boil-off or unit conversion you give that is not read directly from the document must come from a tool call. If no tool covers it, say you cannot calculate it rather than estimating.
-- Never invent measurements. If something has not been logged, say it is not measured ("ikke målt") and suggest what to measure and when.
-- You cannot change anything in the app. When something should be logged, tell the brewer what to log. When an observation says something about the brewery's calibration (for example boil-off, strike temperature offset, efficiency or losses), explain which calibration value it points to and by how much, and note that one batch is weak evidence; an admin decides and saves a new profile version.
-- If a question is unrelated to brewing or this batch, answer briefly or say it is outside what you help with.`;
+Check before answering:
+1. Answer from the brief when it contains enough information.
+2. Otherwise fetch only the section needed with get_batch_section, one section at a time. Fetch the full log only for history or timeline questions.
+3. Use brewery_history only for calibration questions or "what is normal for us?" questions.
+4. Every brewing number not read directly from context must come from a calculation tool. Never calculate it yourself.
+5. Say "ikke målt" instead of guessing. Keep answers short and practical for a brewer using a phone; use metric units.
+
+Keep planned recipe values, calculated values marked "≈", and measured values distinct. You have read-only access: never write or change anything. Explain calibration observations without applying them; one batch is weak evidence and an admin decides whether to save a new profile version. If a needed calculation tool is unavailable, say so instead of estimating. For unrelated questions, answer briefly or say they are outside your scope.`;
 
 export interface AssistantUsage {
   inputTokens: number;
@@ -36,7 +38,9 @@ const MAX_TOOL_ROUNDS = 6;
 export async function runAssistant(input: {
   client: MessagesClient;
   model: string;
-  document: string;
+  brief: string;
+  brewDocumentSections: BrewDocumentSections;
+  loadBreweryHistory?: () => Promise<unknown>;
   history: { role: "user" | "assistant"; content: string }[];
   batch: BatchDetail;
   /** Called after every API response, so usage is recorded even if a later round fails. */
@@ -54,8 +58,8 @@ export async function runAssistant(input: {
       output_config: { effort: "medium" },
       system: [
         { type: "text", text: ASSISTANT_SYSTEM_PROMPT },
-        // The document changes as the log grows, but stays fixed within one question's tool rounds.
-        { type: "text", text: input.document, cache_control: { type: "ephemeral" } },
+        // The brief changes with the batch, but stays fixed within one question's tool rounds.
+        { type: "text", text: input.brief, cache_control: { type: "ephemeral" } },
       ],
       tools: assistantToolDefinitions,
       // After the last allowed round, ask for an answer with what it has.
@@ -72,13 +76,19 @@ export async function runAssistant(input: {
     if (response.stop_reason === "tool_use" && !lastRound) {
       // Pass the whole turn back unchanged: thinking blocks must accompany their tool calls.
       messages.push({ role: "assistant", content: response.content });
-      const results: Anthropic.ToolResultBlockParam[] = response.content
-        .filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use")
-        .map((block) => {
+      const toolUses = response.content
+        .filter((block): block is Anthropic.ToolUseBlock => block.type === "tool_use");
+      const results: Anthropic.ToolResultBlockParam[] = await Promise.all(
+        toolUses.map(async (block) => {
           toolCalls.push(block.name);
-          const result = runAssistantTool(block.name, block.input, { batch: input.batch });
+          const result = await runAssistantTool(block.name, block.input, {
+            batch: input.batch,
+            brewDocumentSections: input.brewDocumentSections,
+            loadBreweryHistory: input.loadBreweryHistory,
+          });
           return { type: "tool_result", tool_use_id: block.id, content: result.content, is_error: result.isError };
-        });
+        }),
+      );
       // All results of one turn go back in a single user message.
       messages.push({ role: "user", content: results });
       continue;

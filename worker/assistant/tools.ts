@@ -1,5 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
+import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import {
   brixToSg,
   calculateAbv,
@@ -24,13 +25,15 @@ import { profileValue } from "../../src/domain/model/equipment-profile.ts";
 
 interface ToolContext {
   batch: BatchDetail;
+  brewDocumentSections?: BrewDocumentSections;
+  loadBreweryHistory?: () => Promise<unknown>;
 }
 
 interface AssistantTool<S extends z.ZodType> {
   name: string;
   description: string;
   input: S;
-  run: (input: z.output<S>, context: ToolContext) => unknown;
+  run: (input: z.output<S>, context: ToolContext) => unknown | Promise<unknown>;
 }
 
 const tool = <S extends z.ZodType>(definition: AssistantTool<S>) => definition;
@@ -177,6 +180,18 @@ const tools = [
       return result === null ? { error: `Cannot convert ${fromUnit} to ${toUnit}.` } : { value: round(result, 4), unit: toUnit };
     },
   }),
+  tool({
+    name: "get_batch_section",
+    description: "Return the requested section of this batch's brew document. An empty section means no section content is available.",
+    input: z.object({ section: z.enum(["plan", "equipment", "status", "results", "calibration", "log"]) }),
+    run: ({ section }, context) => context.brewDocumentSections?.[section] ?? { error: "not available" },
+  }),
+  tool({
+    name: "brewery_history",
+    description: "The brewery's own observed boil-off, brewhouse efficiency, strike-temperature offset and attenuation across earlier batches, with counts. Use only for calibration or questions about what is normal for this brewery.",
+    input: z.object({}),
+    run: async (_input, context) => (context.loadBreweryHistory ? context.loadBreweryHistory() : { error: "not available" }),
+  }),
 ];
 
 /** Tool definitions in the shape the Messages API expects. Order is fixed so the prompt cache holds. */
@@ -186,15 +201,16 @@ export const assistantToolDefinitions: Anthropic.Tool[] = tools.map((t) => {
 });
 
 /** Runs one tool call. Invalid input or a failing calculation becomes an error result, never a throw. */
-export function runAssistantTool(name: string, input: unknown, context: ToolContext): { content: string; isError: boolean } {
+export async function runAssistantTool(name: string, input: unknown, context: ToolContext): Promise<{ content: string; isError: boolean }> {
   const definition = tools.find((t) => t.name === name);
   if (!definition) return { content: `Unknown tool: ${name}`, isError: true };
   const parsed = definition.input.safeParse(input);
   if (!parsed.success) return { content: `Invalid input: ${parsed.error.message}`, isError: true };
   try {
     // Each tool's run matches its own schema; the union type loses that pairing.
-    const result = (definition.run as (input: unknown, context: ToolContext) => unknown)(parsed.data, context);
-    return { content: JSON.stringify(result), isError: false };
+    const result = await (definition.run as (input: unknown, context: ToolContext) => unknown | Promise<unknown>)(parsed.data, context);
+    const content = name === "get_batch_section" && typeof result === "string" ? result : JSON.stringify(result) ?? "null";
+    return { content, isError: false };
   } catch (error) {
     return { content: error instanceof Error ? error.message : "Calculation failed", isError: true };
   }

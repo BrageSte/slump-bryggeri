@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBrewDocument } from "../../src/domain/brew-document/brew-document.ts";
+import { buildAssistantBrief, buildBrewDocument, buildBrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import { sunsetIpaBrewLog, sunsetIpaRecipe, sunsetIpaSplits } from "../../src/domain/fixtures/sunset-ipa.ts";
 import type { BatchDetail, TimelineItem } from "../../src/domain/model/api.ts";
 
@@ -54,7 +54,28 @@ const timeline: TimelineItem[] = sunsetIpaBrewLog.map((entry, index) => ({
 }));
 
 describe("brew document", () => {
-  const doc = buildBrewDocument({ batch, timeline, now: Date.parse("2026-09-23T13:30:00+02:00") });
+  const input = { batch, timeline, now: Date.parse("2026-09-23T13:30:00+02:00") };
+  const doc = buildBrewDocument(input);
+
+  it("joins named sections into the unchanged full document", () => {
+    const sections = buildBrewDocumentSections(input);
+    expect(Object.values(sections).filter(Boolean).join("\n\n") + "\n").toBe(doc);
+    expect(Object.keys(sections)).toEqual(["header", "plan", "equipment", "status", "results", "calibration", "log"]);
+  });
+
+  it("builds a compact assistant brief with current status, next action and recent log", () => {
+    const sections = buildBrewDocumentSections(input);
+    const brief = buildAssistantBrief(input, sections);
+    const latestLogLine = sections.log.split(/\r?\n/).filter((line) => line.startsWith("- ")).at(-1);
+
+    expect(brief.length).toBeLessThan(doc.length * 0.4);
+    expect(brief).toContain("## Status nå");
+    expect(brief).toContain("Neste handling:");
+    expect(brief).toContain("planlagt effektivitet");
+    expect(brief).toContain("≈ beregnet OG");
+    expect(brief).toContain(latestLogLine);
+    expect(brief).toContain(`Loggen har ${timeline.length} oppføringer`);
+  });
 
   it("covers plan, equipment, status and the full log", () => {
     expect(doc).toContain("# Bryggedokument: Sunset IPA (#1)");

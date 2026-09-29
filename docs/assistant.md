@@ -7,15 +7,30 @@ spørsmålene som faktisk stilles.
 
 1. Appen lager **bryggedokumentet** for batchen (`src/domain/brew-document/brew-document.ts`): plan, utstyrssnapshot,
    status nå og hele loggen. Det vises på batchsiden og er det samme dokumentet som «Kopier bryggedokument» gir deg.
-2. Workeren sender dokumentet og spørsmålet til Claude (`worker/services/assistant.ts`). Dokumentet mellomlagres
-   (prompt caching), så gjentatte beregninger i samme spørsmål blir billige.
-3. Claude regner **aldri ut bryggetall selv**. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):
+   Assistenten bruker separate Markdown-seksjoner fra samme datagrunnlag.
+2. Workeren sender et **kort brief** og spørsmålet til Claude (`worker/services/assistant.ts`). Briefet inneholder
+   batchhodet, status og neste handling, én linje med planens nøkkeltall, de siste åtte logglinjene og totalt antall
+   loggoppføringer. Briefet mellomlagres (prompt caching).
+3. Hvis briefet ikke er nok, henter Claude bare én relevant seksjon om gangen med `get_batch_section`: plan, utstyr,
+   status, resultater, kalibrering eller logg. Hele loggen hentes bare for spørsmål om historikk eller tidslinje.
+   `brewery_history` er forbeholdt kalibrering og spørsmål om hva som er normalt for bryggeriet.
+4. Claude regner **aldri ut bryggetall selv**. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):
    innmeskingstemperatur, vannmengder, mesketemperatur-justering, Brix → SG, ABV/forgjæring, brygghuseffektivitet,
    observert fordampning og enhetsomregning. Standardverdiene kommer fra batchens utstyrssnapshot.
-4. Assistenten kan **ikke endre noe** i appen. Den sier hva som bør logges eller justeres i kalibreringen;
+5. Planlagte verdier, beregnede verdier merket «≈» og målte verdier holdes atskilt. Manglende målinger omtales som
+   «ikke målt»; assistenten gjetter ikke.
+6. Assistenten kan **ikke endre noe** i appen. Den sier hva som bør logges eller justeres i kalibreringen;
    en person gjør det.
-5. Spørsmål og svar lagres ikke på serveren (bare i fanen). Serveren reserverer antall spørsmål atomisk per dag
+7. Spørsmål og svar lagres ikke på serveren (bare i fanen). Serveren reserverer antall spørsmål atomisk per dag
    (`assistant_daily_requests`) og lagrer tokenbruk per dag (`assistant_usage`) for kostnadsvisningen.
+
+## Bryggeriets egne tall
+
+Verktøyet `brewery_history` oppsummerer bryggeriets 10 nyeste andre batcher med målte tall for fordampning,
+brygghuseffektivitet, innmeskingsavvik og forgjæring per gjær, med antall, snitt og spredning. Verdiene i hver
+batchs utstyrssnapshot vises ved siden av, så «profil mot målt» synes. Det leser bare batcher, logg og resultater
+i eget bryggeri og skriver aldri til dem. Assistenten henter det bare ved spørsmål om kalibrering eller hva som er
+normalt for bryggeriet.
 
 ## Oppsett (én gang)
 
@@ -49,8 +64,9 @@ spørsmål og maks 8000 tokens i svaret.
 ## Kostnad
 
 Listepris per million tokens (september 2026): Haiku 4.5 $1 inn / $5 ut, Sonnet 5 $2 / $10, Opus 5 $5 / $25.
-Et vanlig spørsmål med bryggedokumentet er grovt 30–40 000 tokens inn og 1–2 000 ut, altså rundt 1 kr med
-Sonnet 5. Appen viser et anslag for dagen og måneden under chatten; fakturaen i Anthropic Console er fasit.
+Inn-tokenbruken varierer med briefet, hvilke seksjoner eller beregninger spørsmålet trenger, og antall runder. Et
+vanlig spørsmål sender derfor ikke hele den voksende loggen hver gang. Appen viser et anslag for dagen og måneden
+basert på tokenbruken fra API-et; fakturaen i Anthropic Console er fasit.
 
 ## Feilmeldinger
 
