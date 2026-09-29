@@ -1,29 +1,10 @@
-import type { BrewDayLogEntry, TargetValue } from "../../domain/brew-day/state.ts";
-import type { TimelineItem } from "../../domain/model/api.ts";
+import type { TargetValue } from "../../domain/brew-day/state.ts";
 import { measurementFromCanonical } from "../../domain/brewing-calculations/measurement-units.ts";
 import { batchStatusLabels, measurementKindSpecs, type BatchStatus, type MeasurementKind } from "../../domain/model/brewing.ts";
 import type { Tone } from "../../design-system/index.ts";
 import { formatNumber, formatSg } from "../../lib/format.ts";
 
-export function toBrewDayLog(items: TimelineItem[]): BrewDayLogEntry[] {
-  return items.map((item) => ({
-    id: item.id,
-    type: item.type,
-    stage: item.stage,
-    splitId: item.splitId,
-    occurredAt: item.occurredAt,
-    data: item.data,
-    measurement: item.measurement
-      ? {
-          kind: item.measurement.kind,
-          value: item.measurement.value,
-          valueMin: item.measurement.valueMin,
-          valueMax: item.measurement.valueMax,
-          label: item.measurement.label,
-        }
-      : null,
-  }));
-}
+export { toBrewDayLog } from "../../domain/brew-day/timeline.ts";
 
 export const statusTones: Record<BatchStatus, Tone> = {
   planned: "neutral",
