@@ -11,6 +11,8 @@ and tick the plan's checkboxes in the same PR. Merging to `main` deploys (once t
 ## Commands
 
 - `npm test` — all tests (unit + workerd integration). Must pass before you finish.
+- `npm run e2e` — Playwright tests of the brew-day screens on a phone viewport (own empty database, port 5174,
+  never reads `.dev.vars`). Run it when you change brew-day UI; needs `npx playwright install chromium` once.
 - `npm run typecheck` — must be clean.
 - `npm run build`
 - `npm run dev` — local app on :5173; sign-in codes are printed to the dev server log.

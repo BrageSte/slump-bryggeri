@@ -21,3 +21,25 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  # Brew-day flow on a phone-sized viewport (docs/code-review-plan.md, fase 4). Separate from `check`
+  # so the fast checks report first; it does not gate the production deploy.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7

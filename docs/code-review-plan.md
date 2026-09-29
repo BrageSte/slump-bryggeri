@@ -47,6 +47,14 @@ Logikken er godt dekket, men brukerflatene har ingen automatiske tester (feilen 
 kom derfor i produksjon). Legg til noen få ende-til-ende-tester av bryggedagsflyten på mobilbredde: start mesk,
 logg temperatur, se mesketips, registrer tilsetning, start timer. Vurder avhengigheten (Playwright) før innføring.
 
+Gjort 2026-09-29: Playwright er innført som eneste nye dev-avhengighet (`@playwright/test`, kun Chromium).
+`npm run e2e` starter appen med `e2e/wrangler.jsonc` (tom, nullstilt D1, ingen bryggerikode, ingen Anthropic-nøkkel,
+`.dev.vars` leses aldri) på port 5174 og kjører tre tester i `e2e/`: hele flyten på mobil (mesk → for lav temperatur →
+mesketips og tilsatt vann → tilsetning fra bryggeplanen → timer som overlever omlasting), ingen mesketips når
+temperaturen er på mål, og at Veileder og Logg ligger over bunnmenyen med emulert iPhone-safe-area (testen feiler mot
+den gamle `bottom-20`). Egen CI-jobb `e2e`; den blokkerer ikke produksjonsdeploy. Nye flater legges til som nye
+`e2e/*.spec.ts`.
+
 ## Arbeidsflyt
 
 1. Fase 1 og hvert område i fase 2 kan tas av Codex (Luna) som egne, små jobber i hver sin worktree.
@@ -57,4 +65,4 @@ logg temperatur, se mesketips, registrer tilsetning, start timer. Vurder avhengi
 - [x] Fase 1: skanning og `code-review-findings.md`
 - [ ] Fase 2: områdene 1–10
 - [ ] Fase 3: bryggedagen etter ekte bruk
-- [ ] Fase 4: ende-til-ende-tester
+- [x] Fase 4: ende-til-ende-tester
