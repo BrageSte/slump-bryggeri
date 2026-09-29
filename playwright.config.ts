@@ -40,6 +40,8 @@ export default defineConfig({
     url: `http://localhost:${PORT}/api/mode`,
     // The first Vite start optimises dependencies, which takes a while on a cold cache.
     timeout: 180_000,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse a server: only `npm run e2e:server` resets the database and selects e2e/wrangler.jsonc
+    // (no .dev.vars, no real Anthropic key). If port 5174 is taken, the run fails instead of guessing.
+    reuseExistingServer: false,
   },
 });
