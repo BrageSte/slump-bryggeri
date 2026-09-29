@@ -16,7 +16,7 @@ test.describe("flytende knapper på mobil", () => {
     await cdp.send("Emulation.setSafeAreaInsetsOverride", { insets: { top: 0, left: 0, bottom: IPHONE_HOME_INDICATOR_PX, right: 0 } });
 
     await page.goto(batch.path);
-    await page.getByRole("button", { name: "Start mesking" }).click();
+    await page.getByRole("button", { name: "Start brygg" }).click();
     await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
 
     const nav = await bottomNav(page).boundingBox();

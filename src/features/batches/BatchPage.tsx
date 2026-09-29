@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
-import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
 import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
@@ -21,7 +20,6 @@ import {
   Icon,
   InlineError,
   LoadingState,
-  MetricCard,
   PageHeader,
   parseDecimal,
   Section,
@@ -30,7 +28,7 @@ import {
   TextInput,
   useToast,
 } from "../../design-system/index.ts";
-import { formatNumber, formatSg } from "../../lib/format.ts";
+import { formatNumber } from "../../lib/format.ts";
 import { useMe } from "../auth/session.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
@@ -46,6 +44,7 @@ import { ResultSummary } from "./ResultSummary.tsx";
 import { statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
 import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
+import { PreBrewOverview } from "./PreBrewOverview.tsx";
 import { useBrewAlarms } from "./useBrewAlarms.ts";
 import { useScreenWakeLock } from "./useScreenWakeLock.ts";
 import { VeilederPanel } from "../assistant/VeilederPanel.tsx";
@@ -240,7 +239,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       {batch.status === "completed" ? (
         <CompletedCard batch={batch} />
       ) : batch.currentStage === null ? (
-        <PlannedCard batch={batch} onStart={() => goToStage("mash")} starting={startStage.isPending} />
+        <PreBrewOverview batch={batch} onStart={() => goToStage("mash")} starting={startStage.isPending} />
       ) : (
         <Card>
           {fermenting ? (
@@ -357,28 +356,6 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       <BrewActionBar stage={batch.currentStage} onVeileder={() => setVeilederOpen(true)} onLog={() => setIntent({ kind: "menu" })} />
       <VeilederPanel batch={batch} open={veilederOpen} onClose={() => setVeilederOpen(false)} />
     </div>
-  );
-}
-
-function PlannedCard({ batch, onStart, starting }: { batch: BatchDetail; onStart: () => void; starting: boolean }) {
-  const recipe = batch.recipeSnapshot;
-  const { og } = expectedGravities(recipe);
-  const firstMash = recipe.mashSteps[0];
-  return (
-    <Card className="space-y-4">
-      <div>
-        <SectionLabel>Klar til å brygge</SectionLabel>
-        <p className="mt-1 text-muted">Oppskrift og kalibrering er låst for denne batchen.</p>
-      </div>
-      <div className="grid grid-cols-3 gap-2">
-        <MetricCard label="Volum" value={formatNumber(recipe.batchSizeL, 0)} unit="L" />
-        <MetricCard label="OG" value={formatSg(og)} />
-        <MetricCard label="Mesk" value={firstMash ? formatNumber(firstMash.temperatureC, 1) : "–"} unit="°C" />
-      </div>
-      <Button variant="primary" size="lg" block icon="play" onClick={onStart} loading={starting}>
-        Start mesking
-      </Button>
-    </Card>
   );
 }
 
