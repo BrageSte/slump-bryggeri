@@ -3,7 +3,9 @@ import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels } from "../../domain/model/brewing.ts";
 import type { ProfileValues } from "../../domain/model/equipment-profile.ts";
 import { Button, SectionLabel, TargetVsActual } from "../../design-system/index.ts";
-import { formatAmount, formatDuration } from "../../lib/format.ts";
+import { formatAmount, formatCountdown } from "../../lib/format.ts";
+
+const MINUTE_MS = 60_000;
 import { formatMeasurement, formatMeasurementRange, formatTarget } from "./helpers.ts";
 import type { LogIntent } from "./LogSheet.tsx";
 import { MashAdjustmentHint } from "./MashAdjustmentHint.tsx";
@@ -53,7 +55,7 @@ export function StageBody({
             <p className="text-section font-semibold">{step.label}</p>
             {step.remainingMin !== null && (
               <p className="tabular text-section font-bold" aria-live="off">
-                {step.remainingMin > 0 ? `${formatDuration(step.remainingMin)} igjen` : "Tiden er ute"}
+                {step.remainingMin > 0 ? `${formatCountdown(step.remainingMin * MINUTE_MS)} igjen` : "Tiden er ute"}
               </p>
             )}
           </div>
@@ -143,7 +145,7 @@ function NextActionBody({ action, remainingMin }: { action: NextAction; remainin
         </p>
         <p className="text-muted">
           {a.dueLabel}
-          {a.variant ? ` · ${a.variant}` : ""} · {action.inMin > 0 ? `om ${formatDuration(action.inMin)}` : "nå"}
+          {a.variant ? ` · ${a.variant}` : ""} · {action.inMin > 0 ? `om ${formatCountdown(action.inMin * MINUTE_MS)}` : "nå"}
         </p>
       </div>
     );
@@ -155,7 +157,7 @@ function NextActionBody({ action, remainingMin }: { action: NextAction; remainin
     <div className="mt-1">
       <p className="text-title font-bold">{action.kind === "start_stage" ? brewStageLabels[action.stage] : action.label}</p>
       {action.kind === "start_stage" && remainingMin !== null && (
-        <p className="text-muted">{remainingMin > 0 ? `Om ${formatDuration(remainingMin)}` : "Klar når du er det"}</p>
+        <p className="text-muted">{remainingMin > 0 ? `Om ${formatCountdown(remainingMin * MINUTE_MS)}` : "Klar når du er det"}</p>
       )}
     </div>
   );

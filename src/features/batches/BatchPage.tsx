@@ -207,7 +207,14 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   return (
     <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
       <div className="min-w-0 space-y-5">
-      <AlarmBanner alarms={alarms.current} onAcknowledge={alarms.acknowledge} onRegister={registerFromAlarm} registering={logEvent.isPending} />
+      <AlarmBanner
+        alarms={alarms.current}
+        onAcknowledge={alarms.acknowledge}
+        onRegister={registerFromAlarm}
+        registering={logEvent.isPending}
+        soundLocked={alarms.soundOn && alarms.sound === "locked"}
+        onEnableSound={() => alarms.setSoundOn(true)}
+      />
       <PageHeader
         back="/brygg"
         eyebrow={
@@ -275,6 +282,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
               busy={logEvent.isPending}
               error={logEvent.error?.message}
               soundOn={alarms.soundOn}
+              sound={alarms.sound}
               onSoundChange={alarms.setSoundOn}
             />
           )}

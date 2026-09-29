@@ -129,7 +129,7 @@ Gjort 2026-09-24. Lenket fra batchmenyen («Rapport (PDF)») og fra ferdige batc
 - [x] Delte timere som hendelser `timer_started` `{ label, durationMin, dueAt }` og `timer_cancelled`;
       alle i bryggeriet ser samme nedtelling (polling finnes). Hurtigvalg 5/10/15/20/30/60 min + egendefinert.
 - [x] Alarmer i appen når en timer går ut, et steg er ferdig eller en planlagt tilsetning forfaller
-      (forvarsel 1 min): lyd (Web Audio, låses opp ved første trykk), vibrasjon der det støttes og et stort
+      (forvarsel 1 min): lyd (Web Audio, låses opp ved hvert trykk, se «Oppfølging 2026-09-29, kveld»), vibrasjon der det støttes og et stort
       banner med «Kvitter» / «Registrer tilsatt». Kvittering er per enhet; lyd kan slås av.
 - [x] Rene funksjoner for «hva forfaller når» i `src/domain/brew-day/` med tester, blant annet at samme
       tilsetning ikke varsles to ganger.
@@ -284,6 +284,29 @@ planen, uten å åpne noe. Ett trykk på «Start brygg» går til mesken.
 
 **Akseptanse:** Fra Brygg eller oppskriften kan man velge størrelse, se hva som skaleres og hvilket utstyr som er
 låst, og lande på oversikten for den nye batchen. Oppskriften er urørt.
+
+### Oppfølging 2026-09-29 (kveld) — nedtelling og alarmlyd
+
+Meldt av Brage etter første bruk: nedtellingen sto på «60», og alarmen ga ingen lyd.
+
+- [x] **Nedtelling per sekund.** Stegkortet og «Neste» viste hele minutter (`formatDuration` runder opp), så «60 min igjen»
+      sto stille i det første minuttet. De viser nå `59:42` (fra en time: `1:29:42`), som timerne (`formatCountdown`).
+- [x] **Alarmlyd på iPhone.** Målt mot iOS 26-Safari i simulatoren: `AudioContext.resume()` i en `pointerdown`-handler
+      forblir «suspended»; `touchend`, `click` og `touchstart` låser opp. Appen låste bare opp på `pointerdown`, og
+      bare én gang, så lyden var stille på iPhone. Nå låses den opp (igjen) på hvert `touchend`/`click`/`keydown`
+      og når siden blir synlig igjen; lydøkten settes til «playback» der nettleseren har `navigator.audioSession`,
+      så stillebryteren ikke demper alarmen (ikke verifisert, simulatoren har ingen stillebryter).
+- [x] **Lydknappen viser sannheten.** «Lyd på» bare når lyden faktisk går, ellers «Aktiver lyd» (i timerkortet og i
+      alarmbanneret); et trykk slår den på og gir én pip.
+- [x] **Alarmen ringer til den kvitteres** (hvert 10. sekund i opptil tre minutter, høyere og fire toner), så en
+      pip som ble blokkert eller overhørt kommer igjen. Varselet om en tilsetning ett minutt før ringer bare én gang.
+- [x] Playwright med falsk `AudioContext` etter iOS-regelen, og med kontrollert klokke for nedtellingen.
+
+**Kjent begrensning:** alarmen ringer bare mens appen er åpen og skjermen er på (nettsider kjører ikke i bakgrunnen
+eller på låst skjerm). Hold «Skjerm på» aktiv under brygging. Lås-skjerm-varsler ville kreve push-varsler
+(strøket i B12); det er en egen beslutning.
+
+---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
 
