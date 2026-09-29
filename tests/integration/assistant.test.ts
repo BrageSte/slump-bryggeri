@@ -38,7 +38,7 @@ describe("brewing assistant", () => {
   it("reports that it is not set up without an API key, instead of failing mid-brew", async () => {
     const status = await alice.get(`/breweries/${breweryId}/assistant`);
     expect(status.status).toBe(200);
-    expect(status.body).toMatchObject({ configured: false, model: "claude-sonnet-5", dailyLimit: 40, today: { requests: 0 } });
+    expect(status.body).toMatchObject({ configured: false, model: "claude-sonnet-5-5", dailyLimit: 40, today: { requests: 0 } });
 
     const ask = await alice.post(`/breweries/${breweryId}/batches/${batchId}/assistant/messages`, { content: "Hei" });
     expect(ask.status).toBe(503);

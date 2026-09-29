@@ -222,6 +222,11 @@ Gjort 2026-09-29 (nettsøk): Assistenten søker bare etter avgrensede produkt- o
 etterspørres, bruker en allowlist av autoritative bryggekilder, viser og lagrer kildelenker, og tar med maksimalt
 to nettsøk per spørsmål i kostnadsanslaget. Søket kan slås av med `ASSISTANT_WEB_SEARCH=off`.
 
+### Oppfølging 2026-09-29 — Veileder på mobil og Sonnet 5.5
+
+- [x] Løft Veileder og Logg over bunnmenyen, inkludert trygg bunnmargin på iPhone, så begge kan trykkes i batchen.
+- [x] Bruk `claude-sonnet-5-5` lokalt, i produksjon og som serverstandard; prisanslaget kjenner modellen.
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)

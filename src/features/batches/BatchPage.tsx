@@ -341,7 +341,7 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       <div className="h-16 md:hidden" aria-hidden="true" />
 
       {/* Thumb-reachable logging on phones, above the bottom navigation. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-20 z-20 flex justify-end px-4 md:hidden">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 flex justify-end px-4 md:hidden">
         <Button variant="primary" size="lg" icon="plus" className="pointer-events-auto rounded-full shadow-lg" onClick={() => setIntent({ kind: "menu" })}>
           Logg
         </Button>
