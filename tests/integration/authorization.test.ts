@@ -1,5 +1,8 @@
+import { env } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
+import { createDb } from "../../worker/lib/db.ts";
+import { loadBreweryHistory } from "../../worker/services/brewery-history.ts";
 import { bsmxFixtures } from "../fixtures/beersmith/index.ts";
 import { addMember, createBrewery, createUser, download, request, type TestUser } from "./client.ts";
 
@@ -144,6 +147,10 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/timeline`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryA}/assistant`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
+
+    const history = await loadBreweryHistory(createDb(env.DB), breweryB);
+    expect(history.batches).toEqual([]);
+    expect(history.batches.map((batch) => batch.id)).not.toContain(batchA);
   });
 
   it("refuses every write into Brewery A", async () => {
