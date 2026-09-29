@@ -1,7 +1,7 @@
 # Arkitektur
 
-Levende dokument: beslutninger som faktisk er tatt i koden. Produktkravene står i
-[implementation-package.md](implementation-package.md), som er source of truth.
+Slik systemet er bygget nå. Produktkrav: [implementation-package.md](implementation-package.md). Beslutninger,
+status og hva som er strøket: [implementation-plan.md](implementation-plan.md).
 
 ## Oversikt
 
@@ -55,8 +55,7 @@ En felles bryggerikode (`BREWERY_ACCESS_CODE`, secret) skrives inn én gang per 
 «Hvem er du?» blant bryggeriets personer. Personer er vanlige `users`-rader med plassholder-e-post, og
 `requireUser` godtar enten en Better Auth-sesjon eller personen valgt på enheten (signerte cookies,
 HMAC med `BETTER_AUTH_SECRET`). All autorisasjon videre (medlemskap, roller, isolasjon) er uendret.
-Avvik fra §20 etter ønske fra Brage. Innlogging for andre (Google/e-post) er strøket fra planen;
-e-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
+Avvik fra §20 (B2). E-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
 
 ## Autorisasjon (§50)
 
@@ -147,6 +146,11 @@ kokestyrke). Mål varmt volum før og etter kok for å erstatte anslaget. Meskev
 og førkokvolum beregnes også når profilen er ufullstendig. Logget førkokvolum eller SG/Brix oppdaterer
 prognosen for volum og OG ved kokeslutt; to volummålinger under kok gir observert fordampningsrate.
 
+Meskekortet foreslår vann for å justere en målt temperatur: `mash-adjustment.ts` bruker samme mål/toleranse som
+`state.ts` og `calculateMashTemperatureAdjustment`, og et loggført tillegg er en vanlig `water_added`-hendelse.
+BeerSmith-startpunktet sammenlignes med aktiv profil (fordampning, batchvolum, meskekar) og varsler også når
+kildedatoen er over fem år gammel; advarselen er kun veiledende.
+
 ### Timere og alarmer
 
 Timere er vanlige logghendelser: `timer_started` `{ label, durationMin, dueAt }` (serveren regner ut
@@ -178,8 +182,7 @@ Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer �
 `slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
 bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
 batcher/snapshots/splits/resultater, logghendelser/målinger/kommentarer/vedlegg og `assistant_messages`.
-Auth-sesjoner og
-credentials er ikke med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger
+Auth-sesjoner og credentials er ikke med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger
 fortsatt i objektlageret. Gjenoppretting støttes ikke ennå.
 
 ## Oppskriftsbibliotek
@@ -199,22 +202,14 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
   originalen lagres i `recipe_sources` (§9).
 - Oppdatering: `npm run library:build -- <sti til punkapi-klon>` → `db/seeds/recipe-library.sql`
   (validerer alle oppskrifter), deretter `npm run db:seed:library:local|remote`.
-- BeerSmith-filer (`.bsmx`): `POST /breweries/:id/recipes/import/bsmx` tar filnavn og tekst, parser på
-  serveren med samme rene adapter som gjennomgangsskjermen (`src/domain/import/bsmx.ts`) og lager bare
-  oppskrift + kilde + versjon 1. Kilden (`recipe_sources`) har originalfilen uendret i `original_text`,
-  `filename` og `data` (BeerSmith-utstyr adskilt i oppgitt/avledet, vannplan, advarsler, ignorerte målte
-  felt). Bryggeriets utstyrsprofil endres aldri. `GET …/recipes/:id/source/file` gir filen tilbake
-  byte-lik. Kilder er uforanderlige (trigger). Maks 250 kB per fil. Se [import-bsmx.md](import-bsmx.md).
-- Meskekortet kan foreslå vann for å justere en målt temperatur. `mash-adjustment.ts` bruker samme
-  mål/toleranse som `state.ts` og `calculateMashTemperatureAdjustment`; et loggført tillegg er en vanlig
-  `water_added`-hendelse. BeerSmith-startpunktet sammenlignes med aktiv profil for fordampning,
-  batchvolum og meskekar, og varsles også når kildedatoen er over fem år gammel. Advarselen er kun veiledende.
-- BeerXML og AI-tolkning er strøket inntil videre.
+- BeerSmith-filer (`.bsmx`): `POST /breweries/:id/recipes/import/bsmx` parser på serveren med samme rene adapter som
+  gjennomgangsskjermen og lager bare oppskrift + kilde (`recipe_sources`, uforanderlig) + versjon 1. Bryggeriets
+  utstyrsprofil endres aldri. Format, ruter og regler: [import-bsmx.md](import-bsmx.md).
 
 ## Navigasjon (avvik fra §5)
 
-Etter ønske fra Brage har **Oppskrifter** fått egen fane: Hjem · Brygg · Oppskrifter · Assistent · Mer.
-Brygg viser bare batcher. Inventar er strøket, så det har ingen plassholder. Assistent kom tilbake 2026-09-28 (B14).
+Bunnmeny: Hjem · Brygg · Oppskrifter · Assistent · Mer (`src/components/AppShell.tsx`). Brygg viser bare batcher.
+`/assistent` er en batchliste som åpner batchens delte tråd.
 
 ## Sanntid
 
@@ -231,12 +226,7 @@ pollingen senere uten å endre API-et.
 
 ## Kjøre lokalt
 
-```bash
-npm install
-cp .dev.vars.example .dev.vars   # sett BETTER_AUTH_SECRET
-npm run db:migrate:local
-npm run dev                      # http://localhost:5173 — innloggingskoder skrives i terminalen
-```
+Se [README.md](../README.md#kom-i-gang).
 
 ## Deploy (Cloudflare)
 
@@ -273,38 +263,29 @@ Innlogging krever en e-postleverandør. Koden velger i denne rekkefølgen (`work
 
 Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder aldri havner i logger.
 
-## Kjente begrensninger / neste steg
+## Kjente begrensninger
 
-- Hovedbundelen er ~176 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
+- Hovedbundelen er ~119 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
-- Inventar, smart import og automatiske kalibreringsforslag er strøket fra planen (2026-09-24).
 
 ## Bryggeassistent (B14)
 
-Claude via Anthropic-SDK-en i Workeren (`worker/services/assistant.ts`). Assistenten får et kort, cachet brief
-fra `src/domain/brew-document/`; `get_batch_section` henter én relevant seksjon ved behov, og hele loggen bare
-for historie- og tidslinjespørsmål. Det fullstendige dokumentet vises fortsatt på batchsiden fra de eksisterende,
-medlemsbeskyttede batch- og loggspørringene; visningen gjør ingen skriving. `brewery_history` har en valgfri loader
-for bryggeriets observasjoner på tvers av batcher. Assistenten henter beregnede tall gjennom verktøy som kaller
-`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen gjør ikke aritmetikk selv. Tabellen
-`assistant_messages` (`0011_assistant_messages.sql`) lagrer én delt samtale per batch: personens id på spørsmål,
-NULL på assistentsvar, handlingsforslag som JSON og de siste 100 meldingene i tråd-API-et. De siste omtrent 12
-lagrede meldingene sendes med neste spørsmål. Batchen og alle meldingsspørringer er scoped til
-`c.var.membership.breweryId`; andre bryggerier og batcher gir 404.
+Claude via Anthropic-SDK-en i Workeren. Oppsett, oppførsel, verktøy, nettsøk, kostnad og feilmeldinger:
+[assistant.md](assistant.md). Modell og grenser settes i `wrangler.jsonc` (`ASSISTANT_*`); nøkkelen er hemmeligheten
+`ANTHROPIC_API_KEY`.
 
-Serververktøyet `web_search_20260209` er valgfritt (`ASSISTANT_WEB_SEARCH`, standard `on`), avgrenset til
-autoritative bryggekilder og maksimalt to søk per spørsmål på tvers av verktøyrundene. Pausede svar sendes tilbake
-til Messages API uendret, og nettsitater lagres i `assistant_messages.citations` (migrering `0012`).
-`assistant_usage.web_search_requests` lagrer antall søk for kostnadsanslaget ($10 per 1 000 søk); dagsgrensen
-for spørsmål er uendret.
-
-`propose_actions` validerer forslag mot måle-, hendelses-, ingrediens- og timerskjemaene. Det skriver aldri til
-bryggeloggen. Klienten ber bryggeren bekrefte eller avvise hvert forslag; ved bekreftelse kaller klienten først det
-eksisterende loggendepunktet og PATCH-er deretter utfall, person og tidspunkt på meldingen. Batchsiden viser panelet
-på desktop og en åpneknapp over mobilnavigasjonen. `/assistent` viser den samme batchtråden.
-Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
-Dagskvoten reserveres atomisk per bryggeri i `assistant_daily_requests`; tokenbruk per modell og døgn ligger i
-`assistant_usage`. Spørsmål lagres før Anthropic-kallet og blir stående dersom kallet feiler. Testene bruker bare
-fake Anthropic-klienter. Oppsett og kostnad:
-[assistant.md](assistant.md).
+- **Kode:** `worker/services/assistant.ts` (dagskvote, bruk, feil, status), `worker/services/assistant-thread.ts`
+  (trådlagring og forslagsstatus), `worker/assistant/` (`run.ts` prompt og verktøyløkke mot Claude, `tools.ts` verktøy og
+  `propose_actions`, `pricing.ts` prisanslag). Ruter: tråd-endepunktene under `/batches/:batchId/assistant/messages` og
+  `GET /breweries/:id/assistant` (status og bruk). Modellen regner ikke selv; beregningsverktøyene kaller
+  `src/domain/brewing-calculations/`.
+- **Tabeller:** `assistant_usage` (`0009`, tokenbruk og nettsøk per modell og døgn), `assistant_daily_requests`
+  (`0010`, atomisk dagskvote per bryggeri), `assistant_messages` (`0011`, én delt tråd per batch: personens id på
+  spørsmål, NULL på svar, forslag som JSON), `assistant_messages.citations` og `assistant_usage.web_search_requests`
+  (`0012`). Alt er scoped til `c.var.membership.breweryId`; andre bryggerier og batcher gir 404.
+- **Skriving:** `propose_actions` validerer forslag mot loggskjemaene og skriver aldri til bryggeloggen. Klienten
+  kaller det eksisterende loggendepunktet ved bekreftelse og PATCH-er deretter utfall, person og tidspunkt på
+  meldingen. Spørsmål lagres før Anthropic-kallet. Uten nøkkel svarer API-et 503 `assistant_not_configured`.
+- Batchsiden viser bryggedokumentet (`src/domain/brew-document/`) fra de eksisterende batch- og loggspørringene uten
+  å skrive noe. Testene bruker bare fake Anthropic-klienter.
