@@ -12,7 +12,7 @@ import {
 import type { BrewDayForecast, PlannedAddition } from "../../domain/brew-day/state.ts";
 import { fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
-import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
+import { formatAmount, formatCountdown, formatNumber, formatSg } from "../../lib/format.ts";
 import { phasePreview, planItemDetail, quantity, withSource } from "./plan-format.ts";
 
 function forecastValue(value: BrewDayForecast["postBoilVolumeL"], unit: string): string {
@@ -330,7 +330,7 @@ function PlanItemRow({
     : live.status === "due"
       ? "nå"
       : countdownFrom !== null
-        ? `om ${formatDuration(Math.max(0, live.dueAt - countdownFrom))}`
+        ? `om ${formatCountdown(Math.max(0, live.dueAt - countdownFrom) * 60_000)}`
         : null;
 
   return (

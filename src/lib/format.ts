@@ -40,6 +40,16 @@ export function formatDate(value: number | string): string {
   return date.toLocaleDateString(nb, { day: "numeric", month: "long", year: "numeric" });
 }
 
+/** A running countdown that visibly ticks: "59:42", or "1:29:42" from an hour up. */
+export function formatCountdown(ms: number): string {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  const two = (value: number) => String(value).padStart(2, "0");
+  return hours > 0 ? `${hours}:${two(minutes)}:${two(seconds)}` : `${minutes}:${two(seconds)}`;
+}
+
 export function formatDuration(minutes: number): string {
   const rounded = Math.max(0, Math.ceil(minutes));
   if (rounded < 120) return `${rounded} min`;

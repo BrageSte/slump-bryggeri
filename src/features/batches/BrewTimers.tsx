@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from "react";
 import type { Alarm, AlarmKind, BrewTimer } from "../../domain/brew-day/alarms.ts";
 import { Button, Field, Icon, InlineError, parseDecimal, SectionLabel, TextInput } from "../../design-system/index.ts";
-import { formatDuration } from "../../lib/format.ts";
+import type { AlarmSoundState } from "../../lib/alarm-sound.ts";
+import { formatCountdown, formatDuration } from "../../lib/format.ts";
 
 const QUICK_MINUTES = [5, 10, 15, 20, 30, 60];
 
@@ -22,11 +23,16 @@ export function AlarmBanner({
   onAcknowledge,
   onRegister,
   registering,
+  soundLocked,
+  onEnableSound,
 }: {
   alarms: Alarm[];
   onAcknowledge: (key: string) => void;
   onRegister: (alarm: Alarm) => void;
   registering: boolean;
+  /** The sound is on in the settings, but the browser has not let it start yet. */
+  soundLocked: boolean;
+  onEnableSound: () => void;
 }) {
   const alarm = alarms[0];
   if (!alarm) return null;
@@ -48,6 +54,7 @@ export function AlarmBanner({
             </Button>
           )}
           <Button onClick={() => onAcknowledge(alarm.key)}>Kvitter</Button>
+          {soundLocked && <Button onClick={onEnableSound}>Aktiver lyd</Button>}
         </div>
       </div>
     </div>
@@ -55,12 +62,7 @@ export function AlarmBanner({
 }
 
 function countdown(ms: number): string {
-  if (ms <= 0) return "Ferdig";
-  const totalSeconds = Math.ceil(ms / 1000);
-  if (totalSeconds >= 3600) return formatDuration(totalSeconds / 60);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
+  return ms <= 0 ? "Ferdig" : formatCountdown(ms);
 }
 
 /**
@@ -76,6 +78,7 @@ export function TimerPanel({
   busy,
   error,
   soundOn,
+  sound,
   onSoundChange,
 }: {
   timers: BrewTimer[];
@@ -85,6 +88,8 @@ export function TimerPanel({
   busy: boolean;
   error?: string;
   soundOn: boolean;
+  /** Whether the browser is actually letting the alarm sound play. */
+  sound: AlarmSoundState;
   onSoundChange: (on: boolean) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -114,8 +119,15 @@ export function TimerPanel({
       <div className="flex items-center justify-between gap-2">
         <SectionLabel>Timere</SectionLabel>
         <div className="flex items-center gap-1">
-          <Button size="sm" variant="ghost" aria-pressed={soundOn} onClick={() => onSoundChange(!soundOn)}>
-            Lyd {soundOn ? "på" : "av"}
+          <Button
+            size="sm"
+            variant={soundOn && sound === "locked" ? "secondary" : "ghost"}
+            aria-pressed={soundOn}
+            disabled={sound === "unsupported"}
+            // Sound on but not started yet: the tap starts it (and beeps once) instead of turning it off.
+            onClick={() => onSoundChange(soundOn && sound === "locked" ? true : !soundOn)}
+          >
+            {sound === "unsupported" ? "Ingen lyd" : !soundOn ? "Lyd av" : sound === "ready" ? "Lyd på" : "Aktiver lyd"}
           </Button>
           <Button size="sm" variant={adding ? "secondary" : "ghost"} icon="plus" aria-expanded={adding} onClick={() => setAdding((value) => !value)}>
             Ny timer
