@@ -32,3 +32,5 @@ brukes av flere sider via `design-system/index.ts`.
 
 De konkrete dupliseringene og UI-overlappene er allerede listet som område 1–10 i
 [code-review-plan.md](code-review-plan.md). De hører til egne endringer etter denne skanningen.
+
+- ✅ `AdaptRecipePage` brukte total fermenterbar vekt (inkl. sukker/ekstrakt) til vannvolumer; bruker nå `mashedGrainKg` via `calculateAdaptedWaterVolumes`, som bryggedagsplanen. Antatt/beregnet-merkingen er egen logikk med samme regel som `profileSetting` i `brew-plan.ts` (ikke eksportert) og er bevisst ikke slått sammen.

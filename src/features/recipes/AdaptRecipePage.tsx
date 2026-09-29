@@ -4,8 +4,8 @@ import {
   calculateRecipeMetrics,
   calculateRecipeScaling,
   calculateStrikeTemperature,
-  calculateWaterVolumes,
 } from "../../domain/brewing-calculations/index.ts";
+import { calculateAdaptedWaterVolumes } from "../../domain/brew-day/adapt-water.ts";
 import { getProfileParameter, profileValue, type ProfileValueSources, type ProfileValues } from "../../domain/model/equipment-profile.ts";
 import { Button, Card, ErrorState, Field, InlineError, LoadingState, PageHeader, parseDecimal, Section, SectionLabel, TextInput, useToast } from "../../design-system/index.ts";
 import { formatAmount, formatNumber, formatSg } from "../../lib/format.ts";
@@ -90,24 +90,7 @@ function Adapt({
         })
       : null;
 
-  const boilOff = profileValue(values, "boil_off_l_per_h");
-  const water =
-    scaled && after && after.totalFermentablesKg > 0 && boilOff !== undefined
-      ? calculateWaterVolumes({
-          batchVolumeL: scaled.recipe.batchSizeL,
-          grainKg: after.totalFermentablesKg,
-          boilTimeMin: scaled.recipe.boilTimeMin,
-          boilOffLPerH: boilOff,
-          grainAbsorptionLPerKg: profileValue(values, "grain_absorption_l_per_kg") ?? 0.8,
-          mashThicknessLPerKg: profileValue(values, "mash_thickness_l_per_kg") ?? 3,
-          mashDeadSpaceL: profileValue(values, "mash_dead_space_l"),
-          pumpPipeLossL: profileValue(values, "pump_pipe_loss_l"),
-          kettleLossL: profileValue(values, "kettle_loss_l"),
-          chillerLossL: profileValue(values, "chiller_loss_l"),
-          transferLossL: profileValue(values, "transfer_loss_l"),
-          coolingShrinkagePct: profileValue(values, "cooling_shrinkage_pct"),
-        })
-      : null;
+  const water = scaled ? calculateAdaptedWaterVolumes(scaled.recipe, values) : null;
 
   const waterKeys = [
     "boil_off_l_per_h",
