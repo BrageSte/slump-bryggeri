@@ -33,7 +33,7 @@ krever** — før vi bygger mer. Gjennomgangen endrer ikke oppførsel; hver rett
 | 7 | UI | Tre måter å gjøre Markdown om til visning: `AssistantThread`, `brew-document-view.ts`, `BatchReportPage` | Én liten renderer for det begrensede formatet vi selv lager | ✅ Delt `markdownInline`/`MarkdownList` i `design-system/Markdown.tsx`, brukt av `AssistantThread` og `BrewDocumentPanel`; seksjonsparseren i `brew-document-view.ts` uendret. `BatchReportPage` gjør ikke Markdown-parsing (bare formaterte tabellceller/fritekst) og er derfor ikke endret. |
 | 8 | UI | To flytende elementer nederst på mobil (Logg-knapp og Veileder-felt) | Vurder én samlet handlingslinje | |
 | 9 | Docs | `implementation-plan.md` og `architecture.md` er skrevet av mange økter; overlappende og utdaterte avsnitt | Stram inn: én kilde per beslutning, fjern historikk som ligger i git | |
-| 10 | Worker | Assistent-API: gammel og ny vei (`assistant.ts` + `assistant-thread.ts`), prompt og verktøy i flere filer | Sjekk at det bare finnes én vei inn, og at hver fil har ett ansvar | |
+| 10 | Worker | Assistent-API: gammel og ny vei (`assistant.ts` + `assistant-thread.ts`), prompt og verktøy i flere filer | Sjekk at det bare finnes én vei inn, og at hver fil har ett ansvar | ✅ Sjekket: kun tråd-rutene og status-ruten finnes (ingen gammel stateless `POST .../assistant`); `assistant.ts` (spørring, grenser, bruk, feil) og `assistant-thread.ts` (trådlagring) har hvert sitt ansvar. Ingen kode fjernet. |
 
 ## Fase 3 — Bryggedagen (etter første ekte bryggedag)
 
