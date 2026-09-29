@@ -28,6 +28,7 @@ sender bare API-kall til Worker-koden; alt annet er statiske filer.
 | Auth | Better Auth 1.7 + email OTP, D1 direkte | Better Auth støtter D1-bindingen nativt; ingen egen dialekt nødvendig. |
 | E-post | Cloudflare Email Service (`send_email`) eller Resend | Uten leverandør logges koder til dev-loggen — **kun på localhost**. |
 | Tester | Vitest 4, `@cloudflare/vitest-pool-workers` | Integrasjonstester kjører i workerd med D1/R2; en separat konfigurasjon tester KV uten R2. |
+| Ende-til-ende-tester | Playwright (Chromium, mobilbredde) | `e2e/`. Kjører mot appen med `e2e/wrangler.jsonc`: tom lokal D1 som nullstilles ved hver oppstart, ingen bryggerikode og ingen Anthropic-nøkkel, port 5174. `.dev.vars` leses aldri. Egen CI-jobb `e2e`; blokkerer ikke produksjonsdeploy. |
 
 ## Mappestruktur
 

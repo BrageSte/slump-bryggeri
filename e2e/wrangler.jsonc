@@ -1,0 +1,44 @@
+{
+  // Worker config for the end-to-end tests only (see playwright.config.ts). It lives in its own
+  // folder so Wrangler never reads the developer's .dev.vars: the tests must not see the real
+  // ANTHROPIC_API_KEY or brewery code, and use an empty, throwaway D1 database.
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "slump-bryggeri-e2e",
+  "main": "../worker/index.ts",
+  "compatibility_date": "2026-08-15",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+  // Keep the bindings in step with ../wrangler.jsonc.
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slump-bryggeri-e2e",
+      "database_id": "e2e-local",
+      "migrations_dir": "../db/migrations"
+    }
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "slump-bryggeri-e2e-files" }],
+  "kv_namespaces": [{ "binding": "FILES_KV", "id": "e2e-local" }],
+  "ratelimits": [
+    { "name": "AUTH_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 1000, "period": 60 } },
+    { "name": "UPLOAD_RATE_LIMITER", "namespace_id": "1002", "simple": { "limit": 1000, "period": 60 } },
+    { "name": "ASSISTANT_RATE_LIMITER", "namespace_id": "1003", "simple": { "limit": 1000, "period": 60 } }
+  ],
+  "vars": {
+    "APP_URL": "",
+    "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
+    "BREWERY_MODE": "on",
+    "BREWERY_NAME": "E2E Bryggeri",
+    "BETTER_AUTH_SECRET": "e2e-only-secret-that-is-long-enough-for-better-auth",
+    "BREWERY_ACCESS_CODE": "",
+    "RESEND_API_KEY": "",
+    // Empty on purpose: the assistant reports "not set up" and no test can call the real API.
+    "ANTHROPIC_API_KEY": "",
+    "ASSISTANT_MODEL": "claude-sonnet-5-5",
+    "ASSISTANT_DAILY_LIMIT": "40",
+    "ASSISTANT_WEB_SEARCH": "off"
+  }
+}

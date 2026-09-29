@@ -24,6 +24,7 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 | Kommando | |
 |---|---|
 | `npm test` | Enhetstester + workerd-integrasjonstester med D1/R2 og en separat kjøring uten R2 for KV-fallback |
+| `npm run e2e` | Ende-til-ende-tester (Playwright, mobilbredde) av bryggedagen. Egen tom database og port 5174, uten `.dev.vars`. Første gang: `npx playwright install chromium` |
 | `npm run typecheck` | TypeScript for app, worker, tester og config |
 | `npm run build` | Produksjonsbygg |
 | `npm run deploy` | Bygg og deploy til Cloudflare (se [docs/architecture.md](docs/architecture.md#deploy-cloudflare)) |

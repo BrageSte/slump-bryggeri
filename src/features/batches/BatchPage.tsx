@@ -476,6 +476,7 @@ function StageCard({
                 action={
                   <Button
                     size="sm"
+                    aria-label={`Logg ${target.label.toLowerCase()}`}
                     onClick={() =>
                       onLog({
                         kind: "measurement",
