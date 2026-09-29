@@ -1,6 +1,7 @@
 import { suggestStrikeOffsetFromMash } from "../brewing-calculations/index.ts";
 import { brewhouseNumbers } from "../brew-day/outcome.ts";
-import type { BrewDayLogEntry } from "../brew-day/state.ts";
+import { toBrewDayLog } from "../brew-day/timeline.ts";
+import { num, round } from "../format.ts";
 import type { BatchDetail, TimelineItem } from "../model/api.ts";
 import { profileValue, type ProfileParameterKey } from "../model/equipment-profile.ts";
 
@@ -30,29 +31,12 @@ export interface CalibrationReview {
   missing: string[];
 }
 
-const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
-const num = (value: number, decimals = 1) => value.toLocaleString("nb-NO", { maximumFractionDigits: decimals });
-
-function toLog(timeline: TimelineItem[]): BrewDayLogEntry[] {
-  return timeline.map((item) => ({
-    id: item.id,
-    type: item.type,
-    stage: item.stage,
-    splitId: item.splitId,
-    occurredAt: item.occurredAt,
-    data: item.data,
-    measurement: item.measurement
-      ? { kind: item.measurement.kind, value: item.measurement.value, valueMin: item.measurement.valueMin, valueMax: item.measurement.valueMax }
-      : null,
-  }));
-}
-
 export function reviewCalibration({ batch, timeline }: { batch: BatchDetail; timeline: TimelineItem[] }): CalibrationReview {
   const recipe = batch.recipeSnapshot;
   const values = batch.equipmentSnapshot.values;
   const observations: CalibrationObservation[] = [];
   const missing: string[] = [];
-  const numbers = brewhouseNumbers({ recipe, log: toLog(timeline), splits: batch.splits, wcf: values.refractometer_wcf });
+  const numbers = brewhouseNumbers({ recipe, log: toBrewDayLog(timeline), splits: batch.splits, wcf: values.refractometer_wcf });
 
   if (numbers.boilOffLPerHour !== null && numbers.preBoilVolumeL !== null && numbers.postBoilVolumeL !== null) {
     observations.push({

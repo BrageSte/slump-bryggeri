@@ -1,5 +1,6 @@
 import { splitIdForVariant } from "../brew-day/fermentation.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
+import { round } from "../format.ts";
 import type { BatchDetail, TimelineItem } from "../model/api.ts";
 import { reviewCalibration } from "./tuning.ts";
 
@@ -9,8 +10,6 @@ export interface BreweryHistoryMetric {
   min: number | null;
   max: number | null;
 }
-
-const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
 
 function metric(values: number[], decimals: number): BreweryHistoryMetric {
   if (values.length === 0) return { n: 0, mean: null, min: null, max: null };
