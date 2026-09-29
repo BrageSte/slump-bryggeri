@@ -4,27 +4,12 @@ import { assistantToolDefinitions, runAssistantTool } from "../../worker/assista
 import { ASSISTANT_SYSTEM_PROMPT, runAssistant, type MessagesClient } from "../../worker/assistant/run.ts";
 import { estimateCostUsd } from "../../worker/assistant/pricing.ts";
 import { calculateStrikeTemperature } from "../../src/domain/brewing-calculations/index.ts";
-import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
-import type { BatchDetail } from "../../src/domain/model/api.ts";
+import { makeBatch } from "../helpers/batch.ts";
 
-const batch: BatchDetail = {
-  id: "b1",
-  number: 1,
-  name: "Sunset IPA",
-  status: "brewing",
-  currentStage: "mash",
-  stageStartedAt: 0,
-  brewDate: null,
-  recipe: { id: "r1", name: sunsetIpaRecipe.name },
-  createdAt: 0,
-  updatedAt: 0,
-  completedAt: null,
-  recipeVersion: { id: "v1", version: 1 },
-  recipeSnapshot: sunsetIpaRecipe,
+const batch = makeBatch({
   equipmentSnapshot: { profileId: "p", profileVersion: 2, values: { grain_temperature_c: 16, mash_thickness_l_per_kg: 2.6, strike_temp_offset_c: 1.5 } },
   splits: [],
-  outcomes: [],
-};
+});
 
 const brewDocumentSections = {
   header: "# Bryggedokument: Sunset IPA",

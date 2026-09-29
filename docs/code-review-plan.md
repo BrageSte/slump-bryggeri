@@ -22,18 +22,18 @@ krever** — før vi bygger mer. Gjennomgangen endrer ikke oppførsel; hver rett
 
 ## Fase 2 — Kjente funn (bekreftet 2026-09-29)
 
-| # | Område | Funn | Forslag |
-|---|---|---|---|
-| 1 | Domene | Tidslinje → `BrewDayLogEntry` mappes likt fire steder: `features/batches/helpers.ts`, `brew-document.ts`, `tuning.ts` og integrasjonstester | Én funksjon i `src/domain/brew-day/` som alle bruker |
-| 2 | Domene | «Mesket korn» (`grain` + `adjunct`) summeres på egen hånd i `brew-plan.ts`, `mash-adjustment.ts`, `bsmx-equipment.ts` og `worker/assistant/tools.ts`, selv om `isMashed` finnes i `gravity.ts` | Én `mashedGrainKg(recipe)` i `brewing-calculations` |
-| 3 | Domene | Lokale `num()`/`round()` i `brew-document.ts`, `tuning.ts`, `brewery-history.ts`, `bsmx-equipment.ts` og `tools.ts` | Del én formatering/avrunding (domenet kan ikke bruke `src/lib/format.ts`) |
-| 4 | Tester | `BatchDetail`-fixturer bygges for hånd i minst fire testfiler | Én testhjelper `makeBatch()` / `sunsetTimeline()` i `tests/` |
-| 5 | UI | Bryggedagen viser overlappende innhold: stegkort, bryggeplan, bryggedokument-panel, resultatsammendrag og gjæringskort | Avklar hva hver del har ansvar for; kutt dobbeltvisning (se fase 3) |
-| 6 | UI | Assistentsiden (`/assistent`) og Veileder-panelet dekker nå det samme | Behold én: assistentsiden kan bli en liste over batcher som åpner veilederen |
-| 7 | UI | Tre måter å gjøre Markdown om til visning: `AssistantThread`, `brew-document-view.ts`, `BatchReportPage` | Én liten renderer for det begrensede formatet vi selv lager |
-| 8 | UI | To flytende elementer nederst på mobil (Logg-knapp og Veileder-felt) | Vurder én samlet handlingslinje |
-| 9 | Docs | `implementation-plan.md` og `architecture.md` er skrevet av mange økter; overlappende og utdaterte avsnitt | Stram inn: én kilde per beslutning, fjern historikk som ligger i git |
-| 10 | Worker | Assistent-API: gammel og ny vei (`assistant.ts` + `assistant-thread.ts`), prompt og verktøy i flere filer | Sjekk at det bare finnes én vei inn, og at hver fil har ett ansvar |
+| # | Område | Funn | Forslag | Status |
+|---|---|---|---|---|
+| 1 | Domene | Tidslinje → `BrewDayLogEntry` mappes likt fire steder: `features/batches/helpers.ts`, `brew-document.ts`, `tuning.ts` og integrasjonstester | Én funksjon i `src/domain/brew-day/` som alle bruker | |
+| 2 | Domene | «Mesket korn» (`grain` + `adjunct`) summeres på egen hånd i `brew-plan.ts`, `mash-adjustment.ts`, `bsmx-equipment.ts` og `worker/assistant/tools.ts`, selv om `isMashed` finnes i `gravity.ts` | Én `mashedGrainKg(recipe)` i `brewing-calculations` | |
+| 3 | Domene | Lokale `num()`/`round()` i `brew-document.ts`, `tuning.ts`, `brewery-history.ts`, `bsmx-equipment.ts` og `tools.ts` | Del én formatering/avrunding (domenet kan ikke bruke `src/lib/format.ts`) | |
+| 4 | Tester | `BatchDetail`-fixturer bygges for hånd i minst fire testfiler | Én testhjelper `makeBatch()` / `sunsetTimeline()` i `tests/` | ✅ `tests/helpers/batch.ts` brukt i alle fire filer |
+| 5 | UI | Bryggedagen viser overlappende innhold: stegkort, bryggeplan, bryggedokument-panel, resultatsammendrag og gjæringskort | Avklar hva hver del har ansvar for; kutt dobbeltvisning (se fase 3) | |
+| 6 | UI | Assistentsiden (`/assistent`) og Veileder-panelet dekker nå det samme | Behold én: assistentsiden kan bli en liste over batcher som åpner veilederen | |
+| 7 | UI | Tre måter å gjøre Markdown om til visning: `AssistantThread`, `brew-document-view.ts`, `BatchReportPage` | Én liten renderer for det begrensede formatet vi selv lager | |
+| 8 | UI | To flytende elementer nederst på mobil (Logg-knapp og Veileder-felt) | Vurder én samlet handlingslinje | |
+| 9 | Docs | `implementation-plan.md` og `architecture.md` er skrevet av mange økter; overlappende og utdaterte avsnitt | Stram inn: én kilde per beslutning, fjern historikk som ligger i git | |
+| 10 | Worker | Assistent-API: gammel og ny vei (`assistant.ts` + `assistant-thread.ts`), prompt og verktøy i flere filer | Sjekk at det bare finnes én vei inn, og at hver fil har ett ansvar | |
 
 ## Fase 3 — Bryggedagen (etter første ekte bryggedag)
 

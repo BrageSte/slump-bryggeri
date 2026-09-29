@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { summarizeBreweryHistory } from "../../src/domain/brew-document/brewery-history.ts";
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
+import { makeBatch } from "../helpers/batch.ts";
 import type { BatchDetail, BatchOutcome, TimelineItem } from "../../src/domain/model/api.ts";
 
 const variants = [
@@ -28,7 +29,7 @@ function makeOutcome(id: string, splitId: string | null, og: number | null, fg: 
   };
 }
 
-function makeBatch(input: {
+function makeHistoryBatch(input: {
   id: string;
   number: number;
   createdAt: number;
@@ -36,7 +37,7 @@ function makeBatch(input: {
   profile?: BatchDetail["equipmentSnapshot"]["values"];
   outcomes?: BatchOutcome[];
 }): BatchDetail {
-  return {
+  return makeBatch({
     id: input.id,
     number: input.number,
     name: `Batch ${input.number}`,
@@ -44,16 +45,13 @@ function makeBatch(input: {
     currentStage: null,
     stageStartedAt: null,
     brewDate: input.brewDate,
-    recipe: { id: "r1", name: sunsetIpaRecipe.name },
     createdAt: input.createdAt,
     updatedAt: input.createdAt,
     completedAt: input.createdAt,
-    recipeVersion: { id: "v1", version: 1 },
-    recipeSnapshot: sunsetIpaRecipe,
     equipmentSnapshot: { profileId: "p1", profileVersion: 1, values: input.profile ?? {} },
     splits: variants,
     outcomes: input.outcomes ?? [],
-  };
+  });
 }
 
 function measurement(id: string, stage: "lauter" | "boil" | "cooling" | "fermentation" | "mash", kind: "volume" | "sg" | "temperature", value: number, occurredAt: number): TimelineItem {
@@ -95,7 +93,7 @@ const measuredTimeline = (prefix: string, preBoil: number, postBoil: number, mas
 ];
 
 describe("brewery history", () => {
-  const newest = makeBatch({
+  const newest = makeHistoryBatch({
     id: "b-newest",
     number: 3,
     createdAt: 300,
@@ -106,7 +104,7 @@ describe("brewery history", () => {
       makeOutcome("o-pine", "pine", 1.06, 1.014),
     ],
   });
-  const older = makeBatch({
+  const older = makeHistoryBatch({
     id: "b-older",
     number: 2,
     createdAt: 200,
@@ -114,7 +112,7 @@ describe("brewery history", () => {
     profile: { boil_off_l_per_h: 6, brewhouse_efficiency_pct: 70, strike_temp_offset_c: 0.5 },
     outcomes: [makeOutcome("o-whole", null, 1.06, 1.012)],
   });
-  const unmeasured = makeBatch({
+  const unmeasured = makeHistoryBatch({
     id: "b-unmeasured",
     number: 1,
     createdAt: 100,
