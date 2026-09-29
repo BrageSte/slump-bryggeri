@@ -296,6 +296,7 @@ describe("assistant cost estimate", () => {
     const cost = estimateCostUsd("claude-sonnet-5", { inputTokens: 30_000, outputTokens: 1_500, cacheReadTokens: 10_000, cacheWriteTokens: 4_000, webSearchRequests: 0 });
     expect(cost).toBeCloseTo((30_000 * 2 + 10_000 * 0.2 + 4_000 * 2.5 + 1_500 * 10) / 1_000_000, 10);
     expect(estimateCostUsd("claude-sonnet-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 2 })).toBeCloseTo(0.02, 10);
+    expect(estimateCostUsd("claude-sonnet-5-5", { inputTokens: 30_000, outputTokens: 1_500, cacheReadTokens: 10_000, cacheWriteTokens: 4_000, webSearchRequests: 0 })).toBeCloseTo(cost!, 10);
     expect(estimateCostUsd("some-future-model", { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 })).toBeNull();
   });
 });

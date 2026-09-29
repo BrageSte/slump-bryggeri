@@ -32,7 +32,7 @@
     "BREWERY_MODE": "on",
     "BREWERY_NAME": "Slump Bryggeri",
     // Brewing assistant (secret ANTHROPIC_API_KEY). Questions per brewery per day (UTC).
-    "ASSISTANT_MODEL": "claude-sonnet-5",
+    "ASSISTANT_MODEL": "claude-sonnet-5-5",
     "ASSISTANT_DAILY_LIMIT": "40",
     "ASSISTANT_WEB_SEARCH": "on"
   },

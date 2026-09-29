@@ -10,7 +10,7 @@ import { getBatch } from "./batches.ts";
 import { getTimeline } from "./brew-log.ts";
 import { loadBreweryHistory } from "./brewery-history.ts";
 
-const DEFAULT_MODEL = "claude-sonnet-5";
+const DEFAULT_MODEL = "claude-sonnet-5-5";
 const DEFAULT_DAILY_LIMIT = 40;
 
 export type AssistantEnv = Pick<Env, "ANTHROPIC_API_KEY" | "ASSISTANT_MODEL" | "ASSISTANT_DAILY_LIMIT" | "ASSISTANT_WEB_SEARCH">;

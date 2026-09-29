@@ -85,7 +85,7 @@ Testene setter alltid en tom nøkkel og kaller aldri det ekte API-et.
 
 | Variabel | Standard | Betydning |
 |---|---|---|
-| `ASSISTANT_MODEL` | `claude-sonnet-5` | Modellen. `claude-haiku-4-5` er billigst, `claude-opus-5` er sterkest og dyrest. |
+| `ASSISTANT_MODEL` | `claude-sonnet-5-5` | Modellen. `claude-haiku-4-5` er billigst, `claude-opus-5-5` er sterkest og dyrest. |
 | `ASSISTANT_DAILY_LIMIT` | `40` | Maks spørsmål per bryggeri per døgn (UTC). |
 | `ASSISTANT_WEB_SEARCH` | `on` | `off` deaktiverer nettsøket. |
 
@@ -94,7 +94,7 @@ spørsmål og maks 8000 tokens i svaret.
 
 ## Kostnad
 
-Listepris per million tokens (september 2026): Haiku 4.5 $1 inn / $5 ut, Sonnet 5 $2 / $10, Opus 5 $5 / $25.
+Listepris per million tokens (september 2026): Haiku 4.5 $1 inn / $5 ut, Sonnet 5.5 $2 / $10, Opus 5.5 $4 / $20.
 Inn-tokenbruken varierer med briefet, hvilke seksjoner eller beregninger spørsmålet trenger, og antall runder. Et
 vanlig spørsmål sender derfor ikke hele den voksende loggen hver gang. Appen viser et anslag for dagen og måneden
 basert på tokenbruk og nettsøk fra API-et; fakturaen i Anthropic Console er fasit.
