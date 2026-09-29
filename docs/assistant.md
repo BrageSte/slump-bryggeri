@@ -14,15 +14,22 @@ spørsmålene som faktisk stilles.
 3. Hvis briefet ikke er nok, henter Claude bare én relevant seksjon om gangen med `get_batch_section`: plan, utstyr,
    status, resultater, kalibrering eller logg. Hele loggen hentes bare for spørsmål om historikk eller tidslinje.
    `brewery_history` er forbeholdt kalibrering og spørsmål om hva som er normalt for bryggeriet.
-4. Claude regner **aldri ut bryggetall selv**. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):
+4. Claude gjør **aldri aritmetikk selv**, heller ikke summer eller differanser. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):
    innmeskingstemperatur, vannmengder, mesketemperatur-justering, Brix → SG, ABV/forgjæring, brygghuseffektivitet,
    observert fordampning og enhetsomregning. Standardverdiene kommer fra batchens utstyrssnapshot.
 5. Planlagte verdier, beregnede verdier merket «≈» og målte verdier holdes atskilt. Manglende målinger omtales som
    «ikke målt»; assistenten gjetter ikke.
-6. Assistenten kan **ikke endre noe** i appen. Den sier hva som bør logges eller justeres i kalibreringen;
-   en person gjør det.
-7. Spørsmål og svar lagres ikke på serveren (bare i fanen). Serveren reserverer antall spørsmål atomisk per dag
-   (`assistant_daily_requests`) og lagrer tokenbruk per dag (`assistant_usage`) for kostnadsvisningen.
+6. Når bryggeren forteller om en måling eller noe som har skjedd, foreslår assistenten en loggføring med
+   `propose_actions` i stedet for å be bryggeren logge det manuelt. Forslag valideres mot loggskjemaene, men
+   assistenten utfører aldri en skriving. Bryggeren trykker «Logg» eller «Avvis» for hvert forslag.
+7. Spørsmål og svar **lagres per batch** i `assistant_messages` og er synlige for alle i bryggeriet. D1 beholder
+   hele tråden; API-et viser de 100 nyeste meldingene, eldste først, mens modellen får de siste omtrent 12 som
+   samtalehistorikk.
+   Forslagene lagres sammen med assistentsvaret. Når en brygger logger eller avviser et forslag, lagres hvem som
+   gjorde det og tidspunktet, slik at alle ser utfallet.
+8. Serveren reserverer antall spørsmål atomisk per dag (`assistant_daily_requests`) og lagrer tokenbruk per dag
+   (`assistant_usage`) for kostnadsvisningen. Spørsmål lagres før Anthropic-kallet, så de står igjen i tråden også
+   når assistenten returnerer en feil.
 
 ## Bryggeriets egne tall
 
@@ -47,7 +54,8 @@ normalt for bryggeriet.
    Lim inn nøkkelen når du blir spurt. Gjør dette etter at koden er deployet (merge til `main`); hemmeligheten
    gjelder med én gang, uten ny deploy.
 5. Lokalt: sett `ANTHROPIC_API_KEY=` i `.dev.vars` og start `npm run dev` på nytt.
-6. Åpne **Assistent** i bunnmenyen. Står det «ikke satt opp» mangler nøkkelen; ellers er det klart.
+6. Åpne **Veileder** på en batch eller **Assistent** i bunnmenyen og velg batch. Står det «ikke satt opp» mangler
+   nøkkelen; ellers er det klart. Samtalen følger batchen og deles med hele bryggeriet.
 
 Testene setter alltid en tom nøkkel og kaller aldri det ekte API-et.
 

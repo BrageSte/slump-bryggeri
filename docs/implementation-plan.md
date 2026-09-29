@@ -238,6 +238,26 @@ Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre
       Advarselen blokkerer ikke lagring.
 - [x] Rene tester for BeerSmiths temperaturjustering og utstyrssammenligning.
 
+### Steg 11 — Veileder: delt tråd og loggforslag ✅
+
+- [x] Lagre spørsmål og svar i `assistant_messages` per batch. Alle medlemmer ser samme tråd, med forfatternavn;
+      API-et returnerer de 100 nyeste meldingene eldste først og bruker de siste omtrent 12 som modellhistorikk.
+- [x] Vis Veileder på batchsiden: mobilknapp over bunnmenyen som åpner samtalen, og sidepanel på desktop.
+      `/assistent` bruker den valgte batchens samme lagrede tråd. Behold «Kopier bryggedokument».
+- [x] Legg til `propose_actions` for validerte målinger, hendelser og timere. Forslag utføres ikke av AI;
+      bryggeren logger via eksisterende endepunkt og bekrefter deretter med ett trykk, eller avviser.
+- [x] Poll tråden mens den vises, vis hvem som spurte og hvem som logget/avviste et forslag, og behold lagret
+      spørsmål når Anthropic-kallet feiler.
+- [x] Isolasjon, historikk, handlingstilstand, validering og promptregel testes med fake Anthropic-klient.
+
+**Akseptanse:** Alle på bryggeriet kan følge samtalen på samme batch. Et foreslått loggelement endrer ingenting før
+en brygger bekrefter det; etterpå ser alle hvem som utførte handlingen og når.
+
+Gjort 2026-09-29. Delt tråd i `assistant_messages` og bryggeriscopede endepunkter. Veileder vises på batchsiden og
+den gamle assistentsiden bruker nå samme tråd. Claude foreslår skjema-validerte loggoppføringer; logging skjer via
+de eksisterende måle-, hendelses- og kommentarendepunktene før statusen registreres på forslaget. Utvidet
+bryggeri-eksport og oppdatert [assistant.md](assistant.md).
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)

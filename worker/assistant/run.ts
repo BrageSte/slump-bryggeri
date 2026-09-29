@@ -1,6 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import type { BatchDetail } from "../../src/domain/model/api.ts";
+import type { AssistantProposedAction } from "../../src/domain/model/api.ts";
 import { assistantToolDefinitions, runAssistantTool } from "./tools.ts";
 
 /** Stable instructions; kept byte-identical between requests so the prompt cache holds. */
@@ -10,10 +11,10 @@ Check before answering:
 1. Answer from the brief when it contains enough information.
 2. Otherwise fetch only the section needed with get_batch_section, one section at a time. Fetch the full log only for history or timeline questions.
 3. Use brewery_history only for calibration questions or "what is normal for us?" questions.
-4. Every brewing number not read directly from context must come from a calculation tool. Never calculate it yourself.
+4. Never do arithmetic yourself, including sums and differences. Use a calculation tool or state the individual values.
 5. Say "ikke målt" instead of guessing. Keep answers short and practical for a brewer using a phone; use metric units.
 
-Keep planned recipe values, calculated values marked "≈", and measured values distinct. You have read-only access: never write or change anything. Explain calibration observations without applying them; one batch is weak evidence and an admin decides whether to save a new profile version. If a needed calculation tool is unavailable, say so instead of estimating. For unrelated questions, answer briefly or say they are outside your scope.`;
+When the brewer reports a reading or something that happened, propose logging it with propose_actions instead of telling them to log it. Proposed actions are only suggestions: the brewer must confirm each one, and you never execute a write. Keep planned recipe values, calculated values marked "≈", and measured values distinct. Explain calibration observations without applying them; one batch is weak evidence and an admin decides whether to save a new profile version. If a needed calculation tool is unavailable, say so instead of estimating. For unrelated questions, answer briefly or say they are outside your scope.`;
 
 export interface AssistantUsage {
   inputTokens: number;
@@ -25,6 +26,7 @@ export interface AssistantUsage {
 export interface AssistantRunResult {
   text: string;
   toolCalls: string[];
+  actions: AssistantProposedAction[];
   stopReason: string | null;
 }
 
@@ -48,6 +50,7 @@ export async function runAssistant(input: {
 }): Promise<AssistantRunResult> {
   const messages: Anthropic.MessageParam[] = input.history.map((m) => ({ role: m.role, content: m.content }));
   const toolCalls: string[] = [];
+  const actions: AssistantProposedAction[] = [];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const lastRound = round === MAX_TOOL_ROUNDS;
@@ -85,6 +88,7 @@ export async function runAssistant(input: {
             batch: input.batch,
             brewDocumentSections: input.brewDocumentSections,
             loadBreweryHistory: input.loadBreweryHistory,
+            proposedActions: actions,
           });
           return { type: "tool_result", tool_use_id: block.id, content: result.content, is_error: result.isError };
         }),
@@ -100,10 +104,10 @@ export async function runAssistant(input: {
       .join("\n")
       .trim();
     if (response.stop_reason === "refusal") {
-      return { text: "Assistenten kunne ikke svare på dette. Prøv å formulere spørsmålet annerledes.", toolCalls, stopReason: "refusal" };
+      return { text: "Assistenten kunne ikke svare på dette. Prøv å formulere spørsmålet annerledes.", toolCalls, actions, stopReason: "refusal" };
     }
     const truncated = response.stop_reason === "max_tokens" ? "\n\n(Svaret ble avkortet.)" : "";
-    return { text: (text || "Assistenten ga ikke noe svar. Prøv igjen.") + truncated, toolCalls, stopReason: response.stop_reason };
+    return { text: (text || "Assistenten ga ikke noe svar. Prøv igjen.") + truncated, toolCalls, actions, stopReason: response.stop_reason };
   }
-  return { text: "Assistenten brukte for mange beregninger. Prøv et mer avgrenset spørsmål.", toolCalls, stopReason: null };
+  return { text: "Assistenten brukte for mange beregninger. Prøv et mer avgrenset spørsmål.", toolCalls, actions, stopReason: null };
 }

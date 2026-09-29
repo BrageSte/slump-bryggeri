@@ -43,7 +43,7 @@ src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalib
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
 worker/                            Hono-app, auth, middleware, services (én fil per domene)
-worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, priser
+worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, forslag og priser
 db/migrations/                     D1-migrasjoner (wrangler d1 migrations)
 tests/                             calculations, domain, integration
 ```
@@ -166,7 +166,8 @@ Administratorer kan laste ned `GET /api/breweries/:breweryId/export` fra **Mer �
 `c.var.membership.breweryId` etter `requireMember("admin")` og returnerer formatet
 `slump-brewery-backup`, versjon 1. `tables` beholder relasjonene, rå JSON-dokumentene og tidsstemplene for
 bryggeriet, personer/medlemskap, invitasjoner, utstyr/profilverdier, oppskrifter/kilder/versjoner,
-batcher/snapshots/splits/resultater og logghendelser/målinger/kommentarer/vedlegg. Auth-sesjoner og
+batcher/snapshots/splits/resultater, logghendelser/målinger/kommentarer/vedlegg og `assistant_messages`.
+Auth-sesjoner og
 credentials er ikke med. `files` lister vedleggsmetadata og relative nedlastingslenker; filbytes ligger
 fortsatt i objektlageret. Gjenoppretting støttes ikke ennå.
 
@@ -275,9 +276,18 @@ fra `src/domain/brew-document/`; `get_batch_section` henter én relevant seksjon
 for historie- og tidslinjespørsmål. Det fullstendige dokumentet vises fortsatt på batchsiden fra de eksisterende,
 medlemsbeskyttede batch- og loggspørringene; visningen gjør ingen skriving. `brewery_history` har en valgfri loader
 for bryggeriets observasjoner på tvers av batcher. Assistenten henter beregnede tall gjennom verktøy som kaller
-`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen regner ikke selv og kan ikke skrive til
-databasen. Batchen hentes scoped til `c.var.membership.breweryId` før noe annet, så andre bryggerier får 404.
+`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen gjør ikke aritmetikk selv. Tabellen
+`assistant_messages` (`0011_assistant_messages.sql`) lagrer én delt samtale per batch: personens id på spørsmål,
+NULL på assistentsvar, handlingsforslag som JSON og de siste 100 meldingene i tråd-API-et. De siste omtrent 12
+lagrede meldingene sendes med neste spørsmål. Batchen og alle meldingsspørringer er scoped til
+`c.var.membership.breweryId`; andre bryggerier og batcher gir 404.
+
+`propose_actions` validerer forslag mot måle-, hendelses-, ingrediens- og timerskjemaene. Det skriver aldri til
+bryggeloggen. Klienten ber bryggeren bekrefte eller avvise hvert forslag; ved bekreftelse kaller klienten først det
+eksisterende loggendepunktet og PATCH-er deretter utfall, person og tidspunkt på meldingen. Batchsiden viser panelet
+på desktop og en åpneknapp over mobilnavigasjonen. `/assistent` viser den samme batchtråden.
 Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
 Dagskvoten reserveres atomisk per bryggeri i `assistant_daily_requests`; tokenbruk per modell og døgn ligger i
-`assistant_usage`. Bare tall lagres, ikke samtaler. Testene setter alltid en tom nøkkel. Oppsett og kostnad:
+`assistant_usage`. Spørsmål lagres før Anthropic-kallet og blir stående dersom kallet feiler. Testene bruker bare
+fake Anthropic-klienter. Oppsett og kostnad:
 [assistant.md](assistant.md).

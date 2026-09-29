@@ -5,6 +5,7 @@ import {
   eventTypeSchema,
   ingredientAddedDataSchema,
   measurementKindSchema,
+  timerStartedDataSchema,
   type BatchStatus,
   type BrewStage,
   type MeasurementKind,
@@ -524,18 +525,73 @@ export { ingredientAddedDataSchema };
 
 // --- Brewing assistant -----------------------------------------------------------------
 
-export const assistantRequestSchema = z
-  .object({
-    /** The conversation so far, oldest first; the last message is the new question. */
-    messages: z
-      .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(4000) }))
-      .min(1)
-      .max(20),
-  })
-  .refine((input) => input.messages[0]?.role === "user" && input.messages.at(-1)?.role === "user", {
-    message: "Samtalen må starte og slutte med et spørsmål.",
-    path: ["messages"],
-  });
+const assistantActionEventTypes = [
+  "water_added",
+  "ingredient_added",
+  "yeast_pitched",
+  "comment",
+  "transfer_started",
+  "transfer_completed",
+  "pressure_changed",
+  "cold_crash_started",
+  "packaged",
+  "custom",
+] as const;
+
+/** Strict client/API shape for an assistant suggestion. Runtime validation also applies the log endpoint's domain checks. */
+export const assistantProposedActionSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("log_measurement"),
+    measurementKind: measurementKindSchema,
+    value: z.number().finite(),
+    unit: z.string().trim().min(1).max(20),
+    label: z.string().trim().max(80).optional(),
+    splitId: z.string().min(1).nullable().optional(),
+  }).strict(),
+  z.object({
+    kind: z.literal("log_event"),
+    type: z.enum(assistantActionEventTypes),
+    data: z.record(z.string(), z.unknown()),
+  }).strict(),
+  z.object({ kind: z.literal("start_timer"), ...timerStartedDataSchema.shape }).strict(),
+]);
+export type AssistantProposedAction = z.output<typeof assistantProposedActionSchema>;
+
+export const assistantMessageInputSchema = z.object({
+  content: z.string().trim().min(1).max(4000),
+}).strict();
+
+export const assistantActionStatusSchema = z.object({
+  status: z.enum(["done", "dismissed"]),
+  logEntryId: z.string().min(1).max(128).optional(),
+}).strict();
+export type AssistantActionStatusInput = z.output<typeof assistantActionStatusSchema>;
+
+export type AssistantMessageAction = AssistantProposedAction & {
+  status: "pending" | "done" | "dismissed";
+  resolvedBy: { id: string; name: string } | null;
+  resolvedAt: number | null;
+  logEntryId: string | null;
+};
+
+export interface AssistantThreadMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  actions: AssistantMessageAction[] | null;
+  author: UserRef | null;
+  createdAt: number;
+}
+
+export interface AssistantThreadResponse {
+  messages: AssistantThreadMessage[];
+}
+
+export interface AssistantPostResponse {
+  messages: AssistantThreadMessage[];
+  toolCalls: string[];
+  usage: AssistantUsageSummary;
+}
 
 export interface AssistantUsageSummary {
   requests: number;
@@ -557,6 +613,7 @@ export interface AssistantStatus {
 
 export interface AssistantReply {
   reply: string;
+  actions: AssistantProposedAction[];
   /** Calculations the assistant ran, by tool name, in order. */
   toolCalls: string[];
   usage: AssistantUsageSummary;

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import {
-  assistantRequestSchema,
+  assistantActionStatusSchema,
+  assistantMessageInputSchema,
   createBatchSchema,
   createCommentSchema,
   createEventSchema,
@@ -21,7 +22,7 @@ import { parse, parseJsonBody } from "../lib/validate.ts";
 import { addBatchAttachment } from "../services/attachments.ts";
 import { saveOutcome } from "../services/batch-outcomes.ts";
 import { createBatch, createSplit, deleteBatch, getBatch, listBatches, startStage, updateBatch } from "../services/batches.ts";
-import { askAssistant } from "../services/assistant.ts";
+import { getAssistantThread, resolveAssistantAction, sendAssistantMessage } from "../services/assistant-thread.ts";
 import { addComment, correctLogEntry, deleteEvent, editComment, getTimeline, logEvent, logMeasurement } from "../services/brew-log.ts";
 
 /** Mounted under /breweries/:breweryId/batches — membership is already verified. */
@@ -63,18 +64,37 @@ export const batchRoutes = new Hono<AppEnv>()
     return c.json({ id }, 201);
   })
 
-  // Brewing assistant: read-only questions about this batch (Anthropic API, billed per use).
-  .post("/:batchId/assistant", async (c) => {
-    const { messages } = await parseJsonBody(c, assistantRequestSchema);
+  // Shared per-batch assistant thread. The assistant proposes actions; a member confirms each write.
+  .get("/:batchId/assistant/messages", async (c) =>
+    c.json(await getAssistantThread(c.var.db, c.var.membership.breweryId, c.req.param("batchId"))),
+  )
+  .post("/:batchId/assistant/messages", async (c) => {
+    const { content } = await parseJsonBody(c, assistantMessageInputSchema);
     await enforceRateLimit(c.env.ASSISTANT_RATE_LIMITER, `assistant:${c.var.membership.breweryId}`);
-    const reply = await askAssistant({
+    const result = await sendAssistantMessage({
       env: c.env,
       db: c.var.db,
       breweryId: c.var.membership.breweryId,
       batchId: c.req.param("batchId"),
-      messages,
+      user: c.var.user,
+      content,
     });
-    return c.json(reply);
+    return c.json(result, 201);
+  })
+  .patch("/:batchId/assistant/messages/:messageId/actions/:index", async (c) => {
+    const input = await parseJsonBody(c, assistantActionStatusSchema);
+    const actionIndex = Number(c.req.param("index"));
+    if (!Number.isSafeInteger(actionIndex) || actionIndex < 0) throw badRequest("Ugyldig handlingsnummer.");
+    await resolveAssistantAction({
+      db: c.var.db,
+      breweryId: c.var.membership.breweryId,
+      batchId: c.req.param("batchId"),
+      messageId: c.req.param("messageId"),
+      actionIndex,
+      user: c.var.user,
+      ...input,
+    });
+    return c.body(null, 204);
   })
 
   // Brew log
