@@ -1,6 +1,6 @@
 import { buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatus, registeredIngredientIds, type BrewPlanItem, type PlanQuantity } from "../brew-day/brew-plan.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
-import { deriveBrewDayState, type BrewDayLogEntry, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
+import { deriveBrewDayState, deviationFromTarget, type BrewDayLogEntry, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
 import { packagingLabels, type BatchDetail, type TimelineItem } from "../model/api.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, formatMeasurementValue, measurementKindSpecs } from "../model/brewing.ts";
 import { getProfileParameter } from "../model/equipment-profile.ts";
@@ -201,7 +201,11 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
       const actual = t.actual
         ? `${formatMeasurementValue(t.measurementKind, t.actual.value)}${t.actual.derivedFrom === "brix" ? " (fra Brix)" : ""}`
         : "ikke målt";
-      statusLines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}`);
+      const deviation = t.actual && (t.status === "low" || t.status === "high") ? deviationFromTarget(t.target, t.actual) : null;
+      const deviationText = deviation === null
+        ? ""
+        : ` (avvik ${deviation > 0 ? "+" : "−"}${formatMeasurementValue(t.measurementKind, Math.abs(deviation))} ${t.unit})`;
+      statusLines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}${deviationText}`);
     }
     if (state.nextAction) statusLines.push(`- Neste handling: ${state.nextAction.label}`);
   }

@@ -35,7 +35,7 @@ export function VeilederPanel({ batch }: { batch: BatchDetail }) {
       </aside>
 
       <div className="pointer-events-none fixed inset-x-0 bottom-20 z-20 px-4 md:hidden print:hidden">
-        <div className="mx-auto flex max-w-3xl justify-start pr-20">
+        <div className="mx-auto flex max-w-3xl justify-start pr-36">
           <Button
             variant="secondary"
             size="md"

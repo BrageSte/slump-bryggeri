@@ -303,6 +303,22 @@ export function compareMeasurementToTarget(
   return "ok";
 }
 
+/**
+ * How far a reading lies outside its target: reading − target for a value, or the distance to the
+ * nearest bound for a range (0 when inside). Written into the brew document so nobody, human or
+ * assistant, has to subtract by hand. Null for pH-strip intervals, which have no single reading.
+ */
+export function deviationFromTarget(
+  target: TargetValue,
+  actual: { value: number; valueMin?: number | null; valueMax?: number | null },
+): number | null {
+  if (actual.valueMin !== undefined && actual.valueMin !== null && actual.valueMax !== undefined && actual.valueMax !== null) return null;
+  if (target.kind === "value") return actual.value - target.value;
+  if (actual.value < target.min) return actual.value - target.min;
+  if (actual.value > target.max) return actual.value - target.max;
+  return 0;
+}
+
 export function temperatureTarget(min: number | undefined, max: number | undefined): TargetValue | null {
   if (min === undefined) return null;
   return max === undefined || max === min ? { kind: "value", value: min } : { kind: "range", min, max };
