@@ -13,7 +13,7 @@ import { loadBreweryHistory } from "./brewery-history.ts";
 const DEFAULT_MODEL = "claude-sonnet-5";
 const DEFAULT_DAILY_LIMIT = 40;
 
-export type AssistantEnv = Pick<Env, "ANTHROPIC_API_KEY" | "ASSISTANT_MODEL" | "ASSISTANT_DAILY_LIMIT">;
+export type AssistantEnv = Pick<Env, "ANTHROPIC_API_KEY" | "ASSISTANT_MODEL" | "ASSISTANT_DAILY_LIMIT" | "ASSISTANT_WEB_SEARCH">;
 
 export function assistantModel(env: AssistantEnv): string {
   return env.ASSISTANT_MODEL?.trim() || DEFAULT_MODEL;
@@ -24,10 +24,14 @@ function dailyLimit(env: AssistantEnv): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_DAILY_LIMIT;
 }
 
+function webSearchEnabled(env: AssistantEnv): boolean {
+  return env.ASSISTANT_WEB_SEARCH?.trim().toLowerCase() !== "off";
+}
+
 const today = (now = Date.now()) => new Date(now).toISOString().slice(0, 10);
 
-function summarize(model: string, rows: { requests: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; model: string }[]): AssistantUsageSummary {
-  const usage = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+function summarize(model: string, rows: { requests: number; input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number; web_search_requests: number; model: string }[]): AssistantUsageSummary {
+  const usage = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 };
   let estimatedUsd: number | null = 0;
   for (const row of rows) {
     usage.requests += row.requests;
@@ -35,11 +39,13 @@ function summarize(model: string, rows: { requests: number; input_tokens: number
     usage.outputTokens += row.output_tokens;
     usage.cacheReadTokens += row.cache_read_tokens;
     usage.cacheWriteTokens += row.cache_write_tokens;
+    usage.webSearchRequests += row.web_search_requests;
     const cost = estimateCostUsd(row.model, {
       inputTokens: row.input_tokens,
       outputTokens: row.output_tokens,
       cacheReadTokens: row.cache_read_tokens,
       cacheWriteTokens: row.cache_write_tokens,
+      webSearchRequests: row.web_search_requests,
     });
     estimatedUsd = cost === null || estimatedUsd === null ? null : estimatedUsd + cost;
   }
@@ -92,6 +98,7 @@ async function recordUsage(db: DB, breweryId: string, model: string, usage: Assi
       output_tokens: usage.outputTokens,
       cache_read_tokens: usage.cacheReadTokens,
       cache_write_tokens: usage.cacheWriteTokens,
+      web_search_requests: usage.webSearchRequests,
     })
     .onConflict((oc) =>
       oc.columns(["brewery_id", "day", "model"]).doUpdateSet({
@@ -100,6 +107,7 @@ async function recordUsage(db: DB, breweryId: string, model: string, usage: Assi
         output_tokens: sql`output_tokens + ${usage.outputTokens}`,
         cache_read_tokens: sql`cache_read_tokens + ${usage.cacheReadTokens}`,
         cache_write_tokens: sql`cache_write_tokens + ${usage.cacheWriteTokens}`,
+        web_search_requests: sql`web_search_requests + ${usage.webSearchRequests}`,
       }),
     )
     .execute();
@@ -164,7 +172,7 @@ export async function askAssistant(input: {
 
   const client = input.client ?? new Anthropic({ apiKey, maxRetries: 2, timeout: 60_000 });
 
-  const usage: AssistantUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
+  const usage: AssistantUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 };
   let result;
   try {
     result = await runAssistant({
@@ -176,24 +184,27 @@ export async function askAssistant(input: {
       loadBreweryHistory: input.loadBreweryHistory ?? (() => loadBreweryHistory(db, breweryId, { excludeBatchId: input.batchId })),
       history: input.messages,
       batch,
+      webSearchEnabled: webSearchEnabled(env),
       onUsage: (round) => {
         usage.inputTokens += round.inputTokens;
         usage.outputTokens += round.outputTokens;
         usage.cacheReadTokens += round.cacheReadTokens;
         usage.cacheWriteTokens += round.cacheWriteTokens;
+        usage.webSearchRequests += round.webSearchRequests;
       },
     });
   } catch (error) {
     throw toHttpError(error, model);
   } finally {
     // Tokens are billed even when a later round fails, so count them either way.
-    if (usage.inputTokens + usage.outputTokens > 0) await recordUsage(db, breweryId, model, usage, day);
+    if (usage.inputTokens + usage.outputTokens + usage.webSearchRequests > 0) await recordUsage(db, breweryId, model, usage, day);
   }
 
   return {
     reply: result.text,
     actions: result.actions,
     toolCalls: result.toolCalls,
+    citations: result.citations,
     usage: { requests: 1, ...usage, estimatedUsd: estimateCostUsd(model, usage) },
   };
 }

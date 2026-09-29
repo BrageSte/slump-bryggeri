@@ -8,3 +8,5 @@ BREWERY_ACCESS_CODE=
 # Optional. Anthropic API key for the brewing assistant (console.anthropic.com → API keys).
 # Without it the assistant shows how to set it up; the rest of the app works as before.
 ANTHROPIC_API_KEY=
+# Optional. Web search is on by default; add this to .dev.vars to disable it locally.
+# ASSISTANT_WEB_SEARCH=off

@@ -282,6 +282,12 @@ NULL på assistentsvar, handlingsforslag som JSON og de siste 100 meldingene i t
 lagrede meldingene sendes med neste spørsmål. Batchen og alle meldingsspørringer er scoped til
 `c.var.membership.breweryId`; andre bryggerier og batcher gir 404.
 
+Serververktøyet `web_search_20260209` er valgfritt (`ASSISTANT_WEB_SEARCH`, standard `on`), avgrenset til
+autoritative bryggekilder og maksimalt to søk per spørsmål på tvers av verktøyrundene. Pausede svar sendes tilbake
+til Messages API uendret, og nettsitater lagres i `assistant_messages.citations` (migrering `0012`).
+`assistant_usage.web_search_requests` lagrer antall søk for kostnadsanslaget ($10 per 1 000 søk); dagsgrensen
+for spørsmål er uendret.
+
 `propose_actions` validerer forslag mot måle-, hendelses-, ingrediens- og timerskjemaene. Det skriver aldri til
 bryggeloggen. Klienten ber bryggeren bekrefte eller avvise hvert forslag; ved bekreftelse kaller klienten først det
 eksisterende loggendepunktet og PATCH-er deretter utfall, person og tidspunkt på meldingen. Batchsiden viser panelet

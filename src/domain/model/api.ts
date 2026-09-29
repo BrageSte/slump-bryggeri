@@ -574,11 +574,17 @@ export type AssistantMessageAction = AssistantProposedAction & {
   logEntryId: string | null;
 };
 
+export interface AssistantCitation {
+  url: string;
+  title: string | null;
+}
+
 export interface AssistantThreadMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   actions: AssistantMessageAction[] | null;
+  citations: AssistantCitation[];
   author: UserRef | null;
   createdAt: number;
 }
@@ -599,6 +605,7 @@ export interface AssistantUsageSummary {
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
+  webSearchRequests: number;
   /** Estimate from list prices; null for a model without a known price. */
   estimatedUsd: number | null;
 }
@@ -616,6 +623,7 @@ export interface AssistantReply {
   actions: AssistantProposedAction[];
   /** Calculations the assistant ran, by tool name, in order. */
   toolCalls: string[];
+  citations: AssistantCitation[];
   usage: AssistantUsageSummary;
 }
 

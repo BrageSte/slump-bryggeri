@@ -52,6 +52,93 @@ describe("brewing assistant", () => {
     expect(res.status).toBe(400);
   });
 
+  it("persists cited web sources and prices reported search requests", async () => {
+    const user = await createUser("Source brewer");
+    const brewery = await createBrewery(user, "Source test");
+    const recipe = (await user.post(`/breweries/${brewery}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batch = (await user.post(`/breweries/${brewery}/batches`, { recipeId: recipe })).body.id;
+    const citation = {
+      type: "web_search_result_location",
+      url: "https://www.fermentis.com/en/product/safale-us-05/",
+      title: "SafAle US-05",
+      encrypted_index: "citation-index",
+      cited_text: "Attenuation: 78–82%",
+    };
+    const requests: Anthropic.MessageCreateParamsNonStreaming[] = [];
+    const client: MessagesClient = {
+      messages: {
+        create: async (params) => {
+          requests.push(structuredClone(params));
+          return {
+            id: "citation-message",
+            type: "message",
+            role: "assistant",
+            model: "claude-sonnet-5",
+            content: [{ type: "text", text: "Fermentis oppgir 78–82 % utgjæring.", citations: [citation] }],
+            stop_reason: "end_turn",
+            usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              cache_read_input_tokens: 0,
+              cache_creation_input_tokens: 0,
+              server_tool_use: { web_fetch_requests: 0, web_search_requests: 1 },
+            },
+          } as unknown as Anthropic.Message;
+        },
+      },
+    };
+    const db = createDb(env.DB);
+    const now = Date.parse("2026-10-02T10:00:00Z");
+    const response = await sendAssistantMessage({
+      env: { ...env, ANTHROPIC_API_KEY: "", ASSISTANT_WEB_SEARCH: "on" },
+      db,
+      breweryId: brewery,
+      batchId: batch,
+      user: { id: user.id, name: user.name, email: user.email },
+      content: "Hva er utgjæringen for US-05?",
+      client,
+      now,
+    });
+
+    expect(requests[0]!.tools?.some((tool) => tool.type === "web_search_20260209")).toBe(true);
+    expect(response.messages[1]!.citations).toEqual([{ url: citation.url, title: citation.title }]);
+    expect(response.usage).toMatchObject({ webSearchRequests: 1, estimatedUsd: expect.any(Number) });
+    expect(response.usage.estimatedUsd).toBeGreaterThan(0.01);
+    const thread = await getAssistantThread(db, brewery, batch);
+    expect(thread.messages[1]!.citations).toEqual([{ url: citation.url, title: citation.title }]);
+    const stored = await db
+      .selectFrom("assistant_messages")
+      .select("citations")
+      .where("brewery_id", "=", brewery)
+      .where("batch_id", "=", batch)
+      .where("role", "=", "assistant")
+      .executeTakeFirstOrThrow();
+    expect(JSON.parse(stored.citations!)).toEqual([{ url: citation.url, title: citation.title }]);
+    expect((await getAssistantStatus({ ...env, ASSISTANT_WEB_SEARCH: "on" }, db, brewery, now)).today.webSearchRequests).toBe(1);
+  });
+
+  it("omits web search when ASSISTANT_WEB_SEARCH is off", async () => {
+    const requests: Anthropic.MessageCreateParamsNonStreaming[] = [];
+    const client: MessagesClient = {
+      messages: {
+        create: async (params) => {
+          requests.push(structuredClone(params));
+          return answer.messages.create(params);
+        },
+      },
+    };
+    await askAssistant({
+      env: { ...env, ANTHROPIC_API_KEY: "", ASSISTANT_WEB_SEARCH: "off" },
+      db: createDb(env.DB),
+      breweryId,
+      batchId,
+      messages: [{ role: "user", content: "Hvordan går det?" }],
+      client,
+      now: Date.parse("2026-10-03T10:00:00Z"),
+    });
+    expect(requests[0]!.tools?.some((tool) => tool.type === "web_search_20260209")).toBe(false);
+  });
+
   it("loads model history from the shared stored thread", async () => {
     const person = await createUser("ThreadAuthor");
     const brewery = await createBrewery(person, "Delt assistenttråd");

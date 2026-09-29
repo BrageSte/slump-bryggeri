@@ -1,4 +1,5 @@
-import type { AssistantProposedAction } from "../../domain/model/api.ts";
+import type { AssistantCitation, AssistantProposedAction } from "../../domain/model/api.ts";
+import { assistantWebSourceForUrl } from "../../domain/model/assistant-sources.ts";
 import { eventTypeLabels, measurementKindSpecs, type BrewStage } from "../../domain/model/brewing.ts";
 
 export function starterQuestions(stage: BrewStage | null): string[] {
@@ -13,6 +14,12 @@ export function starterQuestions(stage: BrewStage | null): string[] {
 }
 
 const number = (value: number, digits = 1, minimumDigits = 0) => value.toLocaleString("nb-NO", { minimumFractionDigits: minimumDigits, maximumFractionDigits: digits });
+
+export function assistantCitationLabel(citation: AssistantCitation): string | null {
+  const source = assistantWebSourceForUrl(citation.url);
+  if (!source) return null;
+  return citation.title ? `${source.organization} – ${citation.title}` : source.organization;
+}
 
 export function assistantActionLabel(action: AssistantProposedAction): string {
   if (action.kind === "log_measurement") {

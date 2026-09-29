@@ -95,6 +95,7 @@ export interface AssistantUsageTable {
   output_tokens: number;
   cache_read_tokens: number;
   cache_write_tokens: number;
+  web_search_requests: number;
 }
 
 export interface AssistantDailyRequestsTable {
@@ -112,6 +113,8 @@ export interface AssistantMessagesTable {
   content: string;
   /** JSON serialized AssistantMessageAction[]; null when the assistant proposed no actions. */
   actions: string | null;
+  /** JSON serialized AssistantCitation[]; null when no web sources were cited. */
+  citations: string | null;
   created_by: string | null;
   created_at: number;
 }

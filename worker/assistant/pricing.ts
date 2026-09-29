@@ -17,5 +17,5 @@ export function estimateCostUsd(model: string, usage: AssistantUsage): number | 
   if (!price) return null;
   const inputCost =
     usage.inputTokens * price.input + usage.cacheReadTokens * price.input * 0.1 + usage.cacheWriteTokens * price.input * 1.25;
-  return (inputCost + usage.outputTokens * price.output) / 1_000_000;
+  return (inputCost + usage.outputTokens * price.output) / 1_000_000 + usage.webSearchRequests * 10 / 1_000;
 }

@@ -36,11 +36,17 @@ const brewDocumentSections = {
   log: "## Logg\n- Siste måling",
 };
 
-const usage = (input: number, output: number): Anthropic.Usage =>
-  ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 0 }) as Anthropic.Usage;
+const usage = (input: number, output: number, webSearchRequests = 0): Anthropic.Usage =>
+  ({
+    input_tokens: input,
+    output_tokens: output,
+    cache_read_input_tokens: 100,
+    cache_creation_input_tokens: 0,
+    server_tool_use: { web_fetch_requests: 0, web_search_requests: webSearchRequests },
+  }) as Anthropic.Usage;
 
-function message(content: unknown[], stop_reason: Anthropic.Message["stop_reason"]): Anthropic.Message {
-  return { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5", content, stop_reason, usage: usage(1000, 50) } as unknown as Anthropic.Message;
+function message(content: unknown[], stop_reason: Anthropic.Message["stop_reason"], webSearchRequests = 0): Anthropic.Message {
+  return { id: "m", type: "message", role: "assistant", model: "claude-sonnet-5", content, stop_reason, usage: usage(1000, 50, webSearchRequests) } as unknown as Anthropic.Message;
 }
 
 /** Fake Messages API: plays back scripted responses and records every request. */
@@ -142,6 +148,10 @@ describe("assistant tools", () => {
   it("tells the model not to do arithmetic and to propose reported log entries", () => {
     expect(ASSISTANT_SYSTEM_PROMPT.toLowerCase()).toContain("never do arithmetic yourself, including sums and differences");
     expect(ASSISTANT_SYSTEM_PROMPT).toContain("propose logging it with propose_actions");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("Search the web only when the answer depends on specific external facts");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("Never search this batch's data, brewery history, or anything a calculation tool answers");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("note crop-year and lot variation for hops");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("labelled as general guidance rather than a fact about this batch");
   });
 });
 
@@ -213,6 +223,70 @@ describe("assistant loop", () => {
     ]);
   });
 
+  it("passes server search blocks and cited text back unchanged after pause_turn", async () => {
+    const citation = {
+      type: "web_search_result_location",
+      url: "https://www.fermentis.com/en/product/safale-us-05/",
+      title: "SafAle US-05",
+      encrypted_index: "opaque-citation-index",
+      cited_text: "Attenuation: 78–82%",
+    };
+    const searchTurn = [
+      { type: "server_tool_use", id: "search-1", name: "web_search", input: { query: "SafAle US-05 attenuation" } },
+      { type: "web_search_tool_result", tool_use_id: "search-1", content: [{ type: "web_search_result", url: citation.url, title: citation.title }] },
+      { type: "text", text: "I found the product specification.", citations: [citation] },
+    ];
+    const secondSearchTurn = [
+      { type: "server_tool_use", id: "search-2", name: "web_search", input: { query: "SafAle US-05 attenuation Fermentis" } },
+      { type: "web_search_tool_result", tool_use_id: "search-2", content: [{ type: "web_search_result", url: citation.url, title: citation.title }] },
+    ];
+    const { client, requests } = fakeClient([
+      message(searchTurn, "pause_turn", 1),
+      message(secondSearchTurn, "pause_turn", 1),
+      message([{ type: "text", text: "Fermentis oppgir 78–82 % utgjæring for SafAle US-05.", citations: [citation] }], "end_turn"),
+    ]);
+    const recordedUsage: number[] = [];
+    const result = await runAssistant({
+      client,
+      model: "claude-sonnet-5",
+      brief: "Kort assistentbrief",
+      brewDocumentSections,
+      history: [{ role: "user", content: "Hva er utgjæringen for US-05?" }],
+      batch,
+      onUsage: (round) => recordedUsage.push(round.webSearchRequests),
+    });
+
+    expect(requests).toHaveLength(3);
+    expect(requests[1]!.messages[1]).toEqual({ role: "assistant", content: searchTurn });
+    expect(requests[1]!.messages).toHaveLength(2);
+    expect(requests[2]!.messages[2]).toEqual({ role: "assistant", content: secondSearchTurn });
+    const firstSearch = requests[0]!.tools?.find((tool) => tool.type === "web_search_20260209");
+    const continuedSearch = requests[1]!.tools?.find((tool) => tool.type === "web_search_20260209");
+    const exhaustedSearch = requests[2]!.tools?.some((tool) => tool.type === "web_search_20260209");
+    expect(firstSearch).toMatchObject({ type: "web_search_20260209", name: "web_search", max_uses: 2, allowed_domains: expect.arrayContaining(["fermentis.com", "bjcp.org"]) });
+    expect(continuedSearch).toMatchObject({ type: "web_search_20260209", max_uses: 1 });
+    expect(exhaustedSearch).toBe(false);
+    expect(requests[0]!.tools?.some((tool) => tool.type?.startsWith("code_execution"))).toBe(false);
+    expect(recordedUsage).toEqual([1, 1, 0]);
+    expect(result.text).toContain("78–82 %");
+    expect(result.citations).toEqual([{ url: citation.url, title: citation.title }]);
+  });
+
+  it("omits the server web search tool when it is disabled", async () => {
+    const { client, requests } = fakeClient([message([{ type: "text", text: "Generell veiledning." }], "end_turn")]);
+    await runAssistant({
+      client,
+      model: "claude-sonnet-5",
+      brief: "doc",
+      brewDocumentSections,
+      history: [{ role: "user", content: "?" }],
+      batch,
+      webSearchEnabled: false,
+      onUsage: () => {},
+    });
+    expect(requests[0]!.tools?.some((tool) => tool.type === "web_search_20260209")).toBe(false);
+  });
+
   it("forces a final answer after too many tool rounds", async () => {
     const toolTurn = () => message([{ type: "tool_use", id: "t", name: "convert_units", input: { value: 1, fromUnit: "L", toUnit: "US gal" } }], "tool_use");
     const { client, requests } = fakeClient([...Array.from({ length: 6 }, toolTurn), message([{ type: "text", text: "Svar." }], "end_turn")]);
@@ -234,8 +308,9 @@ describe("assistant loop", () => {
 describe("assistant cost estimate", () => {
   it("uses list prices with cache reads at 0.1× and writes at 1.25×", () => {
     // Sonnet 5: $2 in / $10 out per MTok.
-    const cost = estimateCostUsd("claude-sonnet-5", { inputTokens: 30_000, outputTokens: 1_500, cacheReadTokens: 10_000, cacheWriteTokens: 4_000 });
+    const cost = estimateCostUsd("claude-sonnet-5", { inputTokens: 30_000, outputTokens: 1_500, cacheReadTokens: 10_000, cacheWriteTokens: 4_000, webSearchRequests: 0 });
     expect(cost).toBeCloseTo((30_000 * 2 + 10_000 * 0.2 + 4_000 * 2.5 + 1_500 * 10) / 1_000_000, 10);
-    expect(estimateCostUsd("some-future-model", { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 })).toBeNull();
+    expect(estimateCostUsd("claude-sonnet-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 2 })).toBeCloseTo(0.02, 10);
+    expect(estimateCostUsd("some-future-model", { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 })).toBeNull();
   });
 });
