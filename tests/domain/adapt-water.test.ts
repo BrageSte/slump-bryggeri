@@ -52,8 +52,15 @@ describe("adapted recipe water volumes", () => {
     expect(legacy.mashWaterL - result.mashWaterL).toBeCloseTo(3, 6);
   });
 
-  it("returns null without mashed grain or boil-off", () => {
+  it("returns null without mashed grain", () => {
     expect(calculateAdaptedWaterVolumes({ ...withSugar, fermentables: [sugar] }, equipment)).toBeNull();
-    expect(calculateAdaptedWaterVolumes(withSugar, {})).toBeNull();
+  });
+
+  it("also agrees with the brew-day plan on an uncalibrated profile (documented defaults)", () => {
+    const water = calculateAdaptedWaterVolumes(withSugar, {})!;
+    const plan = buildBrewPlan({ recipe: withSugar, equipment: {} }).summary;
+    expect(water.mashWaterL).toBeCloseTo(plan.strikeVolumeL!.value, 6);
+    expect(water.spargeWaterL).toBeCloseTo(plan.spargeVolumeL!.value, 6);
+    expect(water.preBoilVolumeL).toBeCloseTo(plan.preBoilVolumeL!.value, 6);
   });
 });
