@@ -217,3 +217,13 @@ describe("deriveBrewDayState", () => {
     expect(done.nextAction).toBeNull();
   });
 });
+
+describe("deviationFromTarget", () => {
+  it("gives reading minus target, or the distance to the nearest bound of a range", async () => {
+    const { deviationFromTarget } = await import("../../src/domain/brew-day/state.ts");
+    expect(deviationFromTarget({ kind: "value", value: 64.4 }, { value: 64 })).toBeCloseTo(-0.4, 10);
+    expect(deviationFromTarget({ kind: "range", min: 78, max: 80 }, { value: 82 })).toBeCloseTo(2, 10);
+    expect(deviationFromTarget({ kind: "range", min: 78, max: 80 }, { value: 79 })).toBe(0);
+    expect(deviationFromTarget({ kind: "range", min: 5.2, max: 5.4 }, { value: 5.9, valueMin: 5.8, valueMax: 6 })).toBeNull();
+  });
+});

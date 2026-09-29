@@ -49,6 +49,7 @@ import { LogSheet, type LogIntent } from "./LogSheet.tsx";
 import { OccurredAtInput, occurredAtOf } from "./OccurredAtInput.tsx";
 import { useBrewAlarms } from "./useBrewAlarms.ts";
 import { useScreenWakeLock } from "./useScreenWakeLock.ts";
+import { VeilederPanel } from "../assistant/VeilederPanel.tsx";
 
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
@@ -202,7 +203,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
   }
 
   return (
-    <div className="space-y-5">
+    <div className="grid items-start gap-6 md:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0 space-y-5">
       <AlarmBanner alarms={alarms.current} onAcknowledge={alarms.acknowledge} onRegister={registerFromAlarm} registering={logEvent.isPending} />
       <PageHeader
         back="/brygg"
@@ -358,6 +360,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
         onStage={goToStage}
         onComplete={() => navigate(`/batcher/${batch.id}/resultat`)}
       />
+      </div>
+      <VeilederPanel batch={batch} />
     </div>
   );
 }

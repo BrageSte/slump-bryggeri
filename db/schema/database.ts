@@ -104,6 +104,18 @@ export interface AssistantDailyRequestsTable {
   requests: number;
 }
 
+export interface AssistantMessagesTable {
+  id: string;
+  brewery_id: string;
+  batch_id: string;
+  role: "user" | "assistant";
+  content: string;
+  /** JSON serialized AssistantMessageAction[]; null when the assistant proposed no actions. */
+  actions: string | null;
+  created_by: string | null;
+  created_at: number;
+}
+
 export interface RecipeSourcesTable {
   id: string;
   recipe_id: string;
@@ -305,6 +317,7 @@ export interface Database {
   recipe_sources: RecipeSourcesTable;
   assistant_usage: AssistantUsageTable;
   assistant_daily_requests: AssistantDailyRequestsTable;
+  assistant_messages: AssistantMessagesTable;
   recipe_versions: RecipeVersionsTable;
   batches: BatchesTable;
   batch_recipe_snapshots: BatchRecipeSnapshotsTable;

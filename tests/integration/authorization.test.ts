@@ -18,6 +18,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
   let recipeA: string;
   let importedA: string;
   let batchA: string;
+  let assistantMessageA: string;
   let eventA: string;
   let attachmentA: string;
 
@@ -31,6 +32,9 @@ describe("brewery isolation (Alice vs Bob)", () => {
     importedA = (await alice.post(`/breweries/${breweryA}/recipes/import/bsmx`, { filename: "IRA.bsmx", text: bsmxFixtures["IRA.bsmx"] })).body.id;
     expect(importedA).toBeTruthy();
     batchA = (await alice.post(`/breweries/${breweryA}/batches`, { recipeId: recipeA })).body.id;
+    const unanswered = await alice.post(`/breweries/${breweryA}/batches/${batchA}/assistant/messages`, { content: "Dette spørsmålet blir lagret." });
+    expect(unanswered.status).toBe(503);
+    assistantMessageA = (await alice.get(`/breweries/${breweryA}/batches/${batchA}/assistant/messages`)).body.messages[0].id;
     eventA = (await alice.post(`/breweries/${breweryA}/batches/${batchA}/measurements`, { kind: "temperature", value: 66.8 })).body.id;
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/splits`, { name: "Lille tank", volumeL: 24 });
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/comments`, { body: "Backup test comment" });
@@ -55,6 +59,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
       `/breweries/${breweryA}/batches`,
       `/breweries/${breweryA}/batches/${batchA}`,
       `/breweries/${breweryA}/batches/${batchA}/timeline`,
+      `/breweries/${breweryA}/batches/${batchA}/assistant/messages`,
       `/breweries/${breweryA}/export`,
       `/breweries/${breweryA}/equipment-profile`,
       `/breweries/${breweryA}/attachments/${attachmentA}`,
@@ -145,6 +150,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect((await download(bob, `/breweries/${breweryB}/recipes/${importedA}/source/file`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/timeline`)).status).toBe(404);
+    expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/assistant/messages`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryA}/assistant`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
 
@@ -173,8 +179,10 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.post(`/breweries/${breweryA}/equipment-profile/versions`, { values: {} }),
       bob.put(`/breweries/${breweryA}/batches/${batchA}/outcomes`, bobsResult),
       bob.put(`/breweries/${breweryB}/batches/${batchA}/outcomes`, bobsResult),
-      bob.post(`/breweries/${breweryA}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
-      bob.post(`/breweries/${breweryB}/batches/${batchA}/assistant`, { messages: [{ role: "user", content: "Hvor er vi?" }] }),
+      bob.post(`/breweries/${breweryA}/batches/${batchA}/assistant/messages`, { content: "Hvor er vi?" }),
+      bob.post(`/breweries/${breweryB}/batches/${batchA}/assistant/messages`, { content: "Hvor er vi?" }),
+      bob.patch(`/breweries/${breweryA}/batches/${batchA}/assistant/messages/${assistantMessageA}/actions/0`, { status: "done" }),
+      bob.patch(`/breweries/${breweryB}/batches/${batchA}/assistant/messages/${assistantMessageA}/actions/0`, { status: "done" }),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
     expect((await alice.get(`/breweries/${breweryA}/recipes`)).body).toHaveLength(2);

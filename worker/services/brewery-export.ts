@@ -1,6 +1,16 @@
 import { notFound } from "../lib/errors.ts";
 import type { DB } from "../lib/db.ts";
 
+function resolvedActionUserIds(actions: string | null): string[] {
+  if (!actions) return [];
+  try {
+    const parsed = JSON.parse(actions) as { resolvedBy?: { id?: unknown } | null }[];
+    return parsed.flatMap((action) => typeof action.resolvedBy?.id === "string" ? [action.resolvedBy.id] : []);
+  } catch {
+    return [];
+  }
+}
+
 /** Creates a relational, versioned backup. File bytes stay in object storage. */
 export async function exportBrewery(db: DB, breweryId: string) {
   const brewery = await db
@@ -11,7 +21,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
     .executeTakeFirst();
   if (!brewery) throw notFound("Bryggeriet");
 
-  const [members, invites, equipment, equipmentProfiles, profileValues, recipes, recipeSources, recipeVersions, batches, recipeSnapshots, equipmentSnapshots, splits, events, measurements, comments, attachments, outcomes] =
+  const [members, invites, equipment, equipmentProfiles, profileValues, recipes, recipeSources, recipeVersions, batches, recipeSnapshots, equipmentSnapshots, splits, events, measurements, comments, attachments, outcomes, assistantMessages] =
     await Promise.all([
       db.selectFrom("brewery_members").selectAll().where("brewery_id", "=", breweryId).orderBy("user_id").execute(),
       db.selectFrom("brewery_invites").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
@@ -68,6 +78,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
       db.selectFrom("comments").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
       db.selectFrom("attachments").selectAll().where("brewery_id", "=", breweryId).orderBy("created_at").orderBy("id").execute(),
       db.selectFrom("batch_outcomes").selectAll().where("brewery_id", "=", breweryId).orderBy("batch_id").orderBy("created_at").execute(),
+      db.selectFrom("assistant_messages").selectAll().where("brewery_id", "=", breweryId).orderBy("batch_id").orderBy("created_at").orderBy("id").execute(),
     ]);
 
   const userIds = [
@@ -85,6 +96,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
     ...comments.map((comment) => comment.created_by),
     ...attachments.map((attachment) => attachment.created_by),
     ...outcomes.flatMap((outcome) => [outcome.created_by, outcome.updated_by]),
+    ...assistantMessages.flatMap((message) => [message.created_by, ...resolvedActionUserIds(message.actions)]),
   ].filter((userId): userId is string => userId !== null);
   const users = await db.selectFrom("users").selectAll().where("id", "in", [...new Set(userIds)]).orderBy("id").execute();
 
@@ -133,6 +145,7 @@ export async function exportBrewery(db: DB, breweryId: string) {
       comments,
       attachments,
       batch_outcomes: outcomes,
+      assistant_messages: assistantMessages,
     },
   };
 }

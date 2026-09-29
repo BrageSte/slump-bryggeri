@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { assistantToolDefinitions, runAssistantTool } from "../../worker/assistant/tools.ts";
-import { runAssistant, type MessagesClient } from "../../worker/assistant/run.ts";
+import { ASSISTANT_SYSTEM_PROMPT, runAssistant, type MessagesClient } from "../../worker/assistant/run.ts";
 import { estimateCostUsd } from "../../worker/assistant/pricing.ts";
 import { calculateStrikeTemperature } from "../../src/domain/brewing-calculations/index.ts";
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
@@ -73,11 +73,16 @@ describe("assistant tools", () => {
       "convert_units",
       "get_batch_section",
       "brewery_history",
+      "propose_actions",
     ]);
     for (const definition of assistantToolDefinitions) {
       expect(definition.input_schema.type).toBe("object");
       expect(definition.input_schema).not.toHaveProperty("$schema");
     }
+    const proposalSchema = JSON.stringify(assistantToolDefinitions.find((tool) => tool.name === "propose_actions")?.input_schema);
+    expect(proposalSchema).toContain("log_measurement");
+    expect(proposalSchema).toContain("log_event");
+    expect(proposalSchema).toContain("start_timer");
   });
 
   it("computes with the app's own functions and the batch snapshot's defaults", async () => {
@@ -108,6 +113,35 @@ describe("assistant tools", () => {
     expect(JSON.parse((await runAssistantTool("water_volumes", {}, { batch })).content)).toHaveProperty("error");
     expect((await runAssistantTool("strike_temperature", { targetMashTempC: "varm" }, { batch })).isError).toBe(true);
     expect((await runAssistantTool("does_not_exist", {}, { batch })).isError).toBe(true);
+  });
+
+  it("keeps valid proposed actions, reports invalid ones, and does not execute them", async () => {
+    const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
+    const result = await runAssistantTool("propose_actions", {
+      actions: [
+        { kind: "log_measurement", measurementKind: "temperature", value: 64, unit: "°C", label: "Mesketemperatur" },
+        { kind: "log_event", type: "water_added", data: { volumeL: 3.5, temperatureC: 95 } },
+        { kind: "start_timer", label: "Humle", durationMin: 10 },
+        { kind: "log_measurement", measurementKind: "temperature", value: 164, unit: "°C" },
+        { kind: "log_event", type: "water_added", data: { volumeL: -1, temperatureC: 95 } },
+        { kind: "start_timer", label: "", durationMin: 10 },
+      ],
+    }, { batch, proposedActions });
+
+    const output = JSON.parse(result.content) as { accepted: unknown[]; rejected: { index: number; reason: string }[] };
+    expect(result.isError).toBe(false);
+    expect(output.accepted).toHaveLength(3);
+    expect(output.rejected.map((entry) => entry.index)).toEqual([3, 4, 5]);
+    expect(output.rejected.every((entry) => entry.reason.length > 0)).toBe(true);
+    expect(proposedActions).toHaveLength(3);
+    expect(proposedActions[0]).toMatchObject({ kind: "log_measurement", value: 64 });
+    expect(proposedActions[1]).toMatchObject({ kind: "log_event", type: "water_added" });
+    expect(proposedActions[2]).toMatchObject({ kind: "start_timer", durationMin: 10 });
+  });
+
+  it("tells the model not to do arithmetic and to propose reported log entries", () => {
+    expect(ASSISTANT_SYSTEM_PROMPT.toLowerCase()).toContain("never do arithmetic yourself, including sums and differences");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("propose logging it with propose_actions");
   });
 });
 

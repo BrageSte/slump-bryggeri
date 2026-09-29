@@ -13,7 +13,7 @@ import { loadBreweryHistory } from "./brewery-history.ts";
 const DEFAULT_MODEL = "claude-sonnet-5";
 const DEFAULT_DAILY_LIMIT = 40;
 
-type AssistantEnv = Pick<Env, "ANTHROPIC_API_KEY" | "ASSISTANT_MODEL" | "ASSISTANT_DAILY_LIMIT">;
+export type AssistantEnv = Pick<Env, "ANTHROPIC_API_KEY" | "ASSISTANT_MODEL" | "ASSISTANT_DAILY_LIMIT">;
 
 export function assistantModel(env: AssistantEnv): string {
   return env.ASSISTANT_MODEL?.trim() || DEFAULT_MODEL;
@@ -192,6 +192,7 @@ export async function askAssistant(input: {
 
   return {
     reply: result.text,
+    actions: result.actions,
     toolCalls: result.toolCalls,
     usage: { requests: 1, ...usage, estimatedUsd: estimateCostUsd(model, usage) },
   };

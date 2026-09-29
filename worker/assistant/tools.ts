@@ -2,6 +2,15 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import {
+  assistantProposedActionSchema,
+  createCommentSchema,
+  createEventSchema,
+  createMeasurementSchema,
+  type AssistantProposedAction,
+} from "../../src/domain/model/api.ts";
+import { measurementKindSpecs, ingredientAddedDataSchema, timerStartedDataSchema } from "../../src/domain/model/brewing.ts";
+import { isSupportedMeasurementUnit, measurementToCanonical } from "../../src/domain/brewing-calculations/measurement-units.ts";
+import {
   brixToSg,
   calculateAbv,
   calculateApparentAttenuation,
@@ -27,6 +36,7 @@ interface ToolContext {
   batch: BatchDetail;
   brewDocumentSections?: BrewDocumentSections;
   loadBreweryHistory?: () => Promise<unknown>;
+  proposedActions?: AssistantProposedAction[];
 }
 
 interface AssistantTool<S extends z.ZodType> {
@@ -42,6 +52,64 @@ const mashedGrainKg = (batch: BatchDetail) =>
   batch.recipeSnapshot.fermentables.filter((f) => f.type === "grain" || f.type === "adjunct").reduce((sum, f) => sum + f.amountKg, 0);
 
 const round = (value: number, decimals = 2) => Math.round(value * 10 ** decimals) / 10 ** decimals;
+
+const waterAddedDataSchema = z.object({
+  volumeL: z.number().positive().max(10_000),
+  temperatureC: z.number().min(0).max(110),
+  reason: z.string().trim().max(300).optional(),
+}).strict();
+
+function validateProposedAction(value: unknown, context: ToolContext): { action?: AssistantProposedAction; error?: string } {
+  const actionResult = assistantProposedActionSchema.safeParse(value);
+  if (!actionResult.success) return { error: actionResult.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+  const action = actionResult.data;
+
+  if (action.kind === "log_measurement") {
+    const measurement = createMeasurementSchema.safeParse({
+      kind: action.measurementKind,
+      value: action.value,
+      unit: action.unit,
+      label: action.label,
+      splitId: action.splitId,
+    });
+    if (!measurement.success) return { error: measurement.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+    if (!isSupportedMeasurementUnit(action.measurementKind, action.unit)) return { error: `Unsupported unit for ${action.measurementKind}: ${action.unit}` };
+    if (action.measurementKind === "custom" && !action.label?.trim()) return { error: "Custom measurements need a label." };
+    const canonicalValue = measurementToCanonical(action.measurementKind, action.value, action.unit);
+    const spec = measurementKindSpecs[action.measurementKind];
+    if (canonicalValue === null || canonicalValue < spec.min || canonicalValue > spec.max) {
+      return { error: `Measurement value is outside the allowed range for ${action.measurementKind}.` };
+    }
+    if (action.splitId && !context.batch.splits.some((split) => split.id === action.splitId)) {
+      return { error: "splitId does not belong to this batch." };
+    }
+    return { action };
+  }
+
+  if (action.kind === "start_timer") {
+    const timer = timerStartedDataSchema.safeParse({ label: action.label, durationMin: action.durationMin });
+    return timer.success ? { action } : { error: timer.error.message };
+  }
+
+  const event = createEventSchema.safeParse({ type: action.type, data: action.data });
+  if (!event.success) return { error: event.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+  let validatedData: Record<string, unknown> = action.data;
+  if (action.type === "water_added") {
+    const water = waterAddedDataSchema.safeParse(action.data);
+    if (!water.success) return { error: water.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+    validatedData = water.data;
+  } else if (action.type === "ingredient_added" || action.type === "yeast_pitched") {
+    const ingredient = ingredientAddedDataSchema.strict().safeParse(action.data);
+    if (!ingredient.success) return { error: ingredient.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+    validatedData = ingredient.data;
+  } else if (action.type === "comment") {
+    const comment = createCommentSchema.pick({ body: true }).strict().safeParse(action.data);
+    if (!comment.success) return { error: comment.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
+    validatedData = comment.data;
+  }
+  if (JSON.stringify(validatedData).length > 10_000) return { error: "Event data is too large." };
+  return { action: { ...action, data: validatedData } };
+}
 
 const tools = [
   tool({
@@ -192,6 +260,28 @@ const tools = [
     input: z.object({}),
     run: async (_input, context) => (context.loadBreweryHistory ? context.loadBreweryHistory() : { error: "not available" }),
   }),
+  tool({
+    name: "propose_actions",
+    description:
+      "Suggest log entries or a timer for the brewer to confirm. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?}; {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
+    // Expose the strict action union to Claude; runAssistantTool has a tolerant item-wise fallback
+    // so invalid suggestions are still reported without discarding valid siblings.
+    input: z.object({ actions: z.array(assistantProposedActionSchema).max(12) }).strict(),
+    run: ({ actions }, context) => {
+      const accepted: { index: number; action: AssistantProposedAction }[] = [];
+      const rejected: { index: number; reason: string }[] = [];
+      actions.forEach((candidate, index) => {
+        const result = validateProposedAction(candidate, context);
+        if (result.action) {
+          accepted.push({ index, action: result.action });
+          context.proposedActions?.push(result.action);
+        } else {
+          rejected.push({ index, reason: result.error ?? "Invalid action." });
+        }
+      });
+      return { accepted, rejected };
+    },
+  }),
 ];
 
 /** Tool definitions in the shape the Messages API expects. Order is fixed so the prompt cache holds. */
@@ -204,11 +294,20 @@ export const assistantToolDefinitions: Anthropic.Tool[] = tools.map((t) => {
 export async function runAssistantTool(name: string, input: unknown, context: ToolContext): Promise<{ content: string; isError: boolean }> {
   const definition = tools.find((t) => t.name === name);
   if (!definition) return { content: `Unknown tool: ${name}`, isError: true };
+  let parsedInput: unknown;
   const parsed = definition.input.safeParse(input);
-  if (!parsed.success) return { content: `Invalid input: ${parsed.error.message}`, isError: true };
+  if (parsed.success) {
+    parsedInput = parsed.data;
+  } else if (name === "propose_actions") {
+    const raw = z.object({ actions: z.array(z.unknown()).max(12) }).strict().safeParse(input);
+    if (!raw.success) return { content: `Invalid input: ${raw.error.message}`, isError: true };
+    parsedInput = raw.data;
+  } else {
+    return { content: `Invalid input: ${parsed.error.message}`, isError: true };
+  }
   try {
     // Each tool's run matches its own schema; the union type loses that pairing.
-    const result = await (definition.run as (input: unknown, context: ToolContext) => unknown | Promise<unknown>)(parsed.data, context);
+    const result = await (definition.run as (input: unknown, context: ToolContext) => unknown | Promise<unknown>)(parsedInput, context);
     const content = name === "get_batch_section" && typeof result === "string" ? result : JSON.stringify(result) ?? "null";
     return { content, isError: false };
   } catch (error) {

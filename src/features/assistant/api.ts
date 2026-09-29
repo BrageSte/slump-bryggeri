@@ -1,27 +1,52 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { AssistantReply, AssistantStatus } from "../../domain/model/api.ts";
+import type {
+  AssistantPostResponse,
+  AssistantStatus,
+  AssistantThreadResponse,
+} from "../../domain/model/api.ts";
 import { api } from "../../lib/api.ts";
 import { breweryKey } from "../breweries/api.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 
 const statusKey = (breweryId: string) => [...breweryKey(breweryId), "assistant"] as const;
-
-export interface ChatMessage {
-  role: "user" | "assistant";
-  content: string;
-}
+const threadKey = (breweryId: string, batchId: string) => [...breweryKey(breweryId), "batches", batchId, "assistant-thread"] as const;
 
 export function useAssistantStatus() {
   const { breweryId } = useBrewery();
   return useQuery({ queryKey: statusKey(breweryId), queryFn: () => api.get<AssistantStatus>(`/breweries/${breweryId}/assistant`) });
 }
 
-export function useAskAssistant(batchId: string) {
+export function useAssistantThread(batchId: string, enabled = true) {
+  const { breweryId } = useBrewery();
+  return useQuery({
+    queryKey: threadKey(breweryId, batchId),
+    queryFn: () => api.get<AssistantThreadResponse>(`/breweries/${breweryId}/batches/${batchId}/assistant/messages`),
+    enabled,
+    refetchInterval: enabled ? 10_000 : false,
+  });
+}
+
+export function usePostAssistantMessage(batchId: string) {
   const { breweryId } = useBrewery();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (messages: ChatMessage[]) => api.post<AssistantReply>(`/breweries/${breweryId}/batches/${batchId}/assistant`, { messages }),
-    // Usage changes with every answer (and with failures that still used tokens).
-    onSettled: () => queryClient.invalidateQueries({ queryKey: statusKey(breweryId) }),
+    mutationFn: (content: string) => api.post<AssistantPostResponse>(`/breweries/${breweryId}/batches/${batchId}/assistant/messages`, { content }),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: threadKey(breweryId, batchId) });
+      void queryClient.invalidateQueries({ queryKey: statusKey(breweryId) });
+    },
+  });
+}
+
+export function useResolveAssistantAction(batchId: string) {
+  const { breweryId } = useBrewery();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { messageId: string; index: number; status: "done" | "dismissed"; logEntryId?: string }) =>
+      api.patch(
+        `/breweries/${breweryId}/batches/${batchId}/assistant/messages/${input.messageId}/actions/${input.index}`,
+        { status: input.status, logEntryId: input.logEntryId },
+      ),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: threadKey(breweryId, batchId) }),
   });
 }
