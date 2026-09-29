@@ -5,6 +5,7 @@ import {
   calculateGravityEstimate,
   fahrenheitToCelsius,
   grainBillPercentages,
+  mashedGrainKg,
   ouncesToGrams,
   platoToSg,
   poundsToKg,
@@ -76,5 +77,23 @@ describe("gravity", () => {
   it("reproduces the Sunset IPA grain bill percentages", () => {
     const pct = grainBillPercentages(sunsetIpaRecipe.fermentables).map((p) => Math.round(p * 10) / 10);
     expect(pct).toEqual([74.7, 20.2, 1.9, 3.3]);
+  });
+
+  it("sums only grain and adjunct into mashedGrainKg, leaving out sugar/extract/other", () => {
+    const recipe = {
+      fermentables: [
+        { amountKg: 5, type: "grain" as const },
+        { amountKg: 1, type: "adjunct" as const },
+        { amountKg: 0.5, type: "sugar" as const },
+        { amountKg: 0.3, type: "extract" as const },
+        { amountKg: 0.2, type: "other" as const },
+      ],
+    };
+    expect(mashedGrainKg(recipe)).toBeCloseTo(6, 10);
+  });
+
+  it("returns 0 for a recipe with no mashed fermentables", () => {
+    expect(mashedGrainKg({ fermentables: [{ amountKg: 1, type: "sugar" as const }] })).toBe(0);
+    expect(mashedGrainKg({ fermentables: [] })).toBe(0);
   });
 });

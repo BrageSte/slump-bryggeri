@@ -83,6 +83,11 @@ export function isMashed(fermentable: Pick<Fermentable, "type">): boolean {
   return fermentable.type === "grain" || fermentable.type === "adjunct";
 }
 
+/** Total weight of grain and adjuncts that go into the mash; sugars and extracts do not absorb water. */
+export function mashedGrainKg(recipe: { fermentables: Pick<Fermentable, "amountKg" | "type">[] }): number {
+  return recipe.fermentables.reduce((sum, f) => (isMashed(f) ? sum + f.amountKg : sum), 0);
+}
+
 /** Total available extract in gravity points · L, before efficiency. */
 export function extractPotentialPoints(fermentables: GravityFermentable[]): { mashed: number; unmashed: number } {
   let mashed = 0;
