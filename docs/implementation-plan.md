@@ -257,12 +257,18 @@ sikkerhetsnettet for ombyggingen.
 **Akseptanse:** På mobil er det første man ser under mesk «Mesk · 66,5 °C · 42 min igjen», temperaturen som skal
 måles, mesketipset og neste handling, uten å scrolle forbi timere og plan. Alle faser er fortsatt et trykk unna.
 
-**Leveranse 2 — Oversikt før start**
+**Leveranse 2 — Oversikt før start** ✅
 
-- [ ] Batchsiden før start viser hele brygget: forventet OG/FG/ABV/IBU/volum, vann, malt, humle, gjær og alle faser åpne,
-      antakelsene og utstyrsprofilen som er låst (versjon, hva som er målt og hva som er antatt).
-- [ ] Knappen heter «Start brygg» og er det eneste som starter mesken.
-- [ ] Samme plankomponent brukes før og under brygging (`BrewPlanOverview`), ikke to kopier.
+- [x] Batchsiden før start viser hele brygget: forventet volum/OG/FG/ABV/IBU/farge, vann, malt, humle, gjær og alle faser
+      åpne, antakelsene som én linje, og utstyrsprofilen som er låst i batchen (versjon, og for de seks viktigste
+      verdiene om de er kalibrert, satt manuelt, standard eller mangler; `equipment-overview.ts`).
+- [x] Utstyr: se og advare. Advarsler nevner standardverdier ved navn og at oppskriftens volum avviker fra utstyrets
+      batchvolum. Profilen kan ikke endres for batchen; lenke til Kalibrering for neste batch.
+- [x] Knappen heter «Start brygg» og er det eneste som starter mesken.
+- [x] Samme plankomponent brukes før og under brygging (`BrewPlanOverview`), ikke to kopier.
+
+**Akseptanse:** Før start ser man hva brygget blir (tall), hvilket utstyr og hvilke antakelser det bygger på, og hele
+planen, uten å åpne noe. Ett trykk på «Start brygg» går til mesken.
 
 **Leveranse 3 — Ny batch i steg**
 

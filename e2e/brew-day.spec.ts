@@ -11,7 +11,7 @@ test.describe("bryggedagen på mobil", () => {
 
     await test.step("start mesking", async () => {
       await expect(page.getByRole("heading", { name: batch.name, level: 1 })).toBeVisible();
-      await page.getByRole("button", { name: "Start mesking" }).click();
+      await page.getByRole("button", { name: "Start brygg" }).click();
       await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
       await expect(page.getByText("Mesk · 66,5 °C", { exact: true })).toBeVisible();
       await expect(page.getByText("Ikke målt").first()).toBeVisible();
@@ -76,7 +76,7 @@ test.describe("bryggedagen på mobil", () => {
 
   test("ingen mesketips når temperaturen er på mål", async ({ page, batch }) => {
     await page.goto(batch.path);
-    await page.getByRole("button", { name: "Start mesking" }).click();
+    await page.getByRole("button", { name: "Start brygg" }).click();
 
     await page.getByRole("button", { name: "Logg mesketemperatur" }).click();
     const sheet = page.getByRole("dialog", { name: "Mesketemperatur" });
@@ -93,7 +93,7 @@ test.describe("bryggedagen på mobil", () => {
 
   test("aktivt steg øverst, resten av brygget som oversikt under", async ({ page, batch }) => {
     await page.goto(batch.path);
-    await page.getByRole("button", { name: "Start mesking" }).click();
+    await page.getByRole("button", { name: "Start brygg" }).click();
     await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
 
     await test.step("aktivt steg, neste og timere kommer før planen og loggen", async () => {
@@ -130,7 +130,7 @@ test.describe("bryggedagen på mobil", () => {
 
   test("bryggedokumentet ligger sammenbrettet og åpnes fra batchmenyen", async ({ page, batch }) => {
     await page.goto(batch.path);
-    await page.getByRole("button", { name: "Start mesking" }).click();
+    await page.getByRole("button", { name: "Start brygg" }).click();
     await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
 
     const document = page.getByRole("button", { name: /^Bryggedokument/ });
@@ -142,5 +142,36 @@ test.describe("bryggedagen på mobil", () => {
 
     await expect(document).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("button", { name: "Status nå" })).toBeVisible();
+  });
+
+  test("oversikt før start: tallene, utstyret og hele planen, og Start brygg starter mesken", async ({ page, batch }) => {
+    await page.goto(batch.path);
+    await expect(page.getByText("Klar til å brygge")).toBeVisible();
+
+    await test.step("forventede tall", async () => {
+      for (const label of ["Volum", "OG", "FG", "ABV", "IBU", "Farge"]) {
+        await expect(page.getByText(label, { exact: true }).first()).toBeVisible();
+      }
+    });
+
+    await test.step("utstyret som er låst i batchen, med kilde og advarsel", async () => {
+      await expect(page.getByRole("heading", { name: "Utstyr", level: 2 })).toBeVisible();
+      await expect(page.getByText("Profil v1", { exact: true })).toBeVisible();
+      await expect(page.getByText("Fordampning", { exact: true })).toBeVisible();
+      await expect(page.getByText("Standard", { exact: true }).first()).toBeVisible();
+      await expect(page.getByText(/er standardverdier, ikke målt/)).toBeVisible();
+      await expect(page.getByRole("link", { name: "Kalibrering" })).toHaveAttribute("href", "/mer/kalibrering");
+    });
+
+    await test.step("alle faser er åpne, og antakelsene er en linje", async () => {
+      await expect(page.getByRole("button", { name: /^Kok / })).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByRole("button", { name: /^Gjæring / })).toHaveAttribute("aria-expanded", "true");
+      await expect(page.getByRole("button", { name: /verdier er antatt/ })).toBeVisible();
+    });
+
+    await page.getByRole("button", { name: "Start brygg" }).click();
+    await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
+    await expect(page.getByText("Klar til å brygge")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /^Kok / })).toHaveAttribute("aria-expanded", "false");
   });
 });
