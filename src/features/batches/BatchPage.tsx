@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
-import { assumptionNames, buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
+import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
 import { buildFermentationSeries, splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
 import { deriveBrewDayState, type BrewDayLogEntry, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
@@ -470,7 +470,7 @@ function StageCard({
                     target.actual?.derivedFrom === "brix" ? "fra Brix" : null,
                     target.source === "recipe" ? "oppskrift/import" : null,
                     target.source === "calculated" ? "≈ beregnet" : null,
-                    target.source === "assumed" ? `≈ antatt${target.assumptions?.length ? ` (${assumptionNames(target.assumptions)})` : ""}` : null,
+                    target.source === "assumed" ? "≈ antatt" : null,
                   ].filter(Boolean).join(" · ") || undefined
                 }
                 action={

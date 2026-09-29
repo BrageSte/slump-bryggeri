@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  assumptionNames,
   brewPlanPhaseLabels,
   brewPlanPhaseStatus,
   type BrewPlan,
@@ -16,19 +15,26 @@ import { fermentationHasStarted, type BrewStage } from "../../domain/model/brewi
 import { Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
 
-/** Recipe values are unprefixed; calculations and assumptions remain visibly distinct. */
+/**
+ * Recipe values are unprefixed; calculations get "≈" and assumptions "≈ … antatt". Which
+ * assumptions were used is listed once under "Antakelser i planen", not on every number.
+ */
+function withSource(source: PlanQuantity["source"], text: string): string {
+  if (source === "recipe") return text;
+  return source === "calculated" ? `≈ ${text}` : `≈ ${text} antatt`;
+}
+
 function quantity(q: PlanQuantity | undefined, unit: string, decimals = 1): string | null {
   if (!q) return null;
-  const prefix = q.source === "recipe" ? "" : q.source === "calculated" ? "≈ " : `≈ antatt${q.assumptions?.length ? ` (${assumptionNames(q.assumptions)})` : ""} `;
   const formatted = unit === "SG" ? formatSg(q.value) : formatNumber(q.value, decimals);
-  return `${prefix}${formatted}${unit === "SG" ? "" : ` ${unit}`}`;
+  return withSource(q.source, `${formatted}${unit === "SG" ? "" : ` ${unit}`}`);
 }
 
 function temperature(q: PlanQuantity | undefined, maxC?: number): string | null {
   if (!q) return null;
   if (maxC !== undefined && maxC !== q.value) {
     const range = `${formatNumber(q.value, 1)}–${formatNumber(maxC, 1)} °C`;
-    return q.source === "recipe" ? range : q.source === "calculated" ? `≈ ${range}` : `≈ antatt${q.assumptions?.length ? ` (${assumptionNames(q.assumptions)})` : ""} ${range}`;
+    return withSource(q.source, range);
   }
   return quantity(q, "°C");
 }
@@ -36,8 +42,7 @@ function temperature(q: PlanQuantity | undefined, maxC?: number): string | null 
 function forecastValue(value: BrewDayForecast["postBoilVolumeL"], unit: string): string {
   const formatted = unit === "SG" ? formatSg(value.value) : `${formatNumber(value.value, 1)} ${unit}`;
   if (value.source === "measured") return `Målt ${formatted}`;
-  if (value.source === "assumed") return `≈ antatt${value.assumptions?.length ? ` (${assumptionNames(value.assumptions)})` : ""} ${formatted}`;
-  return `≈ ${formatted}`;
+  return withSource(value.source === "assumed" ? "assumed" : "calculated", formatted);
 }
 
 const statusChip: Record<PhaseStatus, { tone: "success" | "primary" | "neutral"; label: string }> = {
@@ -123,7 +128,7 @@ export function BrewPlanOverview({
       </div>
 
       <p className="text-caption text-muted">
-        Oppskrift = oppgitt av oppskriften/importen · ≈ = beregnet fra oppskrifts- eller profilverdier · ≈ antatt = dokumentert standardverdi som fortsatt bør måles · Målt = loggført verdi.
+        Oppskrift = oppgitt av oppskriften/importen · ≈ = beregnet fra oppskrifts- eller profilverdier · ≈ … antatt = dokumentert standardverdi som fortsatt bør måles (se Antakelser i planen) · Målt = loggført verdi.
       </p>
     </Section>
   );
