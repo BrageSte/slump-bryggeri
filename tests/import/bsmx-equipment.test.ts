@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseBsmx } from "../../src/domain/import/bsmx.ts";
-import { suggestProfileFromBsmx } from "../../src/domain/import/bsmx-equipment.ts";
+import { compareBsmxEquipmentWithProfile, suggestProfileFromBsmx, type ProfileSuggestion } from "../../src/domain/import/bsmx-equipment.ts";
 import { bsmxFixtures } from "../fixtures/beersmith/index.ts";
 
 const load = (...names: string[]) => names.flatMap((name) => parseBsmx(bsmxFixtures[name] ?? ""));
@@ -30,7 +30,53 @@ describe("BeerSmith equipment as a calibration suggestion", () => {
     expect(suggestion?.values.batch_volume_l).toBe(25);
   });
 
+  it("keeps the BeerSmith recipe date with the calibration suggestion", () => {
+    expect(suggestProfileFromBsmx(load("Bitter_90l.bsmx"))?.sourceDate).toBe("2015-07-14");
+  });
+
   it("suggests nothing without equipment", () => {
     expect(suggestProfileFromBsmx([])).toBeNull();
+  });
+
+  it("warns when a BeerSmith key value differs from the active profile by more than 15 percent", () => {
+    const suggestion: ProfileSuggestion = {
+      sourceName: "Gammelt 100 L-anlegg",
+      values: { boil_off_l_per_h: 4, batch_volume_l: 100 },
+    };
+    const warning = compareBsmxEquipmentWithProfile(
+      suggestion,
+      { boil_off_l_per_h: 5, batch_volume_l: 90 },
+      Date.parse("2026-09-29T00:00:00Z"),
+    );
+
+    expect(warning).toContain("Utstyret «Gammelt 100 L-anlegg» ser ut til å være et annet anlegg enn dagens profil");
+    expect(warning).toContain("4 mot 5 L/t fordampning");
+    expect(warning).toContain("Sjekk før du lagrer.");
+  });
+
+  it("does not warn for differences at or below 15 percent or a recent source date", () => {
+    const suggestion: ProfileSuggestion = {
+      sourceName: "Nåværende anlegg",
+      sourceDate: "2024-05-10",
+      values: { boil_off_l_per_h: 4.25, batch_volume_l: 90, mash_tun_volume_l: 100 },
+    };
+    expect(compareBsmxEquipmentWithProfile(
+      suggestion,
+      { boil_off_l_per_h: 5, batch_volume_l: 100, mash_tun_volume_l: 100 },
+      Date.parse("2026-09-29T00:00:00Z"),
+    )).toBeNull();
+  });
+
+  it("warns when the BeerSmith recipe date is more than five years old", () => {
+    const suggestion: ProfileSuggestion = {
+      sourceName: "Gammelt anlegg",
+      sourceDate: "2021-09-28",
+      values: { boil_off_l_per_h: 5 },
+    };
+    expect(compareBsmxEquipmentWithProfile(
+      suggestion,
+      { boil_off_l_per_h: 5 },
+      Date.parse("2026-09-29T00:00:00Z"),
+    )).toBe("BeerSmith-utstyret «Gammelt anlegg» er datert 2021, mer enn fem år tilbake, og kan beskrive et annet anlegg enn dagens profil. Sjekk før du lagrer.");
   });
 });

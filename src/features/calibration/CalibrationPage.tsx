@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useLocation, useNavigate } from "react-router";
-import type { ProfileSuggestion } from "../../domain/import/bsmx-equipment.ts";
+import { compareBsmxEquipmentWithProfile, type ProfileSuggestion } from "../../domain/import/bsmx-equipment.ts";
+import type { ProfileValues } from "../../domain/model/equipment-profile.ts";
 import { profileGroupLabels, profileGroups, profileParameters } from "../../domain/model/equipment-profile.ts";
 import { Button, Card, EmptyState, ErrorState, InlineError, inputClasses, LoadingState, PageHeader, parseDecimal, Section, StatusChip, TextInput, useToast } from "../../design-system/index.ts";
 import { formatDate, formatNumber } from "../../lib/format.ts";
@@ -129,6 +130,8 @@ function ProfileForm({
   const changes = suggestion
     ? profileParameters.filter((p) => suggested(p.key) !== undefined && suggested(p.key) !== initial[p.key]?.value)
     : [];
+  const activeValues = Object.fromEntries(Object.entries(initial).map(([key, entry]) => [key, entry.value])) as ProfileValues;
+  const warning = suggestion ? compareBsmxEquipmentWithProfile(suggestion, activeValues, Date.now()) : null;
   const [error, setError] = useState<string | null>(null);
 
   function submit(event: FormEvent) {
@@ -151,6 +154,12 @@ function ProfileForm({
       {suggestion && (
         <Card highlight className="space-y-2">
           <p className="font-semibold">Forslag fra BeerSmith: {suggestion.sourceName}</p>
+          {warning && (
+            <div role="status" className="rounded-md border border-warning bg-warning-soft p-3 text-small">
+              <p className="font-semibold text-warning">Sjekk utstyret</p>
+              <p className="mt-1">{warning}</p>
+            </div>
+          )}
           {changes.length === 0 ? (
             <p className="text-small text-muted">Profilen har allerede disse verdiene.</p>
           ) : (

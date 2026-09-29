@@ -3,7 +3,7 @@ import { brixToSg, refractometerFinalGravity } from "../../domain/brewing-calcul
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasStarted, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
-import { formatAmount, formatDuration, formatLogTime, formatSg, formatTime } from "../../lib/format.ts";
+import { formatAmount, formatDuration, formatLogTime, formatNumber, formatSg, formatTime } from "../../lib/format.ts";
 import { useDeleteEvent, useEditComment } from "./api.ts";
 import { CorrectionForm } from "./CorrectionForm.tsx";
 import { formatMeasurement, formatMeasurementInUnit, formatMeasurementRange } from "./helpers.ts";
@@ -61,6 +61,7 @@ function iconFor(item: TimelineItem): IconName {
   if (item.comment) return "comment";
   if (item.attachment) return "camera";
   if (item.type === "ingredient_added" || item.type === "yeast_pitched") return "leaf";
+  if (item.type === "water_added") return "droplet";
   if (item.type.endsWith("_started")) return "play";
   return "flag";
 }
@@ -104,6 +105,9 @@ function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: 
   }
   if (item.type === "status_changed" && typeof data.to === "string") {
     return { title: `Status: ${batchStatusLabels[data.to as BatchStatus] ?? data.to}` };
+  }
+  if (item.type === "water_added" && typeof data.volumeL === "number" && typeof data.temperatureC === "number") {
+    return { title: `Vann tilsatt: ${formatAmount(data.volumeL, "L")} ved ${formatNumber(data.temperatureC, 0)} °C` };
   }
   const title = item.type === "custom" && typeof data.title === "string" ? data.title : (eventTypeLabels[item.type] ?? item.type.replaceAll("_", " "));
   return { title, detail: typeof data.note === "string" ? data.note : undefined };
