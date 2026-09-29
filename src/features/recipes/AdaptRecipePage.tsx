@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { useNavigate, useParams } from "react-router";
 import {
   calculateRecipeMetrics,
@@ -12,20 +12,7 @@ import { formatAmount, formatNumber, formatSg } from "../../lib/format.ts";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useEquipmentProfile } from "../equipment/api.ts";
 import { useRecipe, useSaveRecipeVersion } from "./api.ts";
-
-function Compare({ label, before, after, unit }: { label: string; before: ReactNode; after: ReactNode; unit?: string }) {
-  return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto] items-baseline gap-x-3 py-2">
-      <span className="text-small text-muted">{label}</span>
-      <span className="tabular text-right text-muted">{before}</span>
-      <span className="text-muted">→</span>
-      <span className="tabular text-right text-section font-bold">
-        {after}
-        {unit && <span className="ml-1 text-small text-muted">{unit}</span>}
-      </span>
-    </div>
-  );
-}
+import { Compare } from "./Compare.tsx";
 
 /** "Tilpass til bryggeriet" (wireframe §37): scale to our volume/efficiency and show why (§56). */
 export function AdaptRecipePage() {

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { equipmentOverview, type EquipmentOverview, type EquipmentValueStatus } from "../../domain/brew-day/equipment-overview.ts";
 import type { BatchDetail } from "../../domain/model/api.ts";
@@ -41,7 +42,8 @@ export function PreBrewOverview({ batch, onStart, starting }: { batch: BatchDeta
   );
 }
 
-function EquipmentCard({ profileVersion, overview }: { profileVersion: number | null; overview: EquipmentOverview }) {
+/** The locked equipment profile and what to be careful about in it; `footer` says what can be done about it. */
+export function EquipmentCard({ profileVersion, overview, footer }: { profileVersion: number | null; overview: EquipmentOverview; footer?: ReactNode }) {
   return (
     <Card className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -71,12 +73,20 @@ function EquipmentCard({ profileVersion, overview }: { profileVersion: number | 
         </p>
       ))}
       <p className="text-small text-muted">
-        Profilen kan ikke endres for denne batchen. Endringer under{" "}
-        <Link to="/mer/kalibrering" className="font-semibold text-primary-strong underline underline-offset-4">
-          Kalibrering
-        </Link>{" "}
-        gjelder neste batch.
+        {footer ?? (
+          <>
+            Profilen kan ikke endres for denne batchen. Endringer under <CalibrationLink /> gjelder neste batch.
+          </>
+        )}
       </p>
     </Card>
+  );
+}
+
+export function CalibrationLink() {
+  return (
+    <Link to="/mer/kalibrering" className="font-semibold text-primary-strong underline underline-offset-4">
+      Kalibrering
+    </Link>
   );
 }

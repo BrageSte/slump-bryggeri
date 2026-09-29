@@ -270,14 +270,20 @@ måles, mesketipset og neste handling, uten å scrolle forbi timere og plan. All
 **Akseptanse:** Før start ser man hva brygget blir (tall), hvilket utstyr og hvilke antakelser det bygger på, og hele
 planen, uten å åpne noe. Ett trykk på «Start brygg» går til mesken.
 
-**Leveranse 3 — Ny batch i steg**
+**Leveranse 3 — Ny batch i steg** ✅
 
-- [ ] `/brygg/ny` (og «Brygg denne» på oppskriften): oppskrift og dato → størrelse → utstyr → oppsummering → «Opprett batch»,
-      som åpner oversikten fra leveranse 2.
-- [ ] Størrelse skaleres i selve batchen (frosset snapshot) med `calculateRecipeScaling`; oppskriften får ikke ny
-      versjon. Forhåndsvisning viser malt, humle, OG og IBU før og etter.
-- [ ] Utstyr: se og advare (profilversjon, antatte verdier, tomme verdier), lenke til Kalibrering. Ingen overstyring per batch.
-- [ ] Tester: skaleringen i snapshotet, autorisasjon/isolasjon, og Playwright for hele veien fra oppskrift til «Start brygg».
+- [x] `/brygg/ny` (og «Opprett batch» på oppskriften, som forhåndsvelger oppskriften): oppskrift og dato → størrelse →
+      utstyr → oppsummering → «Opprett batch», som åpner oversikten fra leveranse 2. Stegrekken viser bare navnet på
+      gjeldende steg, så alle fire får plass på mobil. Erstatter arket «Ny batch».
+- [x] Størrelse og effektivitet skaleres i selve batchen (frosset snapshot, `calculateRecipeScaling` på serveren);
+      oppskriften får ikke ny versjon. Forhåndsvisningen viser volum, malt, humle, OG og IBU før og etter. Skaleringen
+      valideres som alle lagrede oppskrifter, så en størrelse som runder en mengde til null avvises (400 `invalid_scaling`).
+- [x] Utstyr: se og advare (samme kort som oversikten), lenke til Kalibrering. Ingen overstyring per batch.
+- [x] Tester: skaleringen i snapshotet, oppskriften uendret, effektivitetskompensasjon, avvisning og isolasjon
+      (`tests/integration/batch-scaling.test.ts`); Playwright for hele veien fra oppskrift til «Start brygg».
+
+**Akseptanse:** Fra Brygg eller oppskriften kan man velge størrelse, se hva som skaleres og hvilket utstyr som er
+låst, og lande på oversikten for den nye batchen. Oppskriften er urørt.
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
 

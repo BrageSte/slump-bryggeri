@@ -1,7 +1,14 @@
-import { test as base, expect, type Page } from "@playwright/test";
+import { test as base, expect, type APIRequestContext, type Page } from "@playwright/test";
 import { sunsetIpaRecipe } from "../src/domain/fixtures/sunset-ipa.ts";
 
 export { expect };
+
+export interface E2ERecipe {
+  id: string;
+  name: string;
+  /** Path of the recipe page. */
+  path: string;
+}
 
 export interface E2EBatch {
   id: string;
@@ -10,26 +17,32 @@ export interface E2EBatch {
   path: string;
 }
 
+/** The API base for the e2e person's brewery, e.g. `/api/breweries/<id>`. */
+async function apiBase(request: APIRequestContext): Promise<string> {
+  const me = (await (await request.get("/api/me")).json()) as { memberships: { brewery: { id: string } }[] };
+  const breweryId = me.memberships[0]?.brewery.id;
+  if (!breweryId) throw new Error("The e2e person has no brewery; did global setup run?");
+  return `/api/breweries/${breweryId}`;
+}
+
 /**
- * Every test gets its own planned batch of the Sunset IPA reference recipe, made through the API
- * as the person from global setup, so tests never depend on each other's log.
+ * Every test gets its own recipe (the Sunset IPA reference recipe) and, when it asks for `batch`, its own
+ * planned batch of it, made through the API as the person from global setup, so tests never depend on
+ * each other's log.
  */
-export const test = base.extend<{ batch: E2EBatch }>({
-  batch: async ({ request }, use) => {
-    const me = (await (await request.get("/api/me")).json()) as { memberships: { brewery: { id: string } }[] };
-    const breweryId = me.memberships[0]?.brewery.id;
-    if (!breweryId) throw new Error("The e2e person has no brewery; did global setup run?");
-    const base = `/api/breweries/${breweryId}`;
-
-    const recipe = await request.post(`${base}/recipes`, { data: { recipe: sunsetIpaRecipe, source: { kind: "example" } } });
-    expect(recipe.status(), await recipe.text()).toBe(201);
-    const { id: recipeId } = (await recipe.json()) as { id: string };
-
-    const created = await request.post(`${base}/batches`, { data: { recipeId } });
+export const test = base.extend<{ recipe: E2ERecipe; batch: E2EBatch }>({
+  recipe: async ({ request }, use) => {
+    const created = await request.post(`${await apiBase(request)}/recipes`, { data: { recipe: sunsetIpaRecipe, source: { kind: "example" } } });
     expect(created.status(), await created.text()).toBe(201);
     const { id } = (await created.json()) as { id: string };
+    await use({ id, name: sunsetIpaRecipe.name, path: `/oppskrifter/${id}` });
+  },
 
-    await use({ id, name: sunsetIpaRecipe.name, path: `/batcher/${id}` });
+  batch: async ({ request, recipe }, use) => {
+    const created = await request.post(`${await apiBase(request)}/batches`, { data: { recipeId: recipe.id } });
+    expect(created.status(), await created.text()).toBe(201);
+    const { id } = (await created.json()) as { id: string };
+    await use({ id, name: recipe.name, path: `/batcher/${id}` });
   },
 });
 

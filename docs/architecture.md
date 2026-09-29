@@ -40,6 +40,7 @@ src/domain/brewing-calculations/  rene beregningsfunksjoner (docs/calculations.m
 src/domain/brew-day/state.ts       utleder «hva skjer nå / mål / målt / neste» fra snapshot + logg
 src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk, kok, humle, gjær, gjæring)
 src/domain/brew-day/mash-adjustment.ts  deterministisk vannforslag fra meskemåling, oppskrift og utstyrssnapshot
+src/domain/brew-day/equipment-overview.ts  utstyrsprofilen i en batch: nøkkelverdier, kilde og advarsler (skrivebeskyttet)
 src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalibreringen
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
@@ -87,7 +88,7 @@ Se `db/migrations/`. Viktige regler (§51), håndhevet i databasen med triggere:
 | Uforanderlig | Hvordan |
 |---|---|
 | `recipe_versions` | Trigger blokkerer UPDATE. Hver lagring = ny versjon. |
-| `batch_recipe_snapshots`, `batch_equipment_snapshots` | Trigger blokkerer UPDATE. Tas atomisk når batchen opprettes. |
+| `batch_recipe_snapshots`, `batch_equipment_snapshots` | Trigger blokkerer UPDATE. Tas atomisk når batchen opprettes. Oppskriftssnapshotet kan være skalert til batchens egen størrelse og effektivitet (`POST /batches` med `batchSizeL`/`efficiencyPct`, `calculateRecipeScaling`); oppskriften får ingen ny versjon, og `recipe_version_id` peker fortsatt på versjonen den ble skalert fra. |
 | `equipment_profile_values` | Trigger blokkerer UPDATE. Endring = ny profilversjon (kun én aktiv). |
 
 Sletting er soft delete (`deleted_at`) der historikk ellers påvirkes.

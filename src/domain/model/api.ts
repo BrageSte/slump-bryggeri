@@ -373,6 +373,12 @@ export const createBatchSchema = z.object({
   recipeVersionId: z.string().min(1).optional(),
   name: z.string().trim().min(1).max(120).optional(),
   brewDate: z.iso.date().optional(),
+  /**
+   * Scale the frozen recipe to this size (L) and/or efficiency (%) for this batch only: the batch
+   * snapshot is scaled with `calculateRecipeScaling`, the recipe gets no new version.
+   */
+  batchSizeL: z.number().positive().max(10_000).optional(),
+  efficiencyPct: z.number().min(1).max(100).optional(),
 });
 
 export const updateBatchSchema = z.object({
