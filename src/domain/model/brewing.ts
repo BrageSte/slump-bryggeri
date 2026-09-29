@@ -178,7 +178,6 @@ export const eventTypeLabels: Record<string, string> = {
   photo: "Bilde",
   water_added: "Vann tilsatt",
   ingredient_added: "Tilsetning",
-  water_added: "Vann tilsatt",
   transfer_started: "Overføring startet",
   transfer_completed: "Overføring ferdig",
   yeast_pitched: "Gjær tilsatt",

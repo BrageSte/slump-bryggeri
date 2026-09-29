@@ -53,11 +53,11 @@ describe("brewing assistant", () => {
   });
 
   it("loads model history from the shared stored thread", async () => {
-    const person = await createUser("Thread author");
+    const person = await createUser("ThreadAuthor");
     const brewery = await createBrewery(person, "Delt assistenttråd");
     const recipe = (await person.post(`/breweries/${brewery}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
     const batch = (await person.post(`/breweries/${brewery}/batches`, { recipeId: recipe })).body.id;
-    const secondPerson = await createUser("Thread member");
+    const secondPerson = await createUser("ThreadMember");
     await addMember(person, brewery, secondPerson);
     const requests: Anthropic.MessageCreateParamsNonStreaming[] = [];
     const texts = ["Første svar", "Andre svar"];
