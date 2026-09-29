@@ -54,7 +54,7 @@ logg temperatur, se mesketips, registrer tilsetning, start timer. Vurder avhengi
    committer og lager PR.
 3. Etter merge krysses området av her.
 
-- [ ] Fase 1: skanning og `code-review-findings.md`
+- [x] Fase 1: skanning og `code-review-findings.md`
 - [ ] Fase 2: områdene 1–10
 - [ ] Fase 3: bryggedagen etter ekte bruk
 - [ ] Fase 4: ende-til-ende-tester
