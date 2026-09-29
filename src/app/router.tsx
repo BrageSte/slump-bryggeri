@@ -37,6 +37,7 @@ const equipment = async () => ({ Component: (await import("../features/equipment
 const calibration = async () => ({ Component: (await import("../features/calibration/CalibrationPage.tsx")).CalibrationPage });
 const assistant = async () => ({ Component: (await import("../features/assistant/AssistantPage.tsx")).AssistantPage });
 const settings = async () => ({ Component: (await import("./SettingsPage.tsx")).SettingsPage });
+const newBatch = async () => ({ Component: (await import("../features/batches/NewBatchPage.tsx")).NewBatchPage });
 const batchResult = async () => ({ Component: (await import("../features/batches/BatchResultPage.tsx")).BatchResultPage });
 const batchReport = async () => ({ Component: (await import("../features/batches/BatchReportPage.tsx")).BatchReportPage });
 const bsmxImport = async () => ({ Component: (await import("../features/recipes/BsmxImportPage.tsx")).BsmxImportPage });
@@ -53,6 +54,7 @@ export const router = createBrowserRouter([
         children: [
           { index: true, element: <HomePage /> },
           { path: "brygg", element: <BrewPage /> },
+          { path: "brygg/ny", lazy: newBatch },
           { path: "batcher/:batchId", element: <BatchPage /> },
           { path: "batcher/:batchId/resultat", lazy: batchResult },
           { path: "batcher/:batchId/rapport", lazy: batchReport },

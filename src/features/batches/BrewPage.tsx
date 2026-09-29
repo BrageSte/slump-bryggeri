@@ -1,11 +1,9 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import type { BatchStatus } from "../../domain/model/brewing.ts";
-import { Button, buttonClasses, EmptyState, ErrorState, LoadingState, PageHeader, Section } from "../../design-system/index.ts";
+import { buttonClasses, EmptyState, ErrorState, Icon, LoadingState, PageHeader, Section } from "../../design-system/index.ts";
 import { useRecipes } from "../recipes/api.ts";
 import { useBatches } from "./api.ts";
 import { BatchList } from "./BatchList.tsx";
-import { NewBatchSheet } from "./NewBatchSheet.tsx";
 
 const groups: { status: BatchStatus; title: string }[] = [
   { status: "brewing", title: "Brygger nå" },
@@ -27,16 +25,16 @@ export function BrewPage() {
 function Batches() {
   const batches = useBatches();
   const recipes = useRecipes();
-  const [creating, setCreating] = useState(false);
 
   if (batches.isPending) return <LoadingState />;
   if (batches.error) return <ErrorState error={batches.error} onRetry={() => void batches.refetch()} />;
 
   const hasRecipes = (recipes.data?.length ?? 0) > 0;
   const newButton = hasRecipes ? (
-    <Button variant="primary" icon="plus" onClick={() => setCreating(true)}>
+    <Link to="/brygg/ny" className={buttonClasses("primary")}>
+      <Icon name="plus" size={20} />
       Ny batch
-    </Button>
+    </Link>
   ) : (
     <Link to="/oppskrifter" className={buttonClasses("primary")}>
       Legg inn en oppskrift først
@@ -63,7 +61,6 @@ function Batches() {
           })}
         </>
       )}
-      <NewBatchSheet open={creating} onClose={() => setCreating(false)} />
     </div>
   );
 }

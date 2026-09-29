@@ -169,7 +169,7 @@ export function useCreateBatch() {
   const { breweryId } = useBrewery();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { recipeId: string; name?: string; brewDate?: string }) =>
+    mutationFn: (input: { recipeId: string; name?: string; brewDate?: string; batchSizeL?: number; efficiencyPct?: number }) =>
       api.post<CreatedResponse>(`/breweries/${breweryId}/batches`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: batchesKey(breweryId) }),
   });

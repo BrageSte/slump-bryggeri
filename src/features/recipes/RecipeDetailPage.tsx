@@ -16,7 +16,6 @@ import {
 } from "../../design-system/index.ts";
 import { formatDate } from "../../lib/format.ts";
 import { useMe } from "../auth/session.ts";
-import { NewBatchSheet } from "../batches/NewBatchSheet.tsx";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { downloadRecipeSourceFile, useDeleteRecipe, useRecipe } from "./api.ts";
 import { compareBsmxEquipmentWithProfile, suggestProfileFromBsmx } from "../../domain/import/bsmx-equipment.ts";
@@ -46,7 +45,6 @@ export function RecipeDetailPage() {
   const deleteRecipe = useDeleteRecipe();
   const navigate = useNavigate();
   const toast = useToast();
-  const [creatingBatch, setCreatingBatch] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -95,9 +93,10 @@ export function RecipeDetailPage() {
       <RecipeMetrics recipe={doc} />
 
       <div className="grid gap-2 sm:grid-cols-3">
-        <Button variant="primary" size="lg" icon="kettle" onClick={() => setCreatingBatch(true)}>
+        <Link to={`/brygg/ny?oppskrift=${recipe.data.id}`} className={buttonClasses("primary", "lg")}>
+          <Icon name="kettle" size={22} />
           Opprett batch
-        </Button>
+        </Link>
         <Link to={`/oppskrifter/${recipe.data.id}/tilpass`} className={buttonClasses("secondary", "lg")}>
           <Icon name="sliders" size={22} />
           Tilpass
@@ -178,7 +177,6 @@ export function RecipeDetailPage() {
         </Button>
       )}
 
-      <NewBatchSheet open={creatingBatch} onClose={() => setCreatingBatch(false)} recipeId={recipe.data.id} />
       <ConfirmDialog
         open={confirmDelete}
         title="Slette oppskriften?"

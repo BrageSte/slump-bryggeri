@@ -15,10 +15,11 @@ import {
   type BrewStage,
 } from "../../src/domain/model/brewing.ts";
 import type { ProfileValueSources, ProfileValues } from "../../src/domain/model/equipment-profile.ts";
-import type { RecipeDocument } from "../../src/domain/model/recipe.ts";
+import { calculateRecipeScaling } from "../../src/domain/brewing-calculations/index.ts";
+import { recipeDocumentSchema, type RecipeDocument } from "../../src/domain/model/recipe.ts";
 import type { SessionUser } from "../lib/context.ts";
 import { atomic, newId, parseJson, type DB } from "../lib/db.ts";
-import { notFound } from "../lib/errors.ts";
+import { HttpError, notFound } from "../lib/errors.ts";
 import { listOutcomes, resultSummaries } from "./batch-outcomes.ts";
 import { getActiveProfile, listEquipment, profileValuesOf } from "./equipment.ts";
 import { getRecipeVersion } from "./recipes.ts";
@@ -140,6 +141,22 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
  * Creates a batch and freezes the recipe version and the active equipment profile into
  * immutable snapshots, atomically. Later edits to either never change this batch.
  */
+/**
+ * The recipe frozen into a batch: the version as it is, or scaled to the size and efficiency chosen
+ * for this batch. The scaled recipe must pass the same validation as any saved recipe, so a size
+ * that rounds an amount to nothing is refused instead of stored.
+ */
+function batchSnapshot(data: RecipeDocument, input: Pick<z.output<typeof createBatchSchema>, "batchSizeL" | "efficiencyPct">): RecipeDocument {
+  const batchSizeL = input.batchSizeL ?? data.batchSizeL;
+  const efficiencyPct = input.efficiencyPct ?? data.efficiencyPct;
+  if (batchSizeL === data.batchSizeL && efficiencyPct === data.efficiencyPct) return data;
+  const parsed = recipeDocumentSchema.safeParse(calculateRecipeScaling(data, { batchSizeL, efficiencyPct }).recipe);
+  if (!parsed.success) {
+    throw new HttpError(400, "invalid_scaling", "Skaleringen gir mengder som er for små eller for store. Velg en annen størrelse.");
+  }
+  return parsed.data;
+}
+
 export async function createBatch(
   d1: D1Database,
   db: DB,
@@ -157,6 +174,7 @@ export async function createBatch(
   if (!recipe?.current_version_id) throw notFound("Oppskriften");
 
   const version = await getRecipeVersion(db, breweryId, recipe.id, input.recipeVersionId ?? recipe.current_version_id);
+  const snapshot = batchSnapshot(version.data, input);
   const [profile, equipment] = await Promise.all([getActiveProfile(db, breweryId), listEquipment(db, breweryId)]);
 
   const now = Date.now();
@@ -180,7 +198,7 @@ export async function createBatch(
     db.insertInto("batch_recipe_snapshots").values({
       batch_id: batchId,
       recipe_version_id: version.id,
-      data: JSON.stringify(version.data),
+      data: JSON.stringify(snapshot),
       created_at: now,
     }),
     db.insertInto("batch_equipment_snapshots").values({
