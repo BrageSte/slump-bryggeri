@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import type { BatchDetail } from "../../domain/model/api.ts";
-import { Button, BottomSheet, Card, Icon } from "../../design-system/index.ts";
+import { BottomSheet, Card, Icon } from "../../design-system/index.ts";
 import { useAssistantStatus } from "./api.ts";
 import { AssistantThread } from "./AssistantThread.tsx";
-import { assistantStageHint } from "./conversation.ts";
 
-export function VeilederPanel({ batch }: { batch: BatchDetail }) {
-  const [open, setOpen] = useState(false);
+/**
+ * The shared conversation for a batch: a side panel on desktop, and on phones a sheet that the
+ * brew-day action bar (`BrewActionBar`) opens.
+ */
+export function VeilederPanel({ batch, open, onClose }: { batch: BatchDetail; open: boolean; onClose: () => void }) {
   const [desktop, setDesktop] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
   const status = useAssistantStatus();
-  const hint = assistantStageHint(batch.currentStage);
 
   useEffect(() => {
     const media = window.matchMedia("(min-width: 768px)");
@@ -34,22 +35,7 @@ export function VeilederPanel({ batch }: { batch: BatchDetail }) {
         </Card>
       </aside>
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5rem+env(safe-area-inset-bottom))] z-20 px-4 md:hidden print:hidden">
-        <div className="mx-auto flex max-w-3xl justify-start pr-36">
-          <Button
-            variant="secondary"
-            size="md"
-            icon="sparkles"
-            className="pointer-events-auto min-w-0 max-w-full justify-start rounded-full bg-surface/95 shadow-lg"
-            onClick={() => setOpen(true)}
-            aria-label={`Åpne Veileder. ${hint}`}
-          >
-            <span className="truncate">Veileder · {hint}</span>
-          </Button>
-        </div>
-      </div>
-
-      <BottomSheet open={open} onClose={() => setOpen(false)} title="Veileder">
+      <BottomSheet open={open} onClose={onClose} title="Veileder">
         <p className="mb-3 text-small text-muted">Delt samtale for #{batch.number} · {brewStageName(batch)}</p>
         {open && <AssistantThread batchId={batch.id} batch={batch} configured={Boolean(status.data?.configured)} enabled={open} />}
       </BottomSheet>

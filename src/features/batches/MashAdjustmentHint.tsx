@@ -78,10 +78,13 @@ export function MashAdjustmentHint({
           </Button>
         ))}
       </div>
-      <p className="text-small text-muted">
-        {suggestion.mashWaterSource === "measured" ? "Bruker loggført" : suggestion.mashWaterSource === "recipe" ? "Bruker oppskriftens" : suggestion.mashWaterSource === "assumed" ? `Bruker antatt${suggestion.mashWaterAssumptions?.length ? ` (${suggestion.mashWaterAssumptions.join(", ")})` : ""}` : "Bruker beregnet"} {mashWater} L meskevann og {grain} kg korn.
-        Varmetap i meskekaret er ikke medregnet.
-      </p>
+      <details className="text-small text-muted">
+        <summary className="flex min-h-11 cursor-pointer items-center font-semibold">Grunnlag for tipset</summary>
+        <p>
+          {suggestion.mashWaterSource === "measured" ? "Bruker loggført" : suggestion.mashWaterSource === "recipe" ? "Bruker oppskriftens" : suggestion.mashWaterSource === "assumed" ? `Bruker antatt${suggestion.mashWaterAssumptions?.length ? ` (${suggestion.mashWaterAssumptions.join(", ")})` : ""}` : "Bruker beregnet"} {mashWater} L meskevann og {grain} kg korn.
+          Varmetap i meskekaret er ikke medregnet.
+        </p>
+      </details>
       <Button variant="primary" onClick={() => onAddWater(suggestion.additionL, suggestion.additionTempC)} loading={busy}>
         Logg tilsatt vann
       </Button>
