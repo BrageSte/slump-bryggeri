@@ -58,7 +58,8 @@ strøket. Rekkefølgen videre står i [implementeringsplanen](docs/implementatio
 ## Dokumentasjon
 
 - **[Implementeringsplan v0.5](docs/implementation-plan.md)** — steg 1–10 og oppdateringer
-- [Arkitektur og beslutninger](docs/architecture.md)
+- [Arkitektur](docs/architecture.md)
+- [Bryggeassistenten](docs/assistant.md) — oppsett, oppførsel, kostnad
 - [Designsystem](docs/design-system.md)
 - [Beregningsmotor](docs/calculations.md)
 - [BeerSmith-import (BSMX)](docs/import-bsmx.md)

@@ -34,7 +34,7 @@ før neste bryggedag.
 |---|---|---|
 | B1 | Drift | Gratis, på Cloudflare. |
 | B2 | Innlogging | Bryggerimodus (felles bryggerikode + «Hvem er du?») er løsningen. Google/e-post-innlogging og flere bryggerier er strøket. |
-| B3 | BeerSmith | De sju `.bsmx`-filene (`tests/fixtures/beersmith/`) er importkilde for oppskrifter. |
+| B3 | BeerSmith | De sju `.bsmx`-filene (`src/features/recipes/beersmith/`) er importkilde for oppskrifter. |
 | B4 | Enheter | Skriv i gal, °F, oz, lb osv.; lagres metrisk. ✅ |
 | B5 | Bryggedag | Timere og alarmer; skjermen skal ikke slukke. |
 | B6 | Avslutning | Avslutning med faktiske tall og smaksnotater hører hjemme i **Brygg**. |
@@ -45,7 +45,7 @@ før neste bryggedag.
 | B11 | Utstyr | Versjonerte utstyrsprofiler og uforanderlige batch-snapshots. Import overskriver aldri aktiv profil. |
 | B12 | Omfang | Enkel og konsis app: ingen plassholdere, inventar eller automatiske kalibreringsforslag. *AI: se B14.* |
 | B13 | Bryggedag (2026-09-28) | Bryggedagen skal ikke være «lukket» og stegvis: alt man lurer på (vann, temperaturer, humle, gjær) skal være synlig hele tiden, og tilsetninger kan registreres når de faktisk skjer. |
-| B14 | AI (2026-09-28) | Bryggeassistent med Claude API, betalt per bruk (Sonnet 5 som standard), som svarer om brygget og leser et bryggedokument. Den regner ikke selv og endrer ingenting. Erstatter strykningen av AI i B12. |
+| B14 | AI (2026-09-28) | Bryggeassistent med Claude API, betalt per bruk (modell settes i `ASSISTANT_MODEL` i `wrangler.jsonc`), som svarer om brygget og leser et bryggedokument. Den regner ikke selv og endrer ingenting. Erstatter strykningen av AI i B12. |
 | B15 | BeerSmith (2026-09-28) | BeerSmith-oppskriftene er tunet for anlegget og er grunnlaget for oppstart og tuning av kalibreringen. Utstyret kan brukes som *forslag* til ny profilversjon, som en admin ser over og lagrer selv (B11). |
 
 ---
@@ -93,15 +93,8 @@ Det Sunset trenger de neste dagene.
 **Akseptanse:** På dag 3 kan man logge SG for Tropical og Pine hver for seg, se OG → nå → forgjæring per
 variant, registrere faktisk tørrhumlemengde og se kurven.
 
-Gjort 2026-09-24. `src/domain/brew-day/fermentation.ts` gir OG, målinger og pitch-tid per variant; kortet og
-grafen bruker samme grunnlag. Tidspunkt frem i tid avvises av API-et (5 min slakk). En utført tilsetning viser
-faktisk mengde med planen ved siden av.
-
-Gjort 2026-09-28 (påbygning): grafen tegner nå også trykk, FG-mål som stiplet linje og gjæringsplanens
-temperaturvindu som et bånd — begge fra `buildFermentationSeries({ ..., recipe })`, ny valgfri
-`recipe`-parameter (`buildTemperatureBand` er egen, testet ren funksjon). Tom tilstand er nå `EmptyState`
-i stedet for ingenting. `BatchPage.tsx` sender `recipe: batch.recipeSnapshot` til grafen, så FG-målet
-og temperaturbåndet vises i appen.
+Gjort 2026-09-24, utvidet 2026-09-28 med trykk, FG-mål og temperaturvindu i grafen
+(`src/domain/brew-day/fermentation.ts`).
 
 ### Steg 3 — Avslutt batch (tidl. M4, forenklet) ✅
 
@@ -117,10 +110,7 @@ og temperaturbåndet vises i appen.
 **Akseptanse:** Sunset Tropical (bokser) og Sunset Pine (fat) kan avsluttes hver for seg med egne tall
 og smaksnotater.
 
-Gjort 2026-09-24. `/batcher/:id/resultat` har ett skjema per variant (OG/FG forhåndsutfylt fra loggen med
-kilde, «skrevet inn» når det endres), `PUT …/outcomes` med konfliktkontroll, og «Bryggeri-tall»
-(fordampning og brygghuseffektivitet fra egne volum-målinger, `src/domain/brew-day/outcome.ts`). Historikken
-viser faktisk ABV og karakter. Resultater kan legges inn før batchen avsluttes, f.eks. når Tropical er boksa.
+Gjort 2026-09-24. `/batcher/:id/resultat`, `PUT …/outcomes` (konfliktkontroll), `src/domain/brew-day/outcome.ts`.
 
 ### Steg 4 — Rapport (tidl. M8, forenklet) ✅
 
@@ -131,9 +121,7 @@ viser faktisk ABV og karakter. Resultater kan legges inn før batchen avsluttes,
 
 **Akseptanse:** Rapporten for Sunset IPA kan erstatte den håndlagde bryggeloggen i PDF.
 
-Gjort 2026-09-24. Rapporten lenkes fra batchmenyen («Rapport (PDF)») og fra ferdige batcher. Den er bygget
-bare fra loggen, snapshotet og resultatene; «Lagre som PDF» bruker nettleserens utskrift (A4, lys palett,
-uten appens menyer). Gjæringsgrafen tegnes i full papirbredde med tabellen åpen.
+Gjort 2026-09-24. Lenket fra batchmenyen («Rapport (PDF)») og fra ferdige batcher.
 
 ### Steg 5 — Bryggedag: timer og alarmer (tidl. M3-rest) ✅
 
@@ -147,11 +135,7 @@ uten appens menyer). Gjæringsgrafen tegnes i full papirbredde med tabellen åpe
 
 **Akseptanse:** Under kok varsles neste humletilsetning med lyd, og den kan registreres med ett trykk.
 
-Gjort 2026-09-24. `src/domain/brew-day/alarms.ts` (timere fra loggen, forfalte tilsetninger med forvarsel,
-steg som er ferdige, timere som har gått ut — hver alarm har en fast nøkkel). Serveren validerer
-`timer_started`/`timer_cancelled` og regner ut `dueAt` selv. Banneret ligger nederst over menyen; «Registrer
-tilsatt» der logger planlagt mengde med ett trykk, mens «Tilsatt» i listen lar deg endre mengden først.
-Alarmer som allerede var forfalt da siden ble åpnet, vises uten lyd.
+Gjort 2026-09-24. `src/domain/brew-day/alarms.ts`; kvittering per enhet i localStorage.
 
 ### Steg 6 — BeerSmith-import (tidl. M5-rest, forenklet) ✅
 
@@ -167,56 +151,31 @@ Alarmer som allerede var forfalt da siden ble åpnet, vises uten lyd.
 **Akseptanse:** De sju gamle oppskriftene kan importeres som planer, med originalfilen tatt vare på og
 uten at det oppstår bryggelogg.
 
-Gjort 2026-09-24. Oppskrifter → Importer → «BeerSmith-fil (.bsmx)». Filen leses og vises til gjennomgang
-i nettleseren; serveren parser den på nytt (`POST /recipes/import/bsmx`) og lagrer oppskrift, originalfil,
-filnavn og kilde-data (utstyr, vannplan, advarsler, ignorerte målte felt) i `recipe_sources`
-(migrering `0008`, tabellen er nå uforanderlig). Originalfilen lastes ned byte-lik fra oppskriften
-(`GET /recipes/:id/source/file`). Maks filstørrelse er 250 kB (én oppskrift er 20–30 kB), så parsingen
-holder seg godt innenfor CPU-grensen på gratisplanen.
+Gjort 2026-09-24. Se [import-bsmx.md](import-bsmx.md) for format, ruter og importregler.
 
 ---
 
 ### Steg 7 — Bryggeplan (B13) ✅
 
-Gjort 2026-09-28. Samlet **Bryggeplan** på bryggedagen (`src/domain/brew-day/brew-plan.ts`, `BrewPlanOverview.tsx`):
-nøkkeltall (innmesking, mesk, skyllevann, kok, malt, humle, gjærtilsetting, OG → FG) og alle faser samtidig,
-med gjeldende fase uthevet og ferdige faser sammenfoldet. Den erstatter tilsetningskortet (ikke Neste), så ingenting
-vises dobbelt. «Tilsett» åpner det forhåndsutfylte tilsetningsarket; gjær registreres direkte. Vannmengder og
-innmeskingstemperatur tas fra oppskriften når kilden oppgir dem, ellers beregnet fra utstyrssnapshot. Manglende
-kalibrering bruker navngitte standardantakelser som «≈ antatt»; målinger under bryggingen erstatter prognosen.
-
-Samtidig: «Start gjæring» når all gjær er registrert, «Mål SG» (ikke «Sjekk gravity»), slettet batch navigerer
-videre, forsiden sier hva siste måling er, og en kallers bredde erstatter feltenes standardbredde (`fieldClasses`).
-
-Gjort 2026-09-29: Bryggeplanen gir nå alltid vannmengder fra maltmengde og dokumenterte standardverdier når
-profilen mangler kalibrering. Oppskrift, beregnet, antatt og målt vises med egne kilder; førkokmålinger oppdaterer
-volum- og OG-prognosen, og faktisk meskevann brukes i senere temperaturforslag.
+Gjort 2026-09-28, utvidet 2026-09-29. Samlet **Bryggeplan** med alle faser samtidig, gjeldende fase uthevet
+(`src/domain/brew-day/brew-plan.ts`, `BrewPlanOverview.tsx`); vann og OG kommer alltid, med kilde (oppskrift,
+beregnet, antatt, målt). Verdikilder og standardantakelser: [architecture.md](architecture.md#bryggeplan-og-verdikilder).
 
 ### Steg 8 — Bryggedokument og bryggeassistent (B14) ✅
 
-Gjort 2026-09-28. Oppsett og kostnad: [assistant.md](assistant.md).
+Gjort 2026-09-28. Oppsett, oppførsel og kostnad: [assistant.md](assistant.md); oppbygging:
+[architecture.md](architecture.md#bryggeassistent-b14).
 
-- **Bryggedokument** (`src/domain/brew-document/`): plan per fase, utstyrssnapshot, status nå, resultater og hele
-  loggen som tekst. «Kopier bryggedokument» på assistentsiden.
-- **Hva brygget sier om kalibreringen** (`tuning.ts`): fordampning og brygghuseffektivitet fra `brewhouseNumbers`,
-  og systemkorreksjon innmesking fra første mesketemperatur (`suggestStrikeOffsetFromMash`). Bare tekst med
-  grunnlag; ingenting lagres automatisk.
-- **Assistent** (`worker/services/assistant.ts`, `worker/assistant/`): Claude med bryggedokumentet som cachet
-  kontekst og åtte lesende beregningsverktøy (innmesking, vannmengder, mesketemperatur-justering, Brix → SG,
-  ABV, effektivitet, fordampning, enhetsomregning). Dagsgrense (`ASSISTANT_DAILY_LIMIT`, 40), 10 per minutt,
-  atomisk dagsreservasjon i `assistant_daily_requests` (migrering `0010`), tokenbruk i `assistant_usage`
-  (migrering `0009`) og anslag i appen. Assistent i bunnmenyen og i batchmenyen.
-- `calculateMashTemperatureAdjustment` (BeerSmith Mash Adjust: 1,417 L mot 1,41 L) brukes som verktøy for
-  assistenten. Et eget kort for mesketemperatur-korrigering på bryggedagen er fortsatt strøket.
+- **Bryggedokument** (`src/domain/brew-document/`): plan, utstyrssnapshot, status nå, resultater og logg som tekst.
+- **Hva brygget sier om kalibreringen** (`tuning.ts`): bare tekst med grunnlag; ingenting lagres automatisk.
+- **Assistent:** Claude med cachet brief og lesende beregningsverktøy; dagsgrense og tokenbruk lagres i D1.
+- Eget kort for mesketemperatur-korrigering er strøket (se §4); assistenten har `mash_temperature_adjustment`.
 
 ### Steg 9 — BeerSmith som startpunkt for kalibrering (B15) ✅
 
-Gjort 2026-09-28. Oppskriftssiden for en BeerSmith-oppskrift har «Bruk som startpunkt i kalibreringen»:
-`suggestProfileFromBsmx` fyller inn effektivitet, batchvolum, meskekar, dødvolum, trubtap, gjæringstap,
-fordampning, krymping og mesketykkelse (BeerSmiths innmeskingsvann ÷ korn). Kalibreringssiden viser
-gammel → ny, og en admin lagrer ny versjon. «Slumps BeerSmith-oppskrifter» under Importer legger inn Love in a
-canoe, Cascade Pale Ale – Kveik, Bitter 90l og Aasen Kölsch (dagens 90–100 L-anlegg) gjennom samme import.
-BSMX-filene ligger nå i `src/features/recipes/beersmith/`.
+Gjort 2026-09-28. «Bruk som startpunkt i kalibreringen» på BeerSmith-oppskrifter (`suggestProfileFromBsmx`;
+kalibreringssiden viser gammel → ny, admin lagrer ny versjon). «Slumps BeerSmith-oppskrifter» under Importer legger inn
+de fire oppskriftene for dagens 90–100 L-anlegg ([import-bsmx.md](import-bsmx.md)).
 
 **Brage må:** i produksjon, importer «Slumps BeerSmith-oppskrifter», åpne Love in a canoe → «Bruk som startpunkt i
 kalibreringen», sjekk verdiene mot anlegget i dag og lagre. Production-secret `ANTHROPIC_API_KEY` er satt;
@@ -247,7 +206,7 @@ Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre
 - [x] Lagre spørsmål og svar i `assistant_messages` per batch. Alle medlemmer ser samme tråd, med forfatternavn;
       API-et returnerer de 100 nyeste meldingene eldste først og bruker de siste omtrent 12 som modellhistorikk.
 - [x] Vis Veileder på batchsiden: mobilknapp over bunnmenyen som åpner samtalen, og sidepanel på desktop.
-      `/assistent` bruker den valgte batchens samme lagrede tråd. Behold «Kopier bryggedokument».
+      `/assistent` er en batchliste som åpner samme tråd. Behold «Kopier bryggedokument».
 - [x] Legg til `propose_actions` for validerte målinger, hendelser og timere. Forslag utføres ikke av AI;
       bryggeren logger via eksisterende endepunkt og bekrefter deretter med ett trykk, eller avviser.
 - [x] Poll tråden mens den vises, vis hvem som spurte og hvem som logget/avviste et forslag, og behold lagret
@@ -257,10 +216,7 @@ Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre
 **Akseptanse:** Alle på bryggeriet kan følge samtalen på samme batch. Et foreslått loggelement endrer ingenting før
 en brygger bekrefter det; etterpå ser alle hvem som utførte handlingen og når.
 
-Gjort 2026-09-29. Delt tråd i `assistant_messages` og bryggeriscopede endepunkter. Veileder vises på batchsiden og
-den gamle assistentsiden bruker nå samme tråd. Claude foreslår skjema-validerte loggoppføringer; logging skjer via
-de eksisterende måle-, hendelses- og kommentarendepunktene før statusen registreres på forslaget. Utvidet
-bryggeri-eksport og oppdatert [assistant.md](assistant.md).
+Gjort 2026-09-29. Delt tråd og forslag; oppførsel i [assistant.md](assistant.md).
 
 Gjort 2026-09-29 (nettsøk): Assistenten søker bare etter avgrensede produkt- og stilfakta eller når en kilde
 etterspørres, bruker en allowlist av autoritative bryggekilder, viser og lagrer kildelenker, og tar med maksimalt
