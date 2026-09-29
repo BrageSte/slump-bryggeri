@@ -1,6 +1,8 @@
 import { assumptionNames, buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatus, registeredIngredientIds, type BrewPlanItem, type PlanQuantity } from "../brew-day/brew-plan.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
-import { deriveBrewDayState, deviationFromTarget, type BrewDayLogEntry, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
+import { deriveBrewDayState, deviationFromTarget, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
+import { toBrewDayLog } from "../brew-day/timeline.ts";
+import { num } from "../format.ts";
 import { packagingLabels, type BatchDetail, type TimelineItem } from "../model/api.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, formatMeasurementValue, measurementKindSpecs } from "../model/brewing.ts";
 import { getProfileParameter } from "../model/equipment-profile.ts";
@@ -21,9 +23,6 @@ const targetStatusLabels: Record<TargetStatus, string> = {
   uncertain: "Usikker",
   missing: "Ikke målt",
 };
-
-const num = (value: number, decimals = 1) =>
-  value.toLocaleString("nb-NO", { minimumFractionDigits: 0, maximumFractionDigits: decimals });
 
 function time(timestamp: number): string {
   return new Intl.DateTimeFormat("nb-NO", {
@@ -128,17 +127,7 @@ function sectionText(lines: string[]): string {
 
 export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocumentInput): BrewDocumentSections {
   const recipe = batch.recipeSnapshot;
-  const log: BrewDayLogEntry[] = timeline.map((item) => ({
-    id: item.id,
-    type: item.type,
-    splitId: item.splitId,
-    stage: item.stage,
-    occurredAt: item.occurredAt,
-    data: item.data,
-    measurement: item.measurement
-      ? { kind: item.measurement.kind, value: item.measurement.value, valueMin: item.measurement.valueMin, valueMax: item.measurement.valueMax, label: item.measurement.label }
-      : null,
-  }));
+  const log = toBrewDayLog(timeline);
   const equipment = batch.equipmentSnapshot.values;
   const plan = buildBrewPlan({ recipe, equipment, equipmentSources: batch.equipmentSnapshot.sources, doneIngredientIds: registeredIngredientIds(log) });
   const state = deriveBrewDayState({

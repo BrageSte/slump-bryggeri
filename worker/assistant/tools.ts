@@ -10,6 +10,7 @@ import {
 } from "../../src/domain/model/api.ts";
 import { measurementKindSpecs, ingredientAddedDataSchema, timerStartedDataSchema } from "../../src/domain/model/brewing.ts";
 import { isSupportedMeasurementUnit, measurementToCanonical } from "../../src/domain/brewing-calculations/measurement-units.ts";
+import { round } from "../../src/domain/format.ts";
 import {
   brixToSg,
   calculateAbv,
@@ -20,6 +21,7 @@ import {
   calculateStrikeTemperature,
   calculateWaterVolumes,
   convertUnitValue,
+  mashedGrainKg,
   refractometerFinalGravity,
 } from "../../src/domain/brewing-calculations/index.ts";
 import type { BatchDetail } from "../../src/domain/model/api.ts";
@@ -47,11 +49,6 @@ interface AssistantTool<S extends z.ZodType> {
 }
 
 const tool = <S extends z.ZodType>(definition: AssistantTool<S>) => definition;
-
-const mashedGrainKg = (batch: BatchDetail) =>
-  batch.recipeSnapshot.fermentables.filter((f) => f.type === "grain" || f.type === "adjunct").reduce((sum, f) => sum + f.amountKg, 0);
-
-const round = (value: number, decimals = 2) => Math.round(value * 10 ** decimals) / 10 ** decimals;
 
 const waterAddedDataSchema = z.object({
   volumeL: z.number().positive().max(10_000),
@@ -151,7 +148,7 @@ const tools = [
       if (boilOffLPerH === undefined) return { error: "Boil-off rate unknown: not in the equipment snapshot and not given." };
       const used = {
         batchVolumeL: input.batchVolumeL ?? batch.recipeSnapshot.batchSizeL,
-        grainKg: input.grainKg ?? mashedGrainKg(batch),
+        grainKg: input.grainKg ?? mashedGrainKg(batch.recipeSnapshot),
         boilTimeMin: input.boilTimeMin ?? batch.recipeSnapshot.boilTimeMin,
         boilOffLPerH,
         grainAbsorptionLPerKg: profileValue(values, "grain_absorption_l_per_kg") ?? 0.8,
@@ -181,7 +178,7 @@ const tools = [
       tunSpecificHeat: z.number().min(0).max(1).optional(),
     }),
     run: (input, { batch }) => {
-      const used = { ...input, grainKg: input.grainKg ?? mashedGrainKg(batch) };
+      const used = { ...input, grainKg: input.grainKg ?? mashedGrainKg(batch.recipeSnapshot) };
       const result = calculateMashTemperatureAdjustment(used);
       return { additionL: result ? round(result.additionL, 2) : null, inputsUsed: used };
     },

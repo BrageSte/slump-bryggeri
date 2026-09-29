@@ -1,3 +1,4 @@
+import { mashedGrainKg } from "../brewing-calculations/gravity.ts";
 import { calculateMashTemperatureAdjustment } from "../brewing-calculations/water.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 import type { BrewStage } from "../model/brewing.ts";
@@ -115,9 +116,7 @@ export function suggestMashTemperatureAdjustment(input: MashAdjustmentInput): Ma
   mashWaterL += addedBeforeReadingL;
   if (waterAdded.length > 0) mashWaterSource = "measured";
 
-  const grainKg = input.recipe.fermentables
-    .filter((fermentable) => fermentable.type === "grain" || fermentable.type === "adjunct")
-    .reduce((sum, fermentable) => sum + fermentable.amountKg, 0);
+  const grainKg = mashedGrainKg(input.recipe);
   if (grainKg <= 0) return { reason: "no_mashed_grain" };
 
   const direction = target.status === "low" ? "raise" : "lower";

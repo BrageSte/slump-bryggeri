@@ -1,3 +1,5 @@
+import { mashedGrainKg } from "../brewing-calculations/gravity.ts";
+import { round } from "../format.ts";
 import type { ProfileParameterKey, ProfileValues } from "../model/equipment-profile.ts";
 import type { BsmxRecipeImport } from "./bsmx.ts";
 
@@ -8,8 +10,6 @@ export interface ProfileSuggestion {
   sourceDate?: string;
   values: Partial<Record<ProfileParameterKey, number>>;
 }
-
-const round = (value: number, decimals: number) => Math.round(value * 10 ** decimals) / 10 ** decimals;
 
 function mostCommon(values: (number | undefined)[]): number | undefined {
   const counts = new Map<number, number>();
@@ -51,9 +51,7 @@ export function suggestProfileFromBsmx(
 
   // Mash thickness from the recipes brewed on this same equipment.
   const thicknesses = sameEquipment.flatMap((item) => {
-    const grainKg = item.recipe.fermentables
-      .filter((f) => f.type === "grain" || f.type === "adjunct")
-      .reduce((sum, f) => sum + f.amountKg, 0);
+    const grainKg = mashedGrainKg(item.recipe);
     const mashWaterL = item.waterPlan.mashWaterL;
     return mashWaterL !== undefined && grainKg > 0 ? [mashWaterL / grainKg] : [];
   });

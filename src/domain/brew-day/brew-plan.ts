@@ -1,4 +1,4 @@
-import { calculateStrikeTemperature, calculateWaterVolumes, expectedGravities, pointsToSg, sgToPoints, type WaterVolumeResult } from "../brewing-calculations/index.ts";
+import { calculateStrikeTemperature, calculateWaterVolumes, expectedGravities, isMashed, mashedGrainKg, pointsToSg, sgToPoints, type WaterVolumeResult } from "../brewing-calculations/index.ts";
 import { brewStages, type BrewStage, type IngredientKind } from "../model/brewing.ts";
 import { getProfileParameter, type ProfileValueSources, type ProfileValues } from "../model/equipment-profile.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
@@ -169,11 +169,6 @@ function sourceFrom(inputs: PlanQuantity[]): PlanSource {
   if (inputs.some((input) => input.source === "assumed")) return "assumed";
   if (inputs.every((input) => input.source === "recipe")) return "recipe";
   return "calculated";
-}
-
-/** Grain and adjuncts that go into the mash; sugars and extracts do not absorb water. */
-function mashedGrainKg(doc: RecipeDocument): number {
-  return doc.fermentables.filter((f) => f.type === "grain" || f.type === "adjunct").reduce((sum, f) => sum + f.amountKg, 0);
 }
 
 interface PlannedWater {
@@ -368,7 +363,7 @@ export function buildBrewPlan({ recipe: doc, equipment, equipmentSources, doneIn
       done: false,
     })),
     ...doc.fermentables
-      .filter((f) => f.type === "grain" || f.type === "adjunct")
+      .filter(isMashed)
       .map((f) => ({ id: `grain:${f.id}`, title: f.name, amount: { value: f.amountKg, unit: "kg" }, done: false })),
     ...hopsFor("mash").map((hop) => hopItem(hop, "Mesk")),
     ...miscsFor("mash").map((misc) => miscItem(misc, "Mesk")),
