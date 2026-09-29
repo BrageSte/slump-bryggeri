@@ -2,7 +2,7 @@ import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttribu
 import { cx } from "./cx.ts";
 import { fieldClasses } from "./field-classes.ts";
 
-export { fieldClasses, inputClasses } from "./field-classes.ts";
+export { inputClasses } from "./field-classes.ts";
 
 export function Field({
   label,

@@ -54,4 +54,3 @@ export const useRevokeInvite = () => useBreweryMutation((id, inviteId: string) =
 export const useUpdateMemberRole = () =>
   useBreweryMutation((id, input: { userId: string; role: Role }) => api.patch(`/breweries/${id}/members/${input.userId}`, { role: input.role }));
 export const useRemoveMember = () => useBreweryMutation((id, userId: string) => api.delete(`/breweries/${id}/members/${userId}`));
-export const useRenameBrewery = () => useBreweryMutation((id, name: string) => api.patch(`/breweries/${id}`, { name }));
