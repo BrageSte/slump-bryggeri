@@ -60,7 +60,7 @@
         "EMAIL_FROM": "Slump Bryggeri <bryggeri@example.com>",
         "BREWERY_MODE": "on",
         "BREWERY_NAME": "Slump Bryggeri",
-        "ASSISTANT_MODEL": "claude-sonnet-5",
+        "ASSISTANT_MODEL": "claude-sonnet-5-5",
         "ASSISTANT_DAILY_LIMIT": "40",
         "ASSISTANT_WEB_SEARCH": "on"
       }
