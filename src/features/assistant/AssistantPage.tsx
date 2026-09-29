@@ -1,9 +1,10 @@
-import { useMemo } from "react";
 import { useSearchParams } from "react-router";
 import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import type { AssistantStatus, BatchSummary } from "../../domain/model/api.ts";
-import { Button, Card, EmptyState, ErrorState, Field, LoadingState, PageHeader, Select, useToast } from "../../design-system/index.ts";
+import { brewStageLabels } from "../../domain/model/brewing.ts";
+import { Button, Card, EmptyState, ErrorState, ListCard, ListLink, LoadingState, PageHeader, StatusChip, useToast } from "../../design-system/index.ts";
 import { useBatch, useBatches, useTimeline } from "../batches/api.ts";
+import { statusLabel, statusTones } from "../batches/helpers.ts";
 import { AssistantThread } from "./AssistantThread.tsx";
 import { useAssistantStatus } from "./api.ts";
 
@@ -41,16 +42,16 @@ function UsageLine({ status }: { status: AssistantStatus }) {
   );
 }
 
+/** Brewing first, then fermenting/conditioning, then planned, then completed history last. */
+function activeFirst(batches: BatchSummary[]): BatchSummary[] {
+  const order = (batch: BatchSummary) => (batch.status === "brewing" ? 0 : batch.status === "fermenting" || batch.status === "conditioning" ? 1 : batch.status === "planned" ? 2 : 3);
+  return [...batches].sort((a, b) => order(a) - order(b) || b.createdAt - a.createdAt);
+}
+
 export function AssistantPage() {
   const batches = useBatches();
   const status = useAssistantStatus();
-  const [params, setParams] = useSearchParams();
-  const choices = useMemo(() => {
-    const all = batches.data ?? [];
-    const order = (batch: BatchSummary) => batch.status === "brewing" ? 0 : batch.status === "fermenting" || batch.status === "conditioning" ? 1 : batch.status === "planned" ? 2 : 3;
-    return [...all].sort((a, b) => order(a) - order(b) || b.createdAt - a.createdAt);
-  }, [batches.data]);
-  const selectedBatchId = params.get("batch") ?? choices[0]?.id ?? null;
+  const [params] = useSearchParams();
 
   if (batches.isPending || status.isPending) {
     return <><PageHeader title="Bryggeassistent" /><LoadingState /></>;
@@ -59,32 +60,39 @@ export function AssistantPage() {
     return <><PageHeader title="Bryggeassistent" /><ErrorState error={batches.error ?? status.error} onRetry={() => void (batches.refetch(), status.refetch())} /></>;
   }
 
+  const choices = activeFirst(batches.data);
+  const batchId = params.get("batch");
+  const selected = batchId ? choices.find((batch) => batch.id === batchId) ?? null : null;
+
+  if (selected) return <AssistantConversation batch={selected} configured={status.data.configured} />;
+
   return (
     <div className="space-y-4">
-      <PageHeader title="Bryggeassistent" subtitle="Spør om et brygg. Samtalen deles med hele bryggeriet." />
+      <PageHeader title="Bryggeassistent" subtitle="Velg et brygg for å spørre. Samtalen deles med hele bryggeriet." />
       {!status.data.configured && <SetupCard />}
       {choices.length === 0 ? (
         <EmptyState icon="kettle" title="Ingen batcher ennå">Assistenten svarer om et konkret brygg. Opprett en batch først.</EmptyState>
       ) : (
-        <>
-          <Field label="Brygg">
-            {(props) => (
-              <Select {...props} value={selectedBatchId ?? ""} onChange={(event) => setParams({ batch: event.target.value }, { replace: true })}>
-                {choices.map((batch) => <option key={batch.id} value={batch.id}>#{batch.number} {batch.name}</option>)}
-              </Select>
-            )}
-          </Field>
-          {selectedBatchId && <AssistantConversation key={selectedBatchId} batchId={selectedBatchId} configured={status.data.configured} />}
-          <UsageLine status={status.data} />
-        </>
+        <ListCard>
+          {choices.map((batch) => (
+            <ListLink
+              key={batch.id}
+              to={`/assistent?batch=${batch.id}`}
+              title={<><span className="text-muted tabular">#{batch.number}</span> {batch.name}</>}
+              subtitle={batch.currentStage && batch.status !== "completed" ? brewStageLabels[batch.currentStage] : batch.recipe.name}
+              trailing={<StatusChip tone={statusTones[batch.status]}>{statusLabel(batch.status)}</StatusChip>}
+            />
+          ))}
+        </ListCard>
       )}
+      <UsageLine status={status.data} />
     </div>
   );
 }
 
-function AssistantConversation({ batchId, configured }: { batchId: string; configured: boolean }) {
-  const batch = useBatch(batchId);
-  const timeline = useTimeline(batchId, false);
+function AssistantConversation({ batch: summary, configured }: { batch: BatchSummary; configured: boolean }) {
+  const batch = useBatch(summary.id);
+  const timeline = useTimeline(summary.id, false);
   const toast = useToast();
 
   async function copyDocument() {
@@ -97,15 +105,21 @@ function AssistantConversation({ batchId, configured }: { batchId: string; confi
     }
   }
 
-  if (batch.isPending || timeline.isPending) return <LoadingState />;
-  if (batch.error || timeline.error) return <ErrorState error={batch.error ?? timeline.error} onRetry={() => void (batch.refetch(), timeline.refetch())} />;
-
   return (
-    <section className="space-y-3" aria-label="Samtale">
-      <Button size="sm" variant="ghost" icon="clipboard" onClick={() => void copyDocument()} disabled={!batch.data || !timeline.data}>
-        Kopier bryggedokument
-      </Button>
-      <AssistantThread batchId={batchId} batch={batch.data} configured={configured} />
-    </section>
+    <div className="space-y-3">
+      <PageHeader back="/assistent" title={`#${summary.number} ${summary.name}`} subtitle="Delt samtale for hele bryggeriet" />
+      {batch.isPending || timeline.isPending ? (
+        <LoadingState />
+      ) : batch.error || timeline.error ? (
+        <ErrorState error={batch.error ?? timeline.error} onRetry={() => void (batch.refetch(), timeline.refetch())} />
+      ) : (
+        <>
+          <Button size="sm" variant="ghost" icon="clipboard" onClick={() => void copyDocument()}>
+            Kopier bryggedokument
+          </Button>
+          <AssistantThread batchId={summary.id} batch={batch.data} configured={configured} />
+        </>
+      )}
+    </div>
   );
 }

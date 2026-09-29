@@ -1,17 +1,13 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { AssistantMessageAction, AssistantProposedAction, AssistantThreadMessage, BatchDetail } from "../../domain/model/api.ts";
 import { eventTypeLabels } from "../../domain/model/brewing.ts";
-import { Button, cx, Field, Icon, InlineError, LoadingState, TextArea, useToast } from "../../design-system/index.ts";
+import { Button, cx, Field, Icon, InlineError, LoadingState, markdownInline, MarkdownList, TextArea, useToast } from "../../design-system/index.ts";
 import { useMe } from "../auth/session.ts";
 import { useAddComment, useLogEvent, useLogMeasurement } from "../batches/api.ts";
 import { useAssistantThread, usePostAssistantMessage, useResolveAssistantAction } from "./api.ts";
 import { assistantActionLabel, assistantCitationLabel, starterQuestions } from "./conversation.ts";
 
 function Answer({ text }: { text: string }) {
-  const inline = (line: string): ReactNode[] =>
-    line.split(/(\*\*[^*]+\*\*)/g).map((part, index) =>
-      part.startsWith("**") && part.endsWith("**") ? <strong key={index}>{part.slice(2, -2)}</strong> : part,
-    );
   const listItem = /^\s*([-*•]|\d+\.)\s+/;
   const groups: { list: boolean; ordered: boolean; lines: string[] }[] = [];
   for (const line of text.split("\n")) {
@@ -28,10 +24,10 @@ function Answer({ text }: { text: string }) {
     <div className="space-y-2">
       {groups.filter((group) => group.lines.length > 0).map((group, index) => {
         if (group.list) {
-          const items = group.lines.map((line, itemIndex) => <li key={itemIndex}>{inline(line.replace(listItem, ""))}</li>);
-          return group.ordered ? <ol key={index} className="list-decimal space-y-1 pl-5">{items}</ol> : <ul key={index} className="list-disc space-y-1 pl-5">{items}</ul>;
+          const items = group.lines.map((line) => ({ text: line.replace(listItem, "") }));
+          return <MarkdownList key={index} items={items} ordered={group.ordered} />;
         }
-        return <p key={index}>{group.lines.map((line, lineIndex) => <span key={lineIndex} className={cx(/^#+\s/.test(line) && "font-semibold")}>{lineIndex > 0 && <br />}{inline(line.replace(/^#+\s/, ""))}</span>)}</p>;
+        return <p key={index}>{group.lines.map((line, lineIndex) => <span key={lineIndex} className={cx(/^#+\s/.test(line) && "font-semibold")}>{lineIndex > 0 && <br />}{markdownInline(line.replace(/^#+\s/, ""))}</span>)}</p>;
       })}
     </div>
   );
