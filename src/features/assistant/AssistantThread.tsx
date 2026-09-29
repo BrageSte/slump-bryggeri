@@ -5,7 +5,7 @@ import { Button, cx, Field, Icon, InlineError, LoadingState, TextArea, useToast 
 import { useMe } from "../auth/session.ts";
 import { useAddComment, useLogEvent, useLogMeasurement } from "../batches/api.ts";
 import { useAssistantThread, usePostAssistantMessage, useResolveAssistantAction } from "./api.ts";
-import { assistantActionLabel, starterQuestions } from "./conversation.ts";
+import { assistantActionLabel, assistantCitationLabel, starterQuestions } from "./conversation.ts";
 
 function Answer({ text }: { text: string }) {
   const inline = (line: string): ReactNode[] =>
@@ -52,6 +52,26 @@ function eventSummary(action: AssistantProposedAction): string {
   if (action.kind !== "log_event") return assistantActionLabel(action);
   if (action.type === "comment") return String(action.data.body ?? "");
   return eventTypeLabels[action.type] ?? action.type;
+}
+
+function Sources({ citations }: { citations: AssistantThreadMessage["citations"] }) {
+  const sources = citations.flatMap((citation) => {
+    const label = assistantCitationLabel(citation);
+    return label ? [{ ...citation, label }] : [];
+  });
+  if (sources.length === 0) return null;
+
+  return (
+    <ul className="space-y-0.5 px-1 text-caption text-muted" aria-label="Kilder">
+      {sources.map((source) => (
+        <li key={source.url}>
+          <a className="inline-flex min-h-11 items-center underline decoration-border underline-offset-2 hover:text-primary-strong" href={source.url} target="_blank" rel="noopener noreferrer">
+            Kilde: {source.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
 }
 
 export function AssistantThread({
@@ -158,7 +178,7 @@ export function AssistantThread({
   }
 
   const visibleMessages = pendingQuestion
-    ? [...messages, { id: "pending", role: "user" as const, content: pendingQuestion, actions: null, author: { id: user.id, name: user.name }, createdAt: Date.now() }]
+    ? [...messages, { id: "pending", role: "user" as const, content: pendingQuestion, actions: null, citations: [], author: { id: user.id, name: user.name }, createdAt: Date.now() }]
     : messages;
 
   return (
@@ -202,6 +222,7 @@ export function AssistantThread({
                 <div className={cx("rounded-card px-3 py-2.5 text-small", message.role === "user" ? "bg-primary text-on-primary" : "border border-border bg-surface")}>
                   {message.role === "user" ? <p className="whitespace-pre-wrap text-left">{message.content}</p> : <Answer text={message.content} />}
                 </div>
+                {message.role === "assistant" && <Sources citations={message.citations} />}
                 {message.role === "assistant" && message.actions && message.actions.length > 0 && (
                   <div className="space-y-2 pt-1 text-left">
                     {message.actions.map((action, index) => {

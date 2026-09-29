@@ -28,8 +28,30 @@ spørsmålene som faktisk stilles.
    Forslagene lagres sammen med assistentsvaret. Når en brygger logger eller avviser et forslag, lagres hvem som
    gjorde det og tidspunktet, slik at alle ser utfallet.
 8. Serveren reserverer antall spørsmål atomisk per dag (`assistant_daily_requests`) og lagrer tokenbruk per dag
-   (`assistant_usage`) for kostnadsvisningen. Spørsmål lagres før Anthropic-kallet, så de står igjen i tråden også
-   når assistenten returnerer en feil.
+   (`assistant_usage`) for kostnadsvisningen. Antall nettsøk inngår også i kostnadsanslaget. Spørsmål lagres før
+   Anthropic-kallet, så de står igjen i tråden også når assistenten returnerer en feil.
+
+## Når søker assistenten på nett?
+
+Assistenten søker bare når svaret avhenger av konkrete eksterne fakta som ikke finnes i batchkonteksten eller
+beregningsverktøyene: humlens alfasyre eller olje, gjærens temperatur- eller utgjæringsområde, maltfarge eller
+ekstrakt, stilretningslinjer — eller når bryggeren ber uttrykkelig om en kilde. Den søker aldri etter data for
+denne batchen, bryggeriets historikk eller noe et beregningsverktøy kan svare på. Den bør bruke ett avgrenset søk.
+Finner den ingen pålitelig kilde, skal den si det i stedet for å gjette. Bryggepraksis som er godt etablert kan
+besvares uten søk, men merkes som generell veiledning, ikke som et faktum om denne batchen.
+
+Nettsøket er begrenset til disse kildene:
+
+- Humle: Yakima Chief (`yakimachief.com`), BarthHaas (`barthhaas.com`), Hopsteiner (`hopsteiner.com`).
+- Gjær: Fermentis (`fermentis.com`), Lallemand (`lallemandbrewing.com`), White Labs (`whitelabs.com`),
+  Wyeast (`wyeastlab.com`), Omega Yeast (`omegayeast.com`).
+- Malt: Weyermann (`weyermann.de`), BESTMALZ (`bestmalz.de`), Castle Malting (`castlemalting.com`).
+- Stil og prosess: BJCP (`bjcp.org`), Brewers Association (`brewersassociation.org`).
+
+Svar som bruker nettdata skal navngi organisasjonen og lenke til kilden. Kildelenkene vises også under svaret.
+Humledata varierer mellom avlingsår og lot; assistenten skal si fra om dette. Serververktøyet er begrenset til
+maksimalt to nettsøk per spørsmål, også når Claude fortsetter en pauset samtale. Nettsøk koster $10 per 1 000 søk
+(1 cent per søk), i tillegg til tokenprisene. Dagsgrensen på spørsmål endres ikke.
 
 ## Bryggeriets egne tall
 
@@ -65,6 +87,7 @@ Testene setter alltid en tom nøkkel og kaller aldri det ekte API-et.
 |---|---|---|
 | `ASSISTANT_MODEL` | `claude-sonnet-5` | Modellen. `claude-haiku-4-5` er billigst, `claude-opus-5` er sterkest og dyrest. |
 | `ASSISTANT_DAILY_LIMIT` | `40` | Maks spørsmål per bryggeri per døgn (UTC). |
+| `ASSISTANT_WEB_SEARCH` | `on` | `off` deaktiverer nettsøket. |
 
 I tillegg er det en grense på 10 spørsmål per minutt (`ASSISTANT_RATE_LIMITER`), inntil 6 beregningsrunder per
 spørsmål og maks 8000 tokens i svaret.
@@ -74,7 +97,7 @@ spørsmål og maks 8000 tokens i svaret.
 Listepris per million tokens (september 2026): Haiku 4.5 $1 inn / $5 ut, Sonnet 5 $2 / $10, Opus 5 $5 / $25.
 Inn-tokenbruken varierer med briefet, hvilke seksjoner eller beregninger spørsmålet trenger, og antall runder. Et
 vanlig spørsmål sender derfor ikke hele den voksende loggen hver gang. Appen viser et anslag for dagen og måneden
-basert på tokenbruken fra API-et; fakturaen i Anthropic Console er fasit.
+basert på tokenbruk og nettsøk fra API-et; fakturaen i Anthropic Console er fasit.
 
 ## Feilmeldinger
 

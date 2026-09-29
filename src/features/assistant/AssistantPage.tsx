@@ -35,7 +35,7 @@ function SetupCard() {
 function UsageLine({ status }: { status: AssistantStatus }) {
   return (
     <p className="tabular text-caption text-muted">
-      I dag {status.today.requests} av {status.dailyLimit} spørsmål ({usd(status.today.estimatedUsd)}) · denne måneden {usd(status.month.estimatedUsd)} · {status.model}.
+      I dag {status.today.requests} av {status.dailyLimit} spørsmål · {status.today.webSearchRequests} nettsøk ({usd(status.today.estimatedUsd)}) · denne måneden {usd(status.month.estimatedUsd)} · {status.model}.
       Anslag fra listepris; fakturaen i Anthropic Console er fasit.
     </p>
   );

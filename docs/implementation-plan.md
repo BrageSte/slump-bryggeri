@@ -258,6 +258,10 @@ den gamle assistentsiden bruker nå samme tråd. Claude foreslår skjema-valider
 de eksisterende måle-, hendelses- og kommentarendepunktene før statusen registreres på forslaget. Utvidet
 bryggeri-eksport og oppdatert [assistant.md](assistant.md).
 
+Gjort 2026-09-29 (nettsøk): Assistenten søker bare etter avgrensede produkt- og stilfakta eller når en kilde
+etterspørres, bruker en allowlist av autoritative bryggekilder, viser og lagrer kildelenker, og tar med maksimalt
+to nettsøk per spørsmål i kostnadsanslaget. Søket kan slås av med `ASSISTANT_WEB_SEARCH=off`.
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)

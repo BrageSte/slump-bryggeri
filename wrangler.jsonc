@@ -33,7 +33,8 @@
     "BREWERY_NAME": "Slump Bryggeri",
     // Brewing assistant (secret ANTHROPIC_API_KEY). Questions per brewery per day (UTC).
     "ASSISTANT_MODEL": "claude-sonnet-5",
-    "ASSISTANT_DAILY_LIMIT": "40"
+    "ASSISTANT_DAILY_LIMIT": "40",
+    "ASSISTANT_WEB_SEARCH": "on"
   },
   "env": {
     // Bindings are not inherited by named environments, so repeat both file stores here.
@@ -60,7 +61,8 @@
         "BREWERY_MODE": "on",
         "BREWERY_NAME": "Slump Bryggeri",
         "ASSISTANT_MODEL": "claude-sonnet-5",
-        "ASSISTANT_DAILY_LIMIT": "40"
+        "ASSISTANT_DAILY_LIMIT": "40",
+        "ASSISTANT_WEB_SEARCH": "on"
       }
     }
   }

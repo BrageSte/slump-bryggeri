@@ -1,4 +1,5 @@
 import type {
+  AssistantCitation,
   AssistantMessageAction,
   AssistantPostResponse,
   AssistantProposedAction,
@@ -42,6 +43,10 @@ function actionsFromJson(value: string | null): AssistantMessageAction[] | null 
   return parseJson<AssistantMessageAction[]>(value);
 }
 
+function citationsFromJson(value: string | null): AssistantCitation[] {
+  return parseJson<AssistantCitation[]>(value) ?? [];
+}
+
 async function threadRows(db: DB, breweryId: string, batchId: string, limit: number) {
   return db
     .selectFrom("assistant_messages as m")
@@ -51,6 +56,7 @@ async function threadRows(db: DB, breweryId: string, batchId: string, limit: num
       "m.role",
       "m.content",
       "m.actions",
+      "m.citations",
       "m.created_by",
       "m.created_at",
       "u.name as author_name",
@@ -68,6 +74,7 @@ function messageFromRow(row: {
   role: "user" | "assistant";
   content: string;
   actions: string | null;
+  citations: string | null;
   created_by: string | null;
   created_at: number;
   author_name: string | null;
@@ -77,6 +84,7 @@ function messageFromRow(row: {
     role: row.role,
     content: row.content,
     actions: actionsFromJson(row.actions),
+    citations: citationsFromJson(row.citations),
     author: row.created_by && row.author_name ? { id: row.created_by, name: row.author_name } : null,
     createdAt: row.created_at,
   };
@@ -112,6 +120,7 @@ export async function sendAssistantMessage(input: {
       role: "user",
       content: input.content,
       actions: null,
+      citations: null,
       created_by: user.id,
       created_at: createdAt,
     })
@@ -143,6 +152,7 @@ export async function sendAssistantMessage(input: {
       role: "assistant",
       content: reply.reply,
       actions: actions ? JSON.stringify(actions) : null,
+      citations: reply.citations.length > 0 ? JSON.stringify(reply.citations) : null,
       created_by: null,
       created_at: assistantCreatedAt,
     })
@@ -150,8 +160,8 @@ export async function sendAssistantMessage(input: {
 
   return {
     messages: [
-      { id: userId, role: "user", content: input.content, actions: null, author: { id: user.id, name: user.name }, createdAt },
-      { id: assistantId, role: "assistant", content: reply.reply, actions, author: null, createdAt: assistantCreatedAt },
+      { id: userId, role: "user", content: input.content, actions: null, citations: [], author: { id: user.id, name: user.name }, createdAt },
+      { id: assistantId, role: "assistant", content: reply.reply, actions, citations: reply.citations, author: null, createdAt: assistantCreatedAt },
     ],
     toolCalls: reply.toolCalls,
     usage: reply.usage,
