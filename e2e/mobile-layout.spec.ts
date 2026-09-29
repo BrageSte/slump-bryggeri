@@ -24,6 +24,11 @@ test.describe("flytende knapper på mobil", () => {
     // The brew document has collapsible sections called "Logg" too; the floating button is in a fixed wrapper.
     const logg = page.locator(".fixed").getByRole("button", { name: "Logg", exact: true });
 
+    // One floating bar, not two floating elements.
+    await expect(
+      page.locator(".fixed").filter({ has: veileder }).filter({ has: page.getByRole("button", { name: "Logg", exact: true }) }),
+    ).toHaveCount(1);
+
     for (const button of [veileder, logg]) {
       await expect(button).toBeVisible();
       const box = await button.boundingBox();

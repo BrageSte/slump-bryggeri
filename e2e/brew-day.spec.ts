@@ -39,8 +39,12 @@ test.describe("bryggedagen på mobil", () => {
     });
 
     await test.step("registrer en tilsetning fra bryggeplanen", async () => {
+      // Kok is a coming phase, so it is folded; a tap opens it and the addition can be registered early.
+      const kok = page.getByRole("button", { name: /^Kok .*0\/1 tilsatt/ });
+      await expect(kok).toHaveAttribute("aria-expanded", "false");
+      await kok.click();
+      await expect(kok).toHaveAttribute("aria-expanded", "true");
       const simcoe = page.getByRole("listitem").filter({ hasText: "65 g Simcoe T90" });
-      await expect(page.getByRole("button", { name: /^Kok .*0\/1 tilsatt/ })).toBeVisible();
       await simcoe.getByRole("button", { name: "Tilsett" }).click();
 
       const sheet = page.getByRole("dialog", { name: "Tilsetning" });
@@ -54,7 +58,9 @@ test.describe("bryggedagen på mobil", () => {
     });
 
     await test.step("start en timer som overlever en omlasting", async () => {
+      await page.getByRole("button", { name: "Ny timer" }).click();
       await page.getByRole("button", { name: "10 min", exact: true }).click();
+      await expect(page.getByRole("button", { name: "10 min", exact: true })).toBeHidden();
       await expect(page.getByRole("button", { name: "Stopp 10 min" })).toBeVisible();
       await expect(page.getByText(/^(10:00|9:\d{2})$/)).toBeVisible();
 
@@ -83,5 +89,58 @@ test.describe("bryggedagen på mobil", () => {
     await expect(page.getByRole("button", { name: /66,5°C Temperatur · Mesketemperatur/ })).toBeVisible();
     await expect(page.getByText(/^Tilsett ca\./)).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Logg tilsatt vann" })).toHaveCount(0);
+  });
+
+  test("aktivt steg øverst, resten av brygget som oversikt under", async ({ page, batch }) => {
+    await page.goto(batch.path);
+    await page.getByRole("button", { name: "Start mesking" }).click();
+    await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
+
+    await test.step("aktivt steg, neste og timere kommer før planen og loggen", async () => {
+      const top = async (name: string) => {
+        const box = await page.getByRole("heading", { name, level: 2, exact: true }).first().boundingBox();
+        expect(box, `${name} is laid out`).not.toBeNull();
+        return box!.y;
+      };
+      const [step, next, timers, plan, log] = [await top("Mesk"), await top("Neste"), await top("Timere"), await top("Bryggeplan"), await top("Logg")];
+      expect(step).toBeLessThan(next);
+      expect(next).toBeLessThan(timers);
+      expect(timers).toBeLessThan(plan);
+      expect(plan).toBeLessThan(log);
+    });
+
+    await test.step("bare gjeldende fase er åpen, kommende faser viser hva de inneholder", async () => {
+      await expect(page.getByRole("button", { name: /^Mesk Nå/ })).toHaveAttribute("aria-expanded", "true");
+      const whirlpool = page.getByRole("button", { name: /^Whirlpool Senere/ });
+      await expect(whirlpool).toHaveAttribute("aria-expanded", "false");
+      await expect(whirlpool).toContainText("84,6 g Citra T90");
+      await expect(page.getByRole("button", { name: /^Gjæring Senere/ })).toHaveAttribute("aria-expanded", "false");
+    });
+
+    await test.step("antakelsene ligger i ett ark, ikke i planen", async () => {
+      await expect(page.getByText(/^Antakelser i planen$/)).toHaveCount(0);
+      await page.getByRole("button", { name: /verdier er antatt/ }).click();
+      const sheet = page.getByRole("dialog", { name: "Antakelser i planen" });
+      await expect(sheet.getByText(/^Fordampning:/)).toBeVisible();
+      await expect(sheet.getByText(/^Mesketykkelse:/)).toBeVisible();
+      await sheet.getByRole("button", { name: "Lukk" }).click();
+      await expect(sheet).toBeHidden();
+    });
+  });
+
+  test("bryggedokumentet ligger sammenbrettet og åpnes fra batchmenyen", async ({ page, batch }) => {
+    await page.goto(batch.path);
+    await page.getByRole("button", { name: "Start mesking" }).click();
+    await expect(page.getByText("Brygger nå", { exact: true })).toBeVisible();
+
+    const document = page.getByRole("button", { name: /^Bryggedokument/ });
+    await expect(document).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("button", { name: "Status nå" })).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Flere valg" }).click();
+    await page.getByRole("dialog", { name: "Batch" }).getByRole("button", { name: "Bryggedokument" }).click();
+
+    await expect(document).toHaveAttribute("aria-expanded", "true");
+    await expect(page.getByRole("button", { name: "Status nå" })).toBeVisible();
   });
 });

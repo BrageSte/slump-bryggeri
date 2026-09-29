@@ -3,7 +3,7 @@ import { compareMeasurementToTarget, type BrewDayState } from "../../domain/brew
 import type { BatchDetail } from "../../domain/model/api.ts";
 import { brewStageLabels } from "../../domain/model/brewing.ts";
 import { Link } from "react-router";
-import { Button, buttonClasses, Card, MetricCard, SectionLabel, TargetStatusChip } from "../../design-system/index.ts";
+import { Button, buttonClasses, MetricCard, SectionLabel, TargetStatusChip } from "../../design-system/index.ts";
 import { formatLogTime, formatNumber, formatSg } from "../../lib/format.ts";
 import { formatTarget } from "./helpers.ts";
 import type { LogIntent } from "./LogSheet.tsx";
@@ -12,6 +12,7 @@ import type { LogIntent } from "./LogSheet.tsx";
  * Fermentation and conditioning: one block per fermenter with OG → current gravity → apparent
  * attenuation and the latest temperature. Gravity is not judged against the FG target while the
  * yeast is still working; temperature is compared with the fermentation plan for the day.
+ * Rendered inside the active-step card, which supplies the frame.
  */
 export function FermentationCard({
   batch,
@@ -28,7 +29,7 @@ export function FermentationCard({
 }) {
   const step = state.step;
   return (
-    <Card>
+    <div>
       <SectionLabel>{state.stage ? brewStageLabels[state.stage] : "Gjæring"}</SectionLabel>
       {step && (
         <div className="mt-1">
@@ -44,7 +45,7 @@ export function FermentationCard({
       <Link to={`/batcher/${batch.id}/resultat`} className={`${buttonClasses("ghost", "md", true)} mt-2`}>
         Tappet eller på fat? Registrer resultat
       </Link>
-    </Card>
+    </div>
   );
 }
 

@@ -8,36 +8,12 @@ import {
   type PlanAssumption,
   type PhaseStatus,
   type PlanAddition,
-  type PlanQuantity,
 } from "../../domain/brew-day/brew-plan.ts";
 import type { BrewDayForecast, PlannedAddition } from "../../domain/brew-day/state.ts";
 import { fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
-import { Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
+import { BottomSheet, Button, Card, cx, Icon, Section, StatusChip } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatNumber, formatSg } from "../../lib/format.ts";
-
-/**
- * Recipe values are unprefixed; calculations get "≈" and assumptions "≈ … antatt". Which
- * assumptions were used is listed once under "Antakelser i planen", not on every number.
- */
-function withSource(source: PlanQuantity["source"], text: string): string {
-  if (source === "recipe") return text;
-  return source === "calculated" ? `≈ ${text}` : `≈ ${text} antatt`;
-}
-
-function quantity(q: PlanQuantity | undefined, unit: string, decimals = 1): string | null {
-  if (!q) return null;
-  const formatted = unit === "SG" ? formatSg(q.value) : formatNumber(q.value, decimals);
-  return withSource(q.source, `${formatted}${unit === "SG" ? "" : ` ${unit}`}`);
-}
-
-function temperature(q: PlanQuantity | undefined, maxC?: number): string | null {
-  if (!q) return null;
-  if (maxC !== undefined && maxC !== q.value) {
-    const range = `${formatNumber(q.value, 1)}–${formatNumber(maxC, 1)} °C`;
-    return withSource(q.source, range);
-  }
-  return quantity(q, "°C");
-}
+import { phasePreview, planItemDetail, quantity, withSource } from "./plan-format.ts";
 
 function forecastValue(value: BrewDayForecast["postBoilVolumeL"], unit: string): string {
   const formatted = unit === "SG" ? formatSg(value.value) : `${formatNumber(value.value, 1)} ${unit}`;
@@ -52,9 +28,10 @@ const statusChip: Record<PhaseStatus, { tone: "success" | "primary" | "neutral";
 };
 
 /**
- * The whole brew day on one screen: water, mash, sparge, boil, hops, pitching and
- * fermentation. The current phase is highlighted, but every phase stays readable and every
- * planned addition can be registered whenever it actually happens.
+ * The rest of the brew, under the active step: water, mash, sparge, boil, hops, pitching and
+ * fermentation. While brewing, the current phase is open and the others show one line about what
+ * they hold; every phase is a tap away and every planned addition can be registered whenever it
+ * actually happens. Before the brew starts, everything is open.
  */
 export function BrewPlanOverview({
   plan,
@@ -76,12 +53,15 @@ export function BrewPlanOverview({
   busy: boolean;
 }) {
   const [expanded, setExpanded] = useState<Partial<Record<string, boolean>>>({});
+  const [showAssumptions, setShowAssumptions] = useState(false);
 
   if (plan.phases.length === 0) return null;
+  const planning = currentStage === null;
 
   return (
     <Section title="Bryggeplan">
-      <KeyFigures summary={plan.summary} currentStage={currentStage} forecast={forecast} />
+      <KeyFigures summary={plan.summary} currentStage={currentStage} forecast={forecast} compact={!planning} />
+      <AssumptionsNotice assumptions={plan.summary.assumptions} open={showAssumptions} onOpen={() => setShowAssumptions(true)} onClose={() => setShowAssumptions(false)} />
 
       <nav aria-label="Faser i bryggeplanen" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 md:mx-0 md:flex-wrap md:px-0">
         {plan.phases.map((phase) => {
@@ -108,7 +88,9 @@ export function BrewPlanOverview({
       <div className="space-y-3">
         {plan.phases.map((phase) => {
           const status = brewPlanPhaseStatus(phase, currentStage);
-          const open = expanded[phase.key] ?? status !== "done";
+          // Water counts as current during mash and sparge, but its numbers are in the folded line and in the
+          // mash and sparge phases; only the phase for the stage itself opens by itself.
+          const open = expanded[phase.key] ?? (planning || (phase.key !== "water" && status === "current"));
           return (
             <PhaseCard
               key={phase.key}
@@ -116,7 +98,6 @@ export function BrewPlanOverview({
               status={status}
               open={open}
               onToggle={() => setExpanded((current) => ({ ...current, [phase.key]: !open }))}
-              assumptions={phase.key === "water" ? plan.summary.assumptions : undefined}
               liveAdditions={status === "current" ? liveAdditions : []}
               countdownFrom={status === "current" && currentStage !== "fermentation" && currentStage !== "conditioning" ? elapsedMin : null}
               canRegister={currentStage !== null}
@@ -128,16 +109,30 @@ export function BrewPlanOverview({
       </div>
 
       <p className="text-caption text-muted">
-        Oppskrift = oppgitt av oppskriften/importen · ≈ = beregnet fra oppskrifts- eller profilverdier · ≈ … antatt = dokumentert standardverdi som fortsatt bør måles (se Antakelser i planen) · Målt = loggført verdi.
+        Oppskrift = oppgitt av oppskriften/importen · ≈ = beregnet fra oppskrifts- eller profilverdier · ≈ … antatt = dokumentert standardverdi som fortsatt bør måles · Målt = loggført verdi.
       </p>
     </Section>
   );
 }
 
-function KeyFigures({ summary, currentStage, forecast }: { summary: BrewPlan["summary"]; currentStage: BrewStage | null; forecast: BrewDayForecast | null }) {
+/**
+ * `compact` (while brewing) leaves out what the phases below already say — water, mash, boil, pitch
+ * temperature — and keeps the totals and the forecast that no single phase shows.
+ */
+function KeyFigures({
+  summary,
+  currentStage,
+  forecast,
+  compact,
+}: {
+  summary: BrewPlan["summary"];
+  currentStage: BrewStage | null;
+  forecast: BrewDayForecast | null;
+  compact: boolean;
+}) {
   // Once the wort is in the fermenter, strike water and boil times are history.
   const brewDayDone = fermentationHasStarted(currentStage);
-  const brewDayFigures = brewDayDone ? [] : [
+  const stepFigures = brewDayDone || compact ? [] : [
     summary.strikeVolumeL || summary.strikeTemperatureC
       ? { label: "Innmesking", value: quantity(summary.strikeTemperatureC, "°C") ?? "–", detail: quantity(summary.strikeVolumeL, "L") }
       : null,
@@ -162,13 +157,16 @@ function KeyFigures({ summary, currentStage, forecast }: { summary: BrewPlan["su
           detail: [summary.preBoilVolumeL ? `før kok ${quantity(summary.preBoilVolumeL, "L")}` : null, summary.preBoilSg ? `SG før kok ${quantity(summary.preBoilSg, "SG")}` : null].filter(Boolean).join(" · ") || null,
         }
       : null,
+  ];
+  const brewDayFigures = brewDayDone ? [] : [
+    ...stepFigures,
     summary.grainKg > 0 ? { label: "Malt", value: `${formatNumber(summary.grainKg, 2)} kg`, detail: null } : null,
     summary.hopTotalG > 0 ? { label: "Humle totalt", value: formatAmount(summary.hopTotalG, "g"), detail: null } : null,
   ];
   const figures = [
     ...brewDayFigures,
     brewDayDone && summary.dryHopTotalG > 0 ? { label: "Tørrhumling", value: formatAmount(summary.dryHopTotalG, "g"), detail: null } : null,
-    summary.pitchTemperatureC !== undefined
+    summary.pitchTemperatureC !== undefined && !compact
       ? { label: "Gjærtilsetting", value: `${formatNumber(summary.pitchTemperatureC, 1)} °C`, detail: null }
       : null,
     summary.og !== null
@@ -192,7 +190,7 @@ function KeyFigures({ summary, currentStage, forecast }: { summary: BrewPlan["su
 
   if (figures.length === 0) return null;
   return (
-    <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+    <dl className={cx("grid grid-cols-2 gap-2 sm:grid-cols-4", compact && "[&>div:last-child:nth-child(odd)]:col-span-2 sm:[&>div:last-child:nth-child(odd)]:col-span-1")}>
       {figures.map((figure) => (
         <div key={figure.label} className="rounded-md border border-border bg-surface px-3 py-2">
           <dt className="text-caption font-semibold text-muted">{figure.label}</dt>
@@ -204,12 +202,47 @@ function KeyFigures({ summary, currentStage, forecast }: { summary: BrewPlan["su
   );
 }
 
+/** One line instead of a list: which values are assumed is a tap away, in a sheet. */
+function AssumptionsNotice({ assumptions, open, onOpen, onClose }: { assumptions: PlanAssumption[]; open: boolean; onOpen: () => void; onClose: () => void }) {
+  if (assumptions.length === 0) return null;
+  const count = assumptions.length === 1 ? "1 verdi er antatt" : `${assumptions.length} verdier er antatt`;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex min-h-11 w-full items-center gap-2 rounded-md border border-border bg-surface-2/50 px-3 py-2 text-left text-small"
+      >
+        <Icon name="alert" size={18} className="shrink-0 text-muted" />
+        <span className="min-w-0 flex-1">
+          <span className="font-semibold">{count}</span>, ikke målt
+        </span>
+        <Icon name="chevronRight" size={18} className="shrink-0 text-muted" />
+      </button>
+      <BottomSheet open={open} onClose={onClose} title="Antakelser i planen">
+        <p className="mb-3 text-small text-muted">Planen bruker disse standardverdiene til du har målt dem. Målte verdier erstatter dem i neste kalibrering.</p>
+        <ul className="space-y-3 text-small">
+          {assumptions.map((assumption) => (
+            <li key={assumption.key}>
+              <p className="font-semibold">
+                {assumption.label}: <span className="tabular">{formatNumber(assumption.value, 2)} {assumption.unit}</span>
+              </p>
+              <p className="text-muted">
+                {assumption.explanation} {assumption.measureToReplace}
+              </p>
+            </li>
+          ))}
+        </ul>
+      </BottomSheet>
+    </>
+  );
+}
+
 function PhaseCard({
   phase,
   status,
   open,
   onToggle,
-  assumptions,
   liveAdditions,
   countdownFrom,
   canRegister,
@@ -220,7 +253,6 @@ function PhaseCard({
   status: PhaseStatus;
   open: boolean;
   onToggle: () => void;
-  assumptions?: PlanAssumption[];
   liveAdditions: PlannedAddition[];
   countdownFrom: number | null;
   canRegister: boolean;
@@ -234,7 +266,7 @@ function PhaseCard({
 
   return (
     <div id={`plan-${phase.key}`} className="scroll-mt-20">
-      <Card highlight={status === "current"} flush>
+      <Card highlight={status === "current" && phase.key !== "water"} flush>
         <button
           type="button"
           onClick={onToggle}
@@ -248,30 +280,16 @@ function PhaseCard({
               <StatusChip tone={chip.tone}>{chip.label}</StatusChip>
             </span>
             {additions.length > 0 && (
-              <span className="text-small text-muted">
+              <span className="block text-small text-muted">
                 {doneCount}/{additions.length} tilsatt
               </span>
             )}
+            {!open && <span className="tabular block text-small text-muted">{phasePreview(phase)}</span>}
           </span>
           <Icon name="chevronDown" size={20} className={cx("shrink-0 text-muted transition-transform", open && "rotate-180")} />
         </button>
         {open && (
           <ul id={contentId} className="divide-y divide-border border-t border-border px-4 md:px-5">
-            {assumptions && assumptions.length > 0 && (
-              <li className="flex gap-2 py-3 text-small text-muted">
-                <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-semibold">Antakelser i planen</p>
-                  <ul className="mt-1 space-y-2">
-                    {assumptions.map((assumption) => (
-                      <li key={assumption.key}>
-                        {assumption.label}: {formatNumber(assumption.value, 2)} {assumption.unit}. {assumption.explanation} {assumption.measureToReplace}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </li>
-            )}
             {phase.items.map((item) => (
               <PlanItemRow
                 key={item.id}
@@ -306,14 +324,7 @@ function PlanItemRow({
   onAdd: (addition: PlanAddition) => void;
   busy: boolean;
 }) {
-  const details = [
-    item.timing ?? null,
-    temperature(item.temperatureC, item.temperatureMaxC),
-    item.durationMin !== undefined ? `${formatNumber(item.durationMin, 0)} min` : null,
-    item.durationDays !== undefined ? `${formatNumber(item.durationDays, 0)} ${item.durationDays === 1 ? "dag" : "dager"}` : null,
-    quantity(item.volumeL, "L"),
-    quantity(item.gravitySg, "SG"),
-  ].filter(Boolean);
+  const details = planItemDetail(item);
   const due = !live || live.status === "done" || item.done
     ? null
     : live.status === "due"

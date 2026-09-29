@@ -1,7 +1,7 @@
 # Implementeringsplan v0.5
 
 Oppdatert 2026-09-29 (bryggeplan, bryggeassistent, BeerSmith som grunnlag for kalibrering og
-meskehjelp, se B13–B15). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
+meskehjelp, se B13–B15; bryggedagen bygges om i steg 12, se B16). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
 
 Grunnlag: [implementation-package.md](implementation-package.md) (produktprinsipper),
 [architecture.md](architecture.md) (implementerte beslutninger), [AGENTS.md](../AGENTS.md) og
@@ -47,6 +47,7 @@ før neste bryggedag.
 | B13 | Bryggedag (2026-09-28) | Bryggedagen skal ikke være «lukket» og stegvis: alt man lurer på (vann, temperaturer, humle, gjær) skal være synlig hele tiden, og tilsetninger kan registreres når de faktisk skjer. |
 | B14 | AI (2026-09-28) | Bryggeassistent med Claude API, betalt per bruk (modell settes i `ASSISTANT_MODEL` i `wrangler.jsonc`), som svarer om brygget og leser et bryggedokument. Den regner ikke selv og endrer ingenting. Erstatter strykningen av AI i B12. |
 | B15 | BeerSmith (2026-09-28) | BeerSmith-oppskriftene er tunet for anlegget og er grunnlaget for oppstart og tuning av kalibreringen. Utstyret kan brukes som *forslag* til ny profilversjon, som en admin ser over og lagrer selv (B11). |
+| B16 | Bryggedagen (2026-09-29) | Bryggedagen skal ha ett **aktivt steg øverst** (mål, neste handling, timere) og resten av brygget som oversikt under. Ny batch går fra oppskrift via størrelse og utstyr til oversikt og «Start brygg». Utstyr: **se og advare**, ikke endre per batch. Første bryggedag: innen en uke. |
 
 ---
 
@@ -228,6 +229,49 @@ to nettsøk per spørsmål i kostnadsanslaget. Søket kan slås av med `ASSISTAN
 - [x] Bruk `claude-sonnet-5-5` lokalt, i produksjon og som serverstandard; prisanslaget kjenner modellen.
 
 ---
+
+### Steg 12 — Bryggedagen: aktivt steg, oversikt og ny batch (B16)
+
+Bakgrunn (Brage, 2026-09-29): selve bryggedagen føles rotete og uklar. Under brygg ligger stegkort, «Neste», timere,
+bryggeplan (alle faser åpne, med en liste over antakelser), logg, bryggedokument og to flytende knapper over
+hverandre. Kodegjennomgangens funn #5 og #8 pekte på det samme. Målet er at man alltid ser hva som skjer *nå*, og
+at resten av brygget ligger som oversikt under. Alt i B13 gjelder fortsatt: ingenting er «lukket», bare sammenbrettet.
+
+Rekkefølge: én PR per leveranse, i denne rekkefølgen. Playwright-testene (`e2e/`) oppdateres i samme PR og er
+sikkerhetsnettet for ombyggingen.
+
+**Leveranse 1 — Bryggeskjermen: aktivt steg øverst** ✅
+
+- [x] Ett **aktivt steg-kort** øverst: stegets mål og målinger (med mesketips), «Neste»-handlingen og timerne i samme kort.
+      Frie timere ligger bak «Ny timer»; kjørende timere er alltid synlige.
+- [x] **Bryggeplanen** under er en oversikt: gjeldende fase åpen, ferdige og kommende faser sammenbrettet med en
+      linje som viser hva de inneholder. Tilsetninger kan fortsatt registreres fra en kommende fase når den åpnes.
+- [x] De 10–11 antakelsene samles til én linje («N verdier er antatt») som åpner et ark, i stedet for å fylle vannfasen.
+- [x] Nøkkeltallene under brygg viser bare det som ikke står i fasene (malt, humle, OG → FG, prognose for volum og OG).
+- [x] **Én handlingslinje** nederst på mobil: Veileder og Logg sammen, over bunnmenyen (tar funn #8). Alarmbanneret
+      bruker samme safe-area-sikre avstand.
+- [x] Bryggedokumentet er sammenbrettet nederst, åpnes fra batchmenyen. Mesketipsets lange grunnlagstekst ligger
+      bak «Grunnlag for tipset».
+- [x] Playwright: aktivt steg først, kommende faser sammenbrettet, tilsetning fra åpnet fase, timer via «Ny timer».
+
+**Akseptanse:** På mobil er det første man ser under mesk «Mesk · 66,5 °C · 42 min igjen», temperaturen som skal
+måles, mesketipset og neste handling, uten å scrolle forbi timere og plan. Alle faser er fortsatt et trykk unna.
+
+**Leveranse 2 — Oversikt før start**
+
+- [ ] Batchsiden før start viser hele brygget: forventet OG/FG/ABV/IBU/volum, vann, malt, humle, gjær og alle faser åpne,
+      antakelsene og utstyrsprofilen som er låst (versjon, hva som er målt og hva som er antatt).
+- [ ] Knappen heter «Start brygg» og er det eneste som starter mesken.
+- [ ] Samme plankomponent brukes før og under brygging (`BrewPlanOverview`), ikke to kopier.
+
+**Leveranse 3 — Ny batch i steg**
+
+- [ ] `/brygg/ny` (og «Brygg denne» på oppskriften): oppskrift og dato → størrelse → utstyr → oppsummering → «Opprett batch»,
+      som åpner oversikten fra leveranse 2.
+- [ ] Størrelse skaleres i selve batchen (frosset snapshot) med `calculateRecipeScaling`; oppskriften får ikke ny
+      versjon. Forhåndsvisning viser malt, humle, OG og IBU før og etter.
+- [ ] Utstyr: se og advare (profilversjon, antatte verdier, tomme verdier), lenke til Kalibrering. Ingen overstyring per batch.
+- [ ] Tester: skaleringen i snapshotet, autorisasjon/isolasjon, og Playwright for hele veien fra oppskrift til «Start brygg».
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
 
