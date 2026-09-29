@@ -5,5 +5,6 @@ export * from "./Feedback.tsx";
 export * from "./Form.tsx";
 export * from "./Icon.tsx";
 export * from "./Layout.tsx";
+export * from "./Markdown.tsx";
 export * from "./Overlay.tsx";
 export * from "./Toast.tsx";

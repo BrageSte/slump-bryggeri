@@ -1,19 +1,13 @@
 import { useMemo, useState } from "react";
 import type { BatchStatus } from "../../domain/model/brewing.ts";
-import { Card, Icon, Section } from "../../design-system/index.ts";
+import { Card, Icon, markdownInline, MarkdownList, Section } from "../../design-system/index.ts";
 import { parseBrewDocument, type BrewDocumentBlock } from "./brew-document-view.ts";
 
 function DocumentBlocks({ blocks }: { blocks: BrewDocumentBlock[] }) {
   return blocks.map((block, index) => {
     if (block.kind === "heading") return <h3 key={index} className="font-semibold text-text">{block.text}</h3>;
-    if (block.kind === "paragraph") return <p key={index}>{block.text}</p>;
-    return (
-      <ul key={index} className="list-disc space-y-1 pl-5">
-        {block.items.map((item, itemIndex) => (
-          <li key={itemIndex} className={item.nested ? "ml-4" : undefined}>{item.text}</li>
-        ))}
-      </ul>
-    );
+    if (block.kind === "paragraph") return <p key={index}>{markdownInline(block.text)}</p>;
+    return <MarkdownList key={index} items={block.items} ordered={false} />;
   });
 }
 
