@@ -38,6 +38,7 @@ database eller AI.
 src/domain/brewing-calculations/  rene beregningsfunksjoner (docs/calculations.md)
 src/domain/brew-day/state.ts       utleder «hva skjer nå / mål / målt / neste» fra snapshot + logg
 src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk, kok, humle, gjær, gjæring)
+src/domain/brew-day/mash-adjustment.ts  deterministisk vannforslag fra meskemåling, oppskrift og utstyrssnapshot
 src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalibreringen
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
@@ -192,6 +193,10 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
   `filename` og `data` (BeerSmith-utstyr adskilt i oppgitt/avledet, vannplan, advarsler, ignorerte målte
   felt). Bryggeriets utstyrsprofil endres aldri. `GET …/recipes/:id/source/file` gir filen tilbake
   byte-lik. Kilder er uforanderlige (trigger). Maks 250 kB per fil. Se [import-bsmx.md](import-bsmx.md).
+- Meskekortet kan foreslå vann for å justere en målt temperatur. `mash-adjustment.ts` bruker samme
+  mål/toleranse som `state.ts` og `calculateMashTemperatureAdjustment`; et loggført tillegg er en vanlig
+  `water_added`-hendelse. BeerSmith-startpunktet sammenlignes med aktiv profil for fordampning,
+  batchvolum og meskekar, og varsles også når kildedatoen er over fem år gammel. Advarselen er kun veiledende.
 - BeerXML og AI-tolkning er strøket inntil videre.
 
 ## Navigasjon (avvik fra §5)

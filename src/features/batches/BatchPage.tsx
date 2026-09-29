@@ -5,9 +5,10 @@ import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
 import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
 import { buildFermentationSeries, splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
-import { deriveBrewDayState, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
+import { deriveBrewDayState, type BrewDayLogEntry, type BrewDayState, type NextAction, type PlannedAddition } from "../../domain/brew-day/state.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
 import { brewStageLabels, brewStages, fermentationHasStarted, type BrewStage } from "../../domain/model/brewing.ts";
+import type { ProfileValues } from "../../domain/model/equipment-profile.ts";
 import {
   BottomSheet,
   Button,
@@ -41,6 +42,7 @@ import { BrewDocumentPanel } from "./BrewDocumentPanel.tsx";
 import { BrewPlanOverview } from "./BrewPlanOverview.tsx";
 import { FermentationCard } from "./FermentationCard.tsx";
 import { FermentationChart } from "./FermentationChart.tsx";
+import { MashAdjustmentHint } from "./MashAdjustmentHint.tsx";
 import { ResultSummary } from "./ResultSummary.tsx";
 import { formatMeasurement, formatMeasurementRange, formatTarget, statusLabel, statusTones, toBrewDayLog } from "./helpers.ts";
 import { LogSheet, type LogIntent } from "./LogSheet.tsx";
@@ -175,6 +177,13 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
     logEvent.mutate({ type: "timer_cancelled", stage: batch.currentStage, data: { timerId } });
   }
 
+  function logMashWater(volumeL: number, temperatureC: number) {
+    logEvent.mutate(
+      { type: "water_added", stage: batch.currentStage, data: { volumeL, temperatureC, reason: "mash_adjust" } },
+      { onSuccess: () => toast("Vann tilsatt er loggført") },
+    );
+  }
+
   function goToStage(stage: BrewStage, occurredAt?: number) {
     startStage.mutate({ stage, occurredAt }, { onSuccess: () => toast(`${brewStageLabels[stage]} startet`) });
   }
@@ -232,7 +241,17 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
           {fermenting ? (
             <FermentationCard batch={batch} state={state} variants={variants} now={now} onLog={setIntent} />
           ) : (
-            <StageCard state={state} onLog={setIntent} timeline={timeline} />
+            <StageCard
+              state={state}
+              onLog={setIntent}
+              timeline={timeline}
+              recipe={batch.recipeSnapshot}
+              equipment={batch.equipmentSnapshot.values}
+              log={log}
+              now={now}
+              onAddMashWater={logMashWater}
+              loggingMashWater={logEvent.isPending}
+            />
           )}
         </>
       )}
@@ -365,7 +384,27 @@ function PlannedCard({ batch, onStart, starting }: { batch: BatchDetail; onStart
   );
 }
 
-function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (intent: LogIntent) => void; timeline: TimelineItem[] }) {
+function StageCard({
+  state,
+  onLog,
+  timeline,
+  recipe,
+  equipment,
+  log,
+  now,
+  onAddMashWater,
+  loggingMashWater,
+}: {
+  state: BrewDayState;
+  onLog: (intent: LogIntent) => void;
+  timeline: TimelineItem[];
+  recipe: BatchDetail["recipeSnapshot"];
+  equipment: ProfileValues;
+  log: BrewDayLogEntry[];
+  now: number;
+  onAddMashWater: (volumeL: number, temperatureC: number) => void;
+  loggingMashWater: boolean;
+}) {
   if (!state.stage) return null;
   const step = state.step;
   const progress = step?.totalMin && step.remainingMin !== null ? 1 - step.remainingMin / step.totalMin : null;
@@ -405,34 +444,47 @@ function StageCard({ state, onLog, timeline }: { state: BrewDayState; onLog: (in
       {state.targets.length > 0 && (
         <div className="mt-2 divide-y divide-border">
           {state.targets.map((target) => (
-            <TargetVsActual
-              key={target.key}
-              label={target.label}
-              unit={target.unit}
-              target={formatTarget(target.measurementKind, target.target)}
-              actual={target.actual
-                ? target.actual.valueMin !== undefined && target.actual.valueMax !== undefined
-                  ? formatMeasurementRange(target.measurementKind, target.actual.valueMin, target.actual.valueMax, target.unit)
-                  : formatMeasurement(target.measurementKind, target.actual.value)
-                : null}
-              status={target.status}
-              detail={target.actual?.derivedFrom === "brix" ? "fra Brix" : undefined}
-              action={
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    onLog({
-                      kind: "measurement",
-                      measurementKind: target.measurementKind,
-                      target: target.target,
-                      previous: previousOf(target.measurementKind),
-                    })
-                  }
-                >
-                  Logg
-                </Button>
-              }
-            />
+            <div key={target.key}>
+              <TargetVsActual
+                label={target.label}
+                unit={target.unit}
+                target={formatTarget(target.measurementKind, target.target)}
+                actual={target.actual
+                  ? target.actual.valueMin !== undefined && target.actual.valueMax !== undefined
+                    ? formatMeasurementRange(target.measurementKind, target.actual.valueMin, target.actual.valueMax, target.unit)
+                    : formatMeasurement(target.measurementKind, target.actual.value)
+                  : null}
+                status={target.status}
+                detail={target.actual?.derivedFrom === "brix" ? "fra Brix" : undefined}
+                action={
+                  <Button
+                    size="sm"
+                    onClick={() =>
+                      onLog({
+                        kind: "measurement",
+                        measurementKind: target.measurementKind,
+                        target: target.target,
+                        previous: previousOf(target.measurementKind),
+                      })
+                    }
+                  >
+                    Logg
+                  </Button>
+                }
+              />
+              {target.key === "mash-temp" && state.stage === "mash" && (
+                <MashAdjustmentHint
+                  recipe={recipe}
+                  equipment={equipment}
+                  log={log}
+                  stage={state.stage}
+                  stageStartedAt={state.stageStartedAt}
+                  now={now}
+                  onAddWater={onAddMashWater}
+                  busy={loggingMashWater}
+                />
+              )}
+            </div>
           ))}
         </div>
       )}

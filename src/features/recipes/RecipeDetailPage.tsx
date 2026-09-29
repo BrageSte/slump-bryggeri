@@ -19,9 +19,11 @@ import { useMe } from "../auth/session.ts";
 import { NewBatchSheet } from "../batches/NewBatchSheet.tsx";
 import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { downloadRecipeSourceFile, useDeleteRecipe, useRecipe } from "./api.ts";
-import { suggestProfileFromBsmx } from "../../domain/import/bsmx-equipment.ts";
+import { compareBsmxEquipmentWithProfile, suggestProfileFromBsmx } from "../../domain/import/bsmx-equipment.ts";
+import type { ProfileValues } from "../../domain/model/equipment-profile.ts";
 import { BsmxEquipmentCard, BsmxImportNotes } from "./BsmxSource.tsx";
 import { RecipeIngredients, RecipeMetrics } from "./RecipeView.tsx";
+import { useEquipmentProfile } from "../equipment/api.ts";
 
 const sourceLabels: Record<string, string> = {
   manual: "Lagt inn manuelt",
@@ -201,9 +203,20 @@ export function RecipeDetailPage() {
 
 /** Offers the BeerSmith equipment as the starting point for a new calibration version (never applied by itself). */
 function CalibrationFromBeerSmith({ suggestion }: { suggestion: ReturnType<typeof suggestProfileFromBsmx> }) {
+  const profile = useEquipmentProfile();
   if (!suggestion) return null;
+  const activeValues = profile.data
+    ? Object.fromEntries(Object.entries(profile.data.values).map(([key, entry]) => [key, entry.value])) as ProfileValues
+    : {};
+  const warning = compareBsmxEquipmentWithProfile(suggestion, activeValues, Date.now());
   return (
     <Card className="space-y-2">
+      {warning && (
+        <div role="status" className="rounded-md border border-warning bg-warning-soft p-3 text-small">
+          <p className="font-semibold text-warning">Sjekk utstyret</p>
+          <p className="mt-1">{warning}</p>
+        </div>
+      )}
       <p className="text-small text-muted">
         Oppskriftene fra BeerSmith er tunet for anlegget. Fordampning, tap, meskekar og mesketykkelse herfra kan bli
         startpunktet for kalibreringen. Du ser hver verdi før noe lagres.

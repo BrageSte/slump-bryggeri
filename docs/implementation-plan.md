@@ -1,6 +1,7 @@
 # Implementeringsplan v0.5
 
-Oppdatert 2026-09-28 (bryggeplan, bryggeassistent og BeerSmith som grunnlag for kalibrering, se B13–B15). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
+Oppdatert 2026-09-29 (bryggeplan, bryggeassistent, BeerSmith som grunnlag for kalibrering og
+meskehjelp, se B13–B15). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
 
 Grunnlag: [implementation-package.md](implementation-package.md) (produktprinsipper),
 [architecture.md](architecture.md) (implementerte beslutninger), [AGENTS.md](../AGENTS.md) og
@@ -229,6 +230,14 @@ sett et månedlig forbrukstak i Anthropic Console ([assistant.md](assistant.md))
 **Akseptanse:** Når en måling logges under et brygg, viser dokumentet den sammen med plan og manglende data.
 Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre profilen.
 
+### Oppdatering 2026-09-29 — Mesketemperatur og BeerSmith-utstyr ✅
+
+- [x] Meskekortet foreslår en beregnet vannjustering når siste temperaturmåling er utenfor måltoleransen.
+      Vannmengden kommer fra oppskriften eller bryggeplanen; vannet kan loggføres som `water_added`.
+- [x] BeerSmith-startpunktet varsler om store avvik fra aktivt anlegg og oppskriftsdato eldre enn fem år.
+      Advarselen blokkerer ikke lagring.
+- [x] Rene tester for BeerSmiths temperaturjustering og utstyrssammenligning.
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
@@ -237,8 +246,8 @@ Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre
   E-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
 - **Vannkjemi** (tidl. M6): versjonert kildevannsprofil, salt-/syrekalkulator og pH-modell.
 - **Kalibreringsobservasjoner og automatiske forslag.** Kalibrering endres for hånd som ny profilversjon.
-- Eget kort for mesketemperatur-korrigering på bryggedagen (beregningen finnes og brukes av assistenten),
-  BeerXML-import/-eksport og CSV-eksport.
+- Eget, selvstendig kort for mesketemperatur-korrigering er fortsatt strøket. Et kontekstuelt hint på
+  det aktive meskesteget ble lagt til 2026-09-29. BeerXML-import/-eksport og CSV-eksport er også strøket.
 - Inventar, smart import (bilde/nettadresse/tekst), push-varsler, full generisk
   revisjonshistorikk og avanserte planrevisjoner.
 

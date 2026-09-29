@@ -1,9 +1,11 @@
-import type { ProfileParameterKey } from "../model/equipment-profile.ts";
+import type { ProfileParameterKey, ProfileValues } from "../model/equipment-profile.ts";
 import type { BsmxRecipeImport } from "./bsmx.ts";
 
 export interface ProfileSuggestion {
   /** BeerSmith's equipment name, shown as the source of every suggested value. */
   sourceName: string;
+  /** Date attached to the BeerSmith recipe (when last brewed or created). */
+  sourceDate?: string;
   values: Partial<Record<ProfileParameterKey, number>>;
 }
 
@@ -57,5 +59,54 @@ export function suggestProfileFromBsmx(
   });
   if (thicknesses.length > 0) set("mash_thickness_l_per_kg", thicknesses.reduce((a, b) => a + b, 0) / thicknesses.length);
 
-  return Object.keys(values).length > 0 ? { sourceName: name, values } : null;
+  return Object.keys(values).length > 0
+    ? { sourceName: name, ...(latest.sourceDate && { sourceDate: latest.sourceDate }), values }
+    : null;
+}
+
+const equipmentComparisonParameters = [
+  { key: "boil_off_l_per_h", label: "fordampning", unit: "L/t" },
+  { key: "batch_volume_l", label: "batchvolum", unit: "L" },
+  { key: "mash_tun_volume_l", label: "meskekar", unit: "L" },
+] as const satisfies readonly { key: ProfileParameterKey; label: string; unit: string }[];
+
+const fiveYearsMs = 5 * 365.25 * 24 * 60 * 60 * 1000;
+const formatComparisonValue = (value: number) => value.toLocaleString("nb-NO", { maximumFractionDigits: 1 });
+
+/**
+ * Returns a review warning when BeerSmith differs materially from today's active profile,
+ * or its recipe date is more than five years old. `now` keeps the comparison deterministic.
+ */
+export function compareBsmxEquipmentWithProfile(
+  suggestion: ProfileSuggestion,
+  activeProfile: ProfileValues,
+  now: number,
+): string | null {
+  const materialDifference = equipmentComparisonParameters
+    .map((parameter) => ({
+      ...parameter,
+      suggested: suggestion.values[parameter.key],
+      active: activeProfile[parameter.key],
+    }))
+    .filter(({ suggested, active }) => {
+      if (suggested === undefined || active === undefined || !Number.isFinite(suggested) || !Number.isFinite(active)) return false;
+      const relativeDifference = active === 0
+        ? (suggested === 0 ? 0 : Number.POSITIVE_INFINITY)
+        : Math.abs(suggested - active) / Math.abs(active);
+      return relativeDifference > 0.15;
+    });
+
+  const sourceTimestamp = suggestion.sourceDate ? Date.parse(suggestion.sourceDate) : Number.NaN;
+  const sourceIsOld = Number.isFinite(sourceTimestamp) && now - sourceTimestamp > fiveYearsMs;
+  if (materialDifference.length === 0 && !sourceIsOld) return null;
+
+  const difference = materialDifference[0];
+  const sourceYear = Number.isFinite(sourceTimestamp) ? new Date(sourceTimestamp).getUTCFullYear() : null;
+  if (difference) {
+    const example = ` (f.eks. ${formatComparisonValue(difference.suggested!)} mot ${formatComparisonValue(difference.active!)} ${difference.unit} ${difference.label})`;
+    const dateNote = sourceIsOld && sourceYear !== null ? ` BeerSmith-oppskriften er datert ${sourceYear}.` : "";
+    return `Utstyret «${suggestion.sourceName}» ser ut til å være et annet anlegg enn dagens profil${example}.${dateNote} Sjekk før du lagrer.`;
+  }
+
+  return `BeerSmith-utstyret «${suggestion.sourceName}» er datert ${sourceYear}, mer enn fem år tilbake, og kan beskrive et annet anlegg enn dagens profil. Sjekk før du lagrer.`;
 }
