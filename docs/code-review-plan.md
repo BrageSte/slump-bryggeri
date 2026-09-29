@@ -24,9 +24,9 @@ krever** — før vi bygger mer. Gjennomgangen endrer ikke oppførsel; hver rett
 
 | # | Område | Funn | Forslag | Status |
 |---|---|---|---|---|
-| 1 | Domene | Tidslinje → `BrewDayLogEntry` mappes likt fire steder: `features/batches/helpers.ts`, `brew-document.ts`, `tuning.ts` og integrasjonstester | Én funksjon i `src/domain/brew-day/` som alle bruker | |
-| 2 | Domene | «Mesket korn» (`grain` + `adjunct`) summeres på egen hånd i `brew-plan.ts`, `mash-adjustment.ts`, `bsmx-equipment.ts` og `worker/assistant/tools.ts`, selv om `isMashed` finnes i `gravity.ts` | Én `mashedGrainKg(recipe)` i `brewing-calculations` | |
-| 3 | Domene | Lokale `num()`/`round()` i `brew-document.ts`, `tuning.ts`, `brewery-history.ts`, `bsmx-equipment.ts` og `tools.ts` | Del én formatering/avrunding (domenet kan ikke bruke `src/lib/format.ts`) | |
+| 1 | Domene | Tidslinje → `BrewDayLogEntry` mappes likt fire steder: `features/batches/helpers.ts`, `brew-document.ts`, `tuning.ts` og integrasjonstester | Én funksjon i `src/domain/brew-day/` som alle bruker | ✅ `toBrewDayLog` flyttet til `src/domain/brew-day/timeline.ts`; `helpers.ts` re-eksporterer den, `brew-document.ts` og `tuning.ts` bruker den direkte |
+| 2 | Domene | «Mesket korn» (`grain` + `adjunct`) summeres på egen hånd i `brew-plan.ts`, `mash-adjustment.ts`, `bsmx-equipment.ts` og `worker/assistant/tools.ts`, selv om `isMashed` finnes i `gravity.ts` | Én `mashedGrainKg(recipe)` i `brewing-calculations` | ✅ `mashedGrainKg(recipe)` lagt til i `brewing-calculations/gravity.ts` (med test) og brukt i alle fire steder; `brew-plan.ts` sitt planlistefilter bruker nå også `isMashed` |
+| 3 | Domene | Lokale `num()`/`round()` i `brew-document.ts`, `tuning.ts`, `brewery-history.ts`, `bsmx-equipment.ts` og `tools.ts` | Del én formatering/avrunding (domenet kan ikke bruke `src/lib/format.ts`) | ✅ delt `num`/`round` i `src/domain/format.ts`, brukt av alle fem filene. `diy-dog.ts` og `units.ts` sin `round` er urørt (annen avrundingsregel for negative tall) |
 | 4 | Tester | `BatchDetail`-fixturer bygges for hånd i minst fire testfiler | Én testhjelper `makeBatch()` / `sunsetTimeline()` i `tests/` | ✅ `tests/helpers/batch.ts` brukt i alle fire filer |
 | 5 | UI | Bryggedagen viser overlappende innhold: stegkort, bryggeplan, bryggedokument-panel, resultatsammendrag og gjæringskort | Avklar hva hver del har ansvar for; kutt dobbeltvisning (se fase 3) | |
 | 6 | UI | Assistentsiden (`/assistent`) og Veileder-panelet dekker nå det samme | Behold én: assistentsiden kan bli en liste over batcher som åpner veilederen | |
