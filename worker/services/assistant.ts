@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "kysely";
-import { buildBrewDocument } from "../../src/domain/brew-document/brew-document.ts";
+import { buildAssistantBrief, buildBrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import type { AssistantReply, AssistantStatus, AssistantUsageSummary } from "../../src/domain/model/api.ts";
 import { estimateCostUsd } from "../assistant/pricing.ts";
 import { runAssistant, type AssistantUsage, type MessagesClient } from "../assistant/run.ts";
@@ -8,6 +8,7 @@ import type { DB } from "../lib/db.ts";
 import { HttpError } from "../lib/errors.ts";
 import { getBatch } from "./batches.ts";
 import { getTimeline } from "./brew-log.ts";
+import { loadBreweryHistory } from "./brewery-history.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-5";
 const DEFAULT_DAILY_LIMIT = 40;
@@ -138,6 +139,8 @@ export async function askAssistant(input: {
   messages: { role: "user" | "assistant"; content: string }[];
   /** Injected in tests; defaults to the real SDK client. */
   client?: MessagesClient;
+  /** Injected in tests; defaults to the brewery's own batch history. */
+  loadBreweryHistory?: () => Promise<unknown>;
   now?: number;
 }): Promise<AssistantReply> {
   const { env, db, breweryId } = input;
@@ -152,7 +155,9 @@ export async function askAssistant(input: {
   if (!apiKey && !input.client) {
     throw new HttpError(503, "assistant_not_configured", "Assistenten er ikke satt opp: ANTHROPIC_API_KEY mangler.");
   }
-  const document = buildBrewDocument({ batch, timeline, now });
+  const documentInput = { batch, timeline, now };
+  const brewDocumentSections = buildBrewDocumentSections(documentInput);
+  const brief = buildAssistantBrief(documentInput, brewDocumentSections);
   if (!(await reserveDailyRequest(db, breweryId, day, dailyLimit(env)))) {
     throw new HttpError(429, "assistant_daily_limit", `Dagens grense på ${dailyLimit(env)} spørsmål er nådd. Den nullstilles ved midnatt (UTC).`);
   }
@@ -165,7 +170,10 @@ export async function askAssistant(input: {
     result = await runAssistant({
       client,
       model,
-      document,
+      brief,
+      brewDocumentSections,
+      // Loaded only if the model asks for it; scoped to this brewery, excluding the batch in question.
+      loadBreweryHistory: input.loadBreweryHistory ?? (() => loadBreweryHistory(db, breweryId, { excludeBatchId: input.batchId })),
       history: input.messages,
       batch,
       onUsage: (round) => {

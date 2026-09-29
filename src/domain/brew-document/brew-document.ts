@@ -101,7 +101,29 @@ function logLine(item: TimelineItem, splits: BatchDetail["splits"]): string {
   return `- ${time(item.occurredAt)} ${stage}${what.trim()}${split} · ${who}`;
 }
 
-export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail; timeline: TimelineItem[]; now: number }): string {
+export interface BrewDocumentSections {
+  header: string;
+  plan: string;
+  equipment: string;
+  status: string;
+  results: string;
+  calibration: string;
+  log: string;
+}
+
+export interface BrewDocumentInput {
+  batch: BatchDetail;
+  timeline: TimelineItem[];
+  now: number;
+}
+
+function sectionText(lines: string[]): string {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1] === "") end--;
+  return lines.slice(0, end).join("\n");
+}
+
+export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocumentInput): BrewDocumentSections {
   const recipe = batch.recipeSnapshot;
   const log: BrewDayLogEntry[] = timeline.map((item) => ({
     id: item.id,
@@ -126,20 +148,20 @@ export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail
     completed: batch.status === "completed",
   });
 
-  const lines: string[] = [];
-  lines.push(`# Bryggedokument: ${batch.name} (#${batch.number})`, "");
-  lines.push(
+  const headerLines: string[] = [];
+  headerLines.push(`# Bryggedokument: ${batch.name} (#${batch.number})`, "");
+  headerLines.push(
     `- Oppskrift: ${recipe.name} v${batch.recipeVersion.version}${recipe.style ? `, ${recipe.style}` : ""}`,
     `- Batchstørrelse ${num(recipe.batchSizeL)} L, kok ${num(recipe.boilTimeMin, 0)} min, planlagt effektivitet ${num(recipe.efficiencyPct, 0)} %`,
     `- Status: ${batchStatusLabels[batch.status]}${batch.currentStage ? `, steg ${brewStageLabels[batch.currentStage]}` : ", ikke startet"}${batch.brewDate ? `, bryggedato ${batch.brewDate}` : ""}`,
   );
   if (batch.splits.length > 0) {
-    lines.push(`- Varianter: ${batch.splits.map((s) => `${s.name}${s.vessel ? ` (${s.vessel}${s.volumeL ? `, ${num(s.volumeL)} L` : ""})` : ""}`).join("; ")}`);
+    headerLines.push(`- Varianter: ${batch.splits.map((s) => `${s.name}${s.vessel ? ` (${s.vessel}${s.volumeL ? `, ${num(s.volumeL)} L` : ""})` : ""}`).join("; ")}`);
   }
-  lines.push(`- Dokumentet er laget ${time(now)}.`, "");
+  headerLines.push(`- Dokumentet er laget ${time(now)}.`);
 
   const summary = plan.summary;
-  lines.push("## Plan og mål", "");
+  const planLines: string[] = ["## Plan og mål", ""];
   const targets = [
     summary.og !== null ? `OG ${formatMeasurementValue("sg", summary.og)}` : null,
     summary.fg !== null ? `FG ${formatMeasurementValue("sg", summary.fg)}` : null,
@@ -147,46 +169,47 @@ export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail
     recipe.targets.abvPct !== undefined ? `ABV ${num(recipe.targets.abvPct)} %` : null,
     recipe.targets.colorEbc !== undefined ? `farge ${num(recipe.targets.colorEbc)} EBC` : null,
   ].filter(Boolean);
-  if (targets.length > 0) lines.push(`Mål fra oppskriften: ${targets.join(", ")}.`, "");
+  if (targets.length > 0) planLines.push(`Mål fra oppskriften: ${targets.join(", ")}.`, "");
   if (summary.waterVolumesNeedBoilOff) {
-    lines.push("Vannmengder kan ikke beregnes: batchens utstyrsprofil mangler fordampning.", "");
+    planLines.push("Vannmengder kan ikke beregnes: batchens utstyrsprofil mangler fordampning.", "");
   }
   for (const phase of plan.phases) {
     const status = brewPlanPhaseStatus(phase, batch.currentStage);
-    lines.push(`### ${brewPlanPhaseLabels[phase.key]} (${status === "done" ? "ferdig" : status === "current" ? "nå" : "senere"})`);
-    for (const item of phase.items) lines.push(planItem(item));
-    lines.push("");
+    planLines.push(`### ${brewPlanPhaseLabels[phase.key]} (${status === "done" ? "ferdig" : status === "current" ? "nå" : "senere"})`);
+    for (const item of phase.items) planLines.push(planItem(item));
+    planLines.push("");
   }
-  lines.push("Verdier merket ≈ er beregnet fra utstyrsprofilen; andre står i oppskriften.", "");
+  planLines.push("Verdier merket ≈ er beregnet fra utstyrsprofilen; andre står i oppskriften.", "");
 
-  lines.push(`## Utstyrsprofil i batchen${batch.equipmentSnapshot.profileVersion ? ` (v${batch.equipmentSnapshot.profileVersion})` : ""}`, "");
+  const equipmentLines: string[] = [`## Utstyrsprofil i batchen${batch.equipmentSnapshot.profileVersion ? ` (v${batch.equipmentSnapshot.profileVersion})` : ""}`, ""];
   const profileLines = Object.entries(equipment).flatMap(([key, value]) => {
     const parameter = getProfileParameter(key);
     return parameter && value !== undefined ? [`- ${parameter.label}: ${num(value, 2)} ${parameter.unit}`.trimEnd()] : [];
   });
-  lines.push(...(profileLines.length > 0 ? profileLines : ["- Ingen verdier satt."]), "");
+  equipmentLines.push(...(profileLines.length > 0 ? profileLines : ["- Ingen verdier satt."]), "");
 
-  lines.push("## Status nå", "");
+  const statusLines: string[] = ["## Status nå", ""];
   if (!state.stage) {
-    lines.push(batch.status === "completed" ? "- Batchen er avsluttet." : "- Brygget er ikke startet.");
+    statusLines.push(batch.status === "completed" ? "- Batchen er avsluttet." : "- Brygget er ikke startet.");
   } else {
-    lines.push(`- Steg: ${brewStageLabels[state.stage]}${state.step ? ` — ${state.step.label}` : ""}`);
+    statusLines.push(`- Steg: ${brewStageLabels[state.stage]}${state.step ? ` — ${state.step.label}` : ""}`);
     if (state.step?.remainingMin !== null && state.step?.remainingMin !== undefined) {
-      lines.push(`- Gjenstår i steget: ${num(Math.max(0, state.step.remainingMin), 0)} min`);
+      statusLines.push(`- Gjenstår i steget: ${num(Math.max(0, state.step.remainingMin), 0)} min`);
     }
-    if (state.fermentationDay !== null) lines.push(`- Gjæringsdag ${state.fermentationDay}`);
+    if (state.fermentationDay !== null) statusLines.push(`- Gjæringsdag ${state.fermentationDay}`);
     for (const t of state.targets) {
       const actual = t.actual
         ? `${formatMeasurementValue(t.measurementKind, t.actual.value)}${t.actual.derivedFrom === "brix" ? " (fra Brix)" : ""}`
         : "ikke målt";
-      lines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}`);
+      statusLines.push(`- ${t.label}: mål ${target(t.measurementKind, t.target)} ${t.unit}, faktisk ${actual} → ${targetStatusLabels[t.status]}`);
     }
-    if (state.nextAction) lines.push(`- Neste handling: ${state.nextAction.label}`);
+    if (state.nextAction) statusLines.push(`- Neste handling: ${state.nextAction.label}`);
   }
-  lines.push("");
+  statusLines.push("");
 
+  const resultsLines: string[] = [];
   if (batch.outcomes.length > 0) {
-    lines.push("## Resultat", "");
+    resultsLines.push("## Resultat", "");
     for (const o of batch.outcomes) {
       const variant = o.splitId ? (batch.splits.find((split) => split.id === o.splitId)?.name ?? "Variant") : "Hele batchen";
       const gravity = (sg: number | null, source: string | null) => (sg === null ? "ikke målt" : `${formatMeasurementValue("sg", sg)}${source === "brix" ? " (fra Brix)" : source === "manual" ? " (skrevet inn)" : ""}`);
@@ -201,25 +224,73 @@ export function buildBrewDocument({ batch, timeline, now }: { batch: BatchDetail
         o.carbonationVols !== null ? `${num(o.carbonationVols)} vol CO₂` : null,
         o.rating !== null ? `vurdering ${o.rating}/5` : null,
       ].filter(Boolean);
-      lines.push(`- ${variant}: ${parts.join(", ")}`);
-      if (o.tastingNotes) lines.push(`  - Smak: ${o.tastingNotes}`);
-      if (o.nextTime) lines.push(`  - Neste gang: ${o.nextTime}`);
+      resultsLines.push(`- ${variant}: ${parts.join(", ")}`);
+      if (o.tastingNotes) resultsLines.push(`  - Smak: ${o.tastingNotes}`);
+      if (o.nextTime) resultsLines.push(`  - Neste gang: ${o.nextTime}`);
     }
-    lines.push("");
+    resultsLines.push("");
   }
 
   const calibration = reviewCalibration({ batch, timeline });
-  lines.push("## Hva brygget sier om kalibreringen", "");
+  const calibrationLines: string[] = ["## Hva brygget sier om kalibreringen", ""];
   for (const o of calibration.observations) {
     const current = o.current === undefined ? "ikke satt" : `${num(o.current, 2)} ${o.unit}`;
     const value = o.suggested !== undefined ? `avvik ${num(o.observed)} ${o.unit}, foreslått ny verdi ${num(o.suggested)} ${o.unit}` : `${num(o.observed, 2)} ${o.unit}`;
-    lines.push(`- ${o.label}: ${value} (profilen: ${current}). Grunnlag: ${o.basis}.`);
+    calibrationLines.push(`- ${o.label}: ${value} (profilen: ${current}). Grunnlag: ${o.basis}.`);
   }
-  for (const reason of calibration.missing) lines.push(`- Ikke nok data. ${reason}`);
-  lines.push("- Én batch er svakt grunnlag. En administrator avgjør og lagrer eventuelt en ny profilversjon.", "");
+  for (const reason of calibration.missing) calibrationLines.push(`- Ikke nok data. ${reason}`);
+  calibrationLines.push("- Én batch er svakt grunnlag. En administrator avgjør og lagrer eventuelt en ny profilversjon.", "");
 
-  lines.push("## Logg", "");
+  const logLines: string[] = ["## Logg", ""];
   const ordered = [...timeline].sort((a, b) => a.occurredAt - b.occurredAt);
-  lines.push(...(ordered.length > 0 ? ordered.map((item) => logLine(item, batch.splits)) : ["- Ingenting logget ennå."]));
-  return `${lines.join("\n")}\n`;
+  logLines.push(...(ordered.length > 0 ? ordered.map((item) => logLine(item, batch.splits)) : ["- Ingenting logget ennå."]));
+
+  return {
+    header: sectionText(headerLines),
+    plan: sectionText(planLines),
+    equipment: sectionText(equipmentLines),
+    status: sectionText(statusLines),
+    results: sectionText(resultsLines),
+    calibration: sectionText(calibrationLines),
+    log: sectionText(logLines),
+  };
+}
+
+const documentSectionOrder: (keyof BrewDocumentSections)[] = ["header", "plan", "equipment", "status", "results", "calibration", "log"];
+
+export function buildBrewDocument(input: BrewDocumentInput): string {
+  const sections = buildBrewDocumentSections(input);
+  return `${documentSectionOrder.map((key) => sections[key]).filter(Boolean).join("\n\n")}\n`;
+}
+
+function assistantPlanLine(batch: BatchDetail): string {
+  const recipe = batch.recipeSnapshot;
+  const equipment = batch.equipmentSnapshot.values;
+  const { og, fg } = buildBrewPlan({ recipe, equipment }).summary;
+  const figures = [
+    `${num(recipe.batchSizeL)} L batch`,
+    `${num(recipe.boilTimeMin, 0)} min kok`,
+    `${num(recipe.efficiencyPct, 0)} % planlagt effektivitet`,
+    recipe.targets.og !== undefined ? `oppskriftsmål OG ${formatMeasurementValue("sg", recipe.targets.og)}` : null,
+    recipe.targets.fg !== undefined ? `oppskriftsmål FG ${formatMeasurementValue("sg", recipe.targets.fg)}` : null,
+    og !== null ? `≈ beregnet OG ${formatMeasurementValue("sg", og)}` : null,
+    fg !== null ? `≈ beregnet FG ${formatMeasurementValue("sg", fg)}` : null,
+  ].filter(Boolean);
+  return `- Plan: ${figures.join(", ")}.`;
+}
+
+export function buildAssistantBrief(input: BrewDocumentInput, sections = buildBrewDocumentSections(input)): string {
+  const logLines = sections.log.split(/\r?\n/).slice(2).filter((line) => line.trim());
+  const recentLog = logLines.slice(-8);
+  const retrievableSections: (keyof BrewDocumentSections)[] = ["plan", "equipment", "status", "results", "calibration", "log"];
+  const recentLines = recentLog.length > 0 ? recentLog : ["- Ingenting logget ennå."];
+
+  return [
+    sections.header,
+    sections.status,
+    assistantPlanLine(input.batch),
+    "## Siste logg",
+    ...recentLines,
+    `Hentbare seksjoner: ${retrievableSections.join(", ")}. Loggen har ${input.timeline.length} oppføringer.`,
+  ].join("\n\n");
 }

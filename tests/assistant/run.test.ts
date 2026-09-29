@@ -26,6 +26,16 @@ const batch: BatchDetail = {
   outcomes: [],
 };
 
+const brewDocumentSections = {
+  header: "# Bryggedokument: Sunset IPA",
+  plan: "## Plan og mål\nPlanlagt OG 1,061",
+  equipment: "## Utstyrsprofil\nFordampning: 13,2 L/h",
+  status: "## Status nå\nNeste handling: Mål temperatur",
+  results: "",
+  calibration: "## Kalibrering\nÉn batch er svakt grunnlag",
+  log: "## Logg\n- Siste måling",
+};
+
 const usage = (input: number, output: number): Anthropic.Usage =>
   ({ input_tokens: input, output_tokens: output, cache_read_input_tokens: 100, cache_creation_input_tokens: 0 }) as Anthropic.Usage;
 
@@ -61,6 +71,8 @@ describe("assistant tools", () => {
       "brewhouse_efficiency",
       "observed_boil_off",
       "convert_units",
+      "get_batch_section",
+      "brewery_history",
     ]);
     for (const definition of assistantToolDefinitions) {
       expect(definition.input_schema.type).toBe("object");
@@ -68,17 +80,34 @@ describe("assistant tools", () => {
     }
   });
 
-  it("computes with the app's own functions and the batch snapshot's defaults", () => {
-    const result = runAssistantTool("strike_temperature", { targetMashTempC: 66.5 }, { batch });
+  it("computes with the app's own functions and the batch snapshot's defaults", async () => {
+    const result = await runAssistantTool("strike_temperature", { targetMashTempC: 66.5 }, { batch });
     const expected = calculateStrikeTemperature({ targetMashTempC: 66.5, grainTempC: 16, mashThicknessLPerKg: 2.6, systemOffsetC: 1.5 });
     expect(result.isError).toBe(false);
     expect(JSON.parse(result.content).strikeTempC).toBeCloseTo(expected.strikeTempC, 1);
   });
 
-  it("reports missing boil-off and invalid input as tool errors instead of guessing", () => {
-    expect(JSON.parse(runAssistantTool("water_volumes", {}, { batch }).content)).toHaveProperty("error");
-    expect(runAssistantTool("strike_temperature", { targetMashTempC: "varm" }, { batch }).isError).toBe(true);
-    expect(runAssistantTool("does_not_exist", {}, { batch }).isError).toBe(true);
+  it("returns the requested brew document section", async () => {
+    const result = await runAssistantTool("get_batch_section", { section: "equipment" }, { batch, brewDocumentSections });
+    expect(result).toEqual({ content: brewDocumentSections.equipment, isError: false });
+  });
+
+  it("returns a not available error when brewery history has no loader", async () => {
+    const result = await runAssistantTool("brewery_history", {}, { batch });
+    expect(result.isError).toBe(false);
+    expect(JSON.parse(result.content)).toEqual({ error: "not available" });
+  });
+
+  it("serializes brewery history returned by its async loader as JSON", async () => {
+    const history = { boilOff: { meanLPerH: 12.8, count: 4 } };
+    const result = await runAssistantTool("brewery_history", {}, { batch, loadBreweryHistory: async () => history });
+    expect(JSON.parse(result.content)).toEqual(history);
+  });
+
+  it("reports missing boil-off and invalid input as tool errors instead of guessing", async () => {
+    expect(JSON.parse((await runAssistantTool("water_volumes", {}, { batch })).content)).toHaveProperty("error");
+    expect((await runAssistantTool("strike_temperature", { targetMashTempC: "varm" }, { batch })).isError).toBe(true);
+    expect((await runAssistantTool("does_not_exist", {}, { batch })).isError).toBe(true);
   });
 });
 
@@ -93,7 +122,8 @@ describe("assistant loop", () => {
     const result = await runAssistant({
       client,
       model: "claude-sonnet-5",
-      document: "# Bryggedokument",
+      brief: "Kort assistentbrief",
+      brewDocumentSections,
       history: [{ role: "user", content: "Hvor varmt skal innmeskingsvannet være?" }],
       batch,
       onUsage: (u) => rounds.push(u.inputTokens),
@@ -107,18 +137,52 @@ describe("assistant loop", () => {
     const results = second.messages[2]!.content as Anthropic.ToolResultBlockParam[];
     expect(results).toHaveLength(1);
     expect(results[0]).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: false });
-    // The brew document is sent as a cached system block.
+    // The brief is sent as a cached system block.
     expect(requests[0]!.system).toEqual([
       expect.objectContaining({ type: "text" }),
-      { type: "text", text: "# Bryggedokument", cache_control: { type: "ephemeral" } },
+      { type: "text", text: "Kort assistentbrief", cache_control: { type: "ephemeral" } },
     ]);
     expect(requests[0]!.model).toBe("claude-sonnet-5");
+  });
+
+  it("awaits async tools and returns every result in one user message", async () => {
+    const { client, requests } = fakeClient([
+      message([
+        { type: "tool_use", id: "section", name: "get_batch_section", input: { section: "status" } },
+        { type: "tool_use", id: "history", name: "brewery_history", input: {} },
+      ], "tool_use"),
+      message([{ type: "text", text: "Mål temperaturen igjen." }], "end_turn"),
+    ]);
+    let historyLoaded = false;
+    const result = await runAssistant({
+      client,
+      model: "claude-sonnet-5",
+      brief: "Kort assistentbrief",
+      brewDocumentSections,
+      loadBreweryHistory: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        historyLoaded = true;
+        return { attenuation: { count: 4, meanPct: 72 } };
+      },
+      history: [{ role: "user", content: "Er dette normalt?" }],
+      batch,
+      onUsage: () => {},
+    });
+
+    expect(result.text).toBe("Mål temperaturen igjen.");
+    expect(historyLoaded).toBe(true);
+    const returnedMessages = requests[1]!.messages.filter((entry) => entry.role === "user");
+    expect(returnedMessages).toHaveLength(2);
+    expect(returnedMessages.at(-1)!.content).toEqual([
+      expect.objectContaining({ type: "tool_result", tool_use_id: "section", content: brewDocumentSections.status, is_error: false }),
+      expect.objectContaining({ type: "tool_result", tool_use_id: "history", content: JSON.stringify({ attenuation: { count: 4, meanPct: 72 } }), is_error: false }),
+    ]);
   });
 
   it("forces a final answer after too many tool rounds", async () => {
     const toolTurn = () => message([{ type: "tool_use", id: "t", name: "convert_units", input: { value: 1, fromUnit: "L", toUnit: "US gal" } }], "tool_use");
     const { client, requests } = fakeClient([...Array.from({ length: 6 }, toolTurn), message([{ type: "text", text: "Svar." }], "end_turn")]);
-    const result = await runAssistant({ client, model: "claude-sonnet-5", document: "doc", history: [{ role: "user", content: "?" }], batch, onUsage: () => {} });
+    const result = await runAssistant({ client, model: "claude-sonnet-5", brief: "doc", brewDocumentSections, history: [{ role: "user", content: "?" }], batch, onUsage: () => {} });
     expect(result.text).toBe("Svar.");
     expect(requests).toHaveLength(7);
     expect(requests[6]!.tool_choice).toEqual({ type: "none" });
@@ -127,7 +191,7 @@ describe("assistant loop", () => {
 
   it("explains a refusal instead of returning an empty answer", async () => {
     const { client } = fakeClient([message([], "refusal")]);
-    const result = await runAssistant({ client, model: "claude-sonnet-5", document: "doc", history: [{ role: "user", content: "?" }], batch, onUsage: () => {} });
+    const result = await runAssistant({ client, model: "claude-sonnet-5", brief: "doc", brewDocumentSections, history: [{ role: "user", content: "?" }], batch, onUsage: () => {} });
     expect(result.stopReason).toBe("refusal");
     expect(result.text).toMatch(/kunne ikke svare/);
   });
