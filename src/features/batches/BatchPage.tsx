@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { expectedGravities } from "../../domain/brewing-calculations/index.ts";
+import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import { activeTimers, dueAlarms, type Alarm } from "../../domain/brew-day/alarms.ts";
 import { buildBrewPlan, registeredIngredientIds, type PlanAddition } from "../../domain/brew-day/brew-plan.ts";
 import { buildFermentationSeries, splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
@@ -36,6 +37,7 @@ import { useBrewery } from "../breweries/BreweryContext.tsx";
 import { useBatch, useCreateSplit, useDeleteBatch, useLogEvent, useStartStage, useTimeline, useUpdateBatch } from "./api.ts";
 import { AlarmBanner, TimerCard } from "./BrewTimers.tsx";
 import { BrewLog } from "./BrewLog.tsx";
+import { BrewDocumentPanel } from "./BrewDocumentPanel.tsx";
 import { BrewPlanOverview } from "./BrewPlanOverview.tsx";
 import { FermentationCard } from "./FermentationCard.tsx";
 import { FermentationChart } from "./FermentationChart.tsx";
@@ -125,6 +127,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
     () => buildBrewPlan({ recipe: batch.recipeSnapshot, equipment: batch.equipmentSnapshot.values, doneIngredientIds: registeredIngredientIds(log) }),
     [batch.recipeSnapshot, batch.equipmentSnapshot.values, log],
   );
+  const documentNow = Math.floor(now / 30_000) * 30_000;
+  const brewDocument = useMemo(() => buildBrewDocument({ batch, timeline, now: documentNow }), [batch, timeline, documentNow]);
 
   const user = me.data?.user ?? { id: "", name: "" };
   const pendingAdditions = state.additions.filter((a) => a.status !== "done");
@@ -303,6 +307,8 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
           </>
         )}
       </Section>
+
+      <BrewDocumentPanel markdown={brewDocument} hasLog={timeline.length > 0} batchStatus={batch.status} />
 
       {batch.splits.length > 0 && <SplitsSection batch={batch} />}
 
@@ -561,6 +567,10 @@ function BatchMenu({
               <Icon name="book" size={20} />
               Åpne oppskriften
             </Link>
+            <a href="#bryggedokument" className={buttonClasses("secondary", "md", true)} onClick={close}>
+              <Icon name="file" size={20} />
+              Bryggedokument
+            </a>
             <Link to={`/batcher/${batch.id}/rapport`} className={buttonClasses("secondary", "md", true)}>
               <Icon name="file" size={20} />
               Rapport (PDF)

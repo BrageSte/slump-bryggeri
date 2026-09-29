@@ -266,8 +266,10 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 ## Bryggeassistent (B14)
 
 Claude via Anthropic-SDK-en i Workeren (`worker/services/assistant.ts`). Konteksten er bryggedokumentet
-(`src/domain/brew-document/`), sendt som cachet systemblokk. Alle tall kommer fra verktøy som kaller
-`src/domain/brewing-calculations/` (`worker/assistant/tools.ts`); modellen regner ikke selv og kan ikke skrive
+(`src/domain/brew-document/`), sendt som cachet systemblokk. Det samme dokumentet vises på batchsiden fra
+de eksisterende, medlemsbeskyttede batch- og loggspørringene; visningen gjør ingen skriving. Assistenten henter
+beregnede tall gjennom verktøy som kaller `src/domain/brewing-calculations/` (`worker/assistant/tools.ts`);
+modellen regner ikke selv og kan ikke skrive
 til databasen. Batchen hentes scoped til `c.var.membership.breweryId` før noe annet, så andre bryggerier får 404.
 Nøkkelen er hemmeligheten `ANTHROPIC_API_KEY`; uten den svarer API-et 503 `assistant_not_configured`.
 Dagskvoten reserveres atomisk per bryggeri i `assistant_daily_requests`; tokenbruk per modell og døgn ligger i

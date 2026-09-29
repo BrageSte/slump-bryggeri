@@ -217,6 +217,18 @@ BSMX-filene ligger nå i `src/features/recipes/beersmith/`.
 kalibreringen», sjekk verdiene mot anlegget i dag og lagre. Production-secret `ANTHROPIC_API_KEY` er satt;
 sett et månedlig forbrukstak i Anthropic Console ([assistant.md](assistant.md)).
 
+### Steg 10 — Bryggedokument på batchsiden (B14) ✅
+
+- [x] Vis det samme deterministiske bryggedokumentet som assistenten leser direkte på batchsiden. Status nå og
+      kalibreringsgrunnlaget er åpne; plan, utstyr, resultater og full logg kan åpnes ved behov.
+- [x] Bruk batchens eksisterende, medlemsbeskyttede detalj- og loggspørringer. Dokumentet følger nye målinger og
+      hendelser uten ekstra API-kall, AI-kall, dataskriving eller migrasjon.
+- [x] Mobil og mørk modus, 44 px trykkflater, tydelig tom tilstand og sidens laste-/feiltilstander; tester for
+      dokumentseksjoner, manglende verdier og loggtekst.
+
+**Akseptanse:** Når en måling logges under et brygg, viser dokumentet den sammen med plan og manglende data.
+Brukeren kan lese kalibreringsgrunnlaget uten å spørre assistenten eller endre profilen.
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
