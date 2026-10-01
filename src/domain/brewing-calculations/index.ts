@@ -11,6 +11,8 @@ export * from "./gravity.ts";
 export * from "./hops.ts";
 export * from "./ibu.ts";
 export * from "./measurement-units.ts";
+export * from "./recipe-diff.ts";
+export * from "./recipe-fit.ts";
 export * from "./recipe-metrics.ts";
 export * from "./scaling.ts";
 export * from "./units.ts";
