@@ -32,6 +32,7 @@ Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skj
 | `residualAlkalinityAsCaCO3` | Kolbach: alkalitet − Ca/3,5 − Mg/7, med Ca og Mg omregnet til CaCO₃. En indeks, ikke en pH-prediksjon |
 | `sulfateToChlorideRatio` | SO₄ / Cl (retningen er viktig; noen kilder snur den). Udefinert uten klorid |
 | `saltMassFractions`, `saltIonIncrease`, `addSaltsToWater` | Støkiometri fra formelen med standard atommasser (krystallvann tas med). mg/L = andel · gram · 1000 / liter. Salt-katalogen ligger i `src/domain/model/water.ts` |
+| `solveSaltAdditions` | Omvendt saltberegning: gram av oppgitte salter som bringer kildevannet nærmest en målprofil (mg/L). Eksakt minste kvadrater uten negative mengder over alle delmengder av saltene; et salt brukes bare når alle ionene det tilfører (kalsium unntatt) har et mål; gram rundes til 0,1 g og resultatet regnes fra de avrundede mengdene. Returnerer gram, resulterende profil og avvik mot målet |
 | `deriveWaterValues` | Alle avledede vannverdier fra en ionprofil |
 | `convertUnitValue` | Brew-day-omregner for volum, temperatur, vekt, trykk, SG/°P og Brix/SG med WCF; gjæret Brix krever original Brix |
 

@@ -9,6 +9,7 @@ import {
   residualAlkalinityAsCaCO3,
   saltIonIncrease,
   saltMassFractions,
+  solveSaltAdditions,
   sulfateToChlorideRatio,
 } from "../../src/domain/brewing-calculations/index.ts";
 import { getWaterAgent, isSaltAgent, waterAgents, type SaltComposition } from "../../src/domain/model/water.ts";
@@ -122,5 +123,73 @@ describe("derived values for the Holsfjorden profile", () => {
   it("has a small positive residual alkalinity and an unremarkable ratio", () => {
     expect(derived.residualAlkalinityAsCaCO3MgL).toBeCloseTo(8.3, 1);
     expect(derived.sulfateToChlorideRatio).toBeCloseTo(1.36, 2);
+  });
+});
+
+describe("salts for a target profile", () => {
+  const pure = { ca: 0, mg: 0, na: 0, cl: 0, so4: 0, hco3: 0 };
+  const salts = ["gypsum", "calcium_chloride_dihydrate", "epsom_salt", "table_salt"].map((id) => ({ id, composition: composition(id) }));
+  const grams = (solution: ReturnType<typeof solveSaltAdditions>) => Object.fromEntries(solution.salts.map((s) => [s.id, s.grams]));
+
+  it("finds 1 g calcium chloride dihydrate for 27.3 mg/L Ca and 48.2 mg/L Cl in 10 L of pure water", () => {
+    // CaCl₂·2H₂O is 147.01 g/mol: 27.26 % calcium and 48.23 % chloride.
+    const solution = solveSaltAdditions({ source: pure, target: { ca: 27.26, cl: 48.23 }, waterVolumeL: 10, salts });
+    expect(grams(solution)).toEqual({ gypsum: 0, calcium_chloride_dihydrate: 1, epsom_salt: 0, table_salt: 0 });
+    expect(solution.deviation.ca).toBeCloseTo(0, 1);
+    expect(solution.deviation.cl).toBeCloseTo(0, 1);
+  });
+
+  it("recovers the four salts that made a profile from Holsfjorden water", () => {
+    const holsfjorden = { ca: 6.6, mg: 0.89, na: 2.7, cl: 2.5, so4: 3.4, hco3: 16.5 };
+    const target = addSaltsToWater(
+      holsfjorden,
+      [
+        { composition: composition("gypsum"), grams: 5 },
+        { composition: composition("calcium_chloride_dihydrate"), grams: 8 },
+        { composition: composition("epsom_salt"), grams: 2 },
+        { composition: composition("table_salt"), grams: 1.5 },
+      ],
+      90,
+    );
+    const solution = solveSaltAdditions({ source: holsfjorden, target, waterVolumeL: 90, salts });
+    expect(grams(solution)).toEqual({ gypsum: 5, calcium_chloride_dihydrate: 8, epsom_salt: 2, table_salt: 1.5 });
+  });
+
+  it("lets calcium follow the salts when it has no target, and uses no salt for an ion without one", () => {
+    // Gypsum is 55.79 % sulfate: 150 mg/L in 20 L is 3 g sulfate, 5.38 g gypsum.
+    const solution = solveSaltAdditions({ source: pure, target: { so4: 150 }, waterVolumeL: 20, salts });
+    expect(grams(solution)).toEqual({ gypsum: 5.4, calcium_chloride_dihydrate: 0, epsom_salt: 0, table_salt: 0 });
+    expect(solution.result.ca).toBeCloseTo(62.9, 0);
+    expect(solution.result.mg).toBe(0);
+    // Sulfate without a target: gypsum and Epsom salt stay out even when calcium and magnesium are low.
+    expect(grams(solveSaltAdditions({ source: pure, target: { ca: 80, mg: 10, cl: 60 }, waterVolumeL: 20, salts })).gypsum).toBe(0);
+  });
+
+  it("never suggests negative amounts and reports a target below the source water as out of reach", () => {
+    const hard = { ca: 100, mg: 5, na: 10, cl: 80, so4: 40, hco3: 200 };
+    const solution = solveSaltAdditions({ source: hard, target: { ca: 50, cl: 40, so4: 120 }, waterVolumeL: 30, salts });
+    expect(solution.salts.every((s) => s.grams >= 0)).toBe(true);
+    expect(grams(solution).calcium_chloride_dihydrate).toBe(0);
+    expect(solution.deviation.cl).toBeCloseTo(40, 6);
+    expect(solution.deviation.ca!).toBeGreaterThan(0);
+  });
+
+  it("compromises in least squares when calcium, chloride and sulfate cannot all be hit", () => {
+    // Cl 150 needs ≈ 85 mg/L Ca from CaCl₂ and SO₄ 75 ≈ 31 from gypsum, more than the 100 asked for.
+    const solution = solveSaltAdditions({ source: pure, target: { ca: 100, cl: 150, so4: 75 }, waterVolumeL: 50, salts });
+    expect(grams(solution).epsom_salt).toBe(0);
+    expect(solution.result.ca).toBeGreaterThan(100);
+    expect(solution.result.cl).toBeLessThan(150);
+    expect(Math.abs(solution.deviation.ca!)).toBeLessThan(20);
+  });
+
+  it("rounds to the weighing step and calculates the result from the rounded grams", () => {
+    const solution = solveSaltAdditions({ source: pure, target: { so4: 150 }, waterVolumeL: 20, salts, stepG: 1 });
+    expect(grams(solution).gypsum).toBe(5);
+    expect(solution.result.so4).toBeCloseTo((5 * 0.5579 * 1000) / 20, 0);
+  });
+
+  it("rejects a volume that is not positive", () => {
+    expect(() => solveSaltAdditions({ source: pure, target: { ca: 50 }, waterVolumeL: 0, salts })).toThrow(RangeError);
   });
 });
