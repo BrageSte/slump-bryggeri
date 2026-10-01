@@ -20,6 +20,7 @@ import { Button, Card, cx, ErrorState, IconButton, InlineError, inputClasses, Lo
 import { ApiError } from "../../lib/api.ts";
 import { formatNumber, formatSg } from "../../lib/format.ts";
 import { useCreateRecipe, useRecipe, useSaveRecipeVersion } from "./api.ts";
+import { SaltSuggestion } from "./SaltSuggestion.tsx";
 
 const numeric = { setValueAs: parseDecimal };
 const optionalText = { setValueAs: (v: unknown) => (typeof v === "string" && v.trim() === "" ? undefined : v) };
@@ -255,6 +256,8 @@ function RecipeForm({
   const {
     register,
     control,
+    getValues,
+    setValue,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<RecipeDocument>({ resolver: zodResolver(recipeDocumentSchema), defaultValues: initial, mode: "onBlur" });
@@ -475,6 +478,7 @@ function RecipeForm({
             </Input>
           ))}
         </div>
+        <SaltSuggestion control={control} getValues={getValues} setValue={setValue} miscs={miscs} />
         <Input label="Vannnotat (valgfritt)" error={e.water?.notes}>
           {text(register, "water.notes", e.water?.notes, true)}
         </Input>

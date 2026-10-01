@@ -269,11 +269,26 @@ regner ikke selv; den leser tall fra de testede funksjonene. Status for spørsm�
 | Spørsmål | Status |
 |---|---|
 | Hvilken vannprofil bør denne oppskriften bruke? | Registrering ✓ (målprofil i oppskriften). Anbefaling ✗: ingen logikk som foreslår en profil fra kornblanding og stil |
-| Hvor mye CaCl₂ / CaSO₄ / syre til vårt kildevann? | Fremover-regning ✓ (gitt gram: hva blir profilen). Omvendt (gitt målprofil: hvor mange gram) ✗. Syredosering ✗ |
+| Hvor mye CaCl₂ / CaSO₄ / syre til vårt kildevann? | Fremover-regning ✓ (gitt gram: hva blir profilen). Omvendt (gitt målprofil: hvor mange gram) ✓ («Foreslå salter», se under). Syredosering ✗ |
 | Hva var predikert mot målt mesk-pH? | Målt ✓. Predikert ✗: ingen validert modell, så appen gjetter ikke. Når en modell finnes, må predikert verdi lagres per batch |
 | Trengte tidligere batcher med lignende kornblanding mer eller mindre syre? | ◐ Syre og pH per batch er med i historikken. Mangler: kornblandingens egenskaper (andel crystal, ristet, farge) i oppsummeringen |
 | Hvordan hang vannkjemi sammen med effektivitet, gjæring og smak? | ◐ Kildevann, resultater og smaksnotater finnes per batch. Selve sammenhengsanalysen ✗, og det trengs mange flere batcher |
 | Kan anbefalingene bli bedre med mer Slump-data? | ✗ Krever at predikert og målt sammenlignes over tid; se neste steg |
+
+### Foreslå salter (omvendt beregning)
+
+I oppskriftsredigereren, under «Vann», regner `solveSaltAdditions` ut gram gips, kalsiumklorid, epsomsalt og bordsalt som bringer
+Slumps basisvann nærmest ionmålene, og «Legg inn som tilsetninger» legger dem inn som vanlige tilsetninger. Reglene:
+
+- **Et salt brukes bare når alle ionene det tilfører har et mål**, kalsium unntatt. Epsomsalt krever et magnesiummål, bordsalt et
+  natriummål, gips og kalsiumklorid et sulfat- eller kloridmål. Kalsium følger saltene som bærer det, også uten kalsiummål.
+- Minste kvadraters avvik i mg/L over ionene som har et mål, uten negative mengder (alle delmengder av saltene prøves, så svaret er
+  eksakt). Ved likt avvik vinner færrest salter.
+- Gram rundes til 0,1 g, og profilen etter saltene regnes fra de avrundede mengdene.
+- Alle salter regnes løst i hele vannmengden (mesk + skyll), som i resten av vannregningen. Er vannmengden bygget på antatte
+  profilverdier, står det i forslaget.
+- Salter kan bare legge til: et mål under kildevannet kan ikke nås, og avviket vises under «Hva det gir». Syre regnes ikke med, og
+  det er ingen pH-prediksjon.
 
 ## 7. Hva som mangler
 
@@ -283,16 +298,12 @@ regner ikke selv; den leser tall fra de testede funksjonene. Status for spørsm�
 - **Restklor og kloramin** er ikke oppgitt av kilden.
 - **Modell for mesk-pH** og **syredosering**: krever malts farge og buffer (eller målt destillert-vann-pH) og validering mot
   egne målinger.
-- **Omvendt saltberegning** (målprofil til gram).
 - **Kornblandingens egenskaper** i historikken, så «lignende kornblanding» kan defineres.
 - **Valg av vannkilde per batch** (for eksempel fortynnet med omvendt osmose): i dag fryser alle batcher basisvannet.
 - **Logg over pH-meterets kalibrering.**
 - **Stilmaler** for vannprofiler, med vilje ikke laget uten egne resultater.
 - Ingen automatisk sjekk mot ABVs side; oppdatering gjøres for hånd (se over).
 
-**Mest verdifulle neste steg mot automatiske vannjusteringer:** en ren, testet *omvendt mineralberegning* i
-`brewing-calculations`: gitt kildevannet, ønsket Ca/Cl/SO₄ (og eventuelt Mg/Na) og vannmengde, finn gram av kalsiumklorid,
-gips, epsomsalt og salt som kommer nærmest. Den er ren støkiometri, trenger ingen pH-modell, bruker data vi allerede har
-(frosset kildevann, oppskriftens målprofil, middelkatalogen), og svarer direkte på «hvor mye CaCl₂/CaSO₄». Parallelt:
-mål mesk-pH på avkjølt prøve og logg salter og syre i 10–15 brygg, og lagre en enkel publisert modells predikerte
-mesk-pH per batch, så feilen mot det målte samles opp før noen modell får styre syredosering.
+**Neste steg mot automatiske vannjusteringer:** den omvendte mineralberegningen er bygget (se «Foreslå salter» over). Det som
+gjenstår er å måle mesk-pH på avkjølt prøve og logge salter og syre i 10–15 brygg, og å lagre en enkel publisert modells
+predikerte mesk-pH per batch, så feilen mot det målte samles opp før noen modell får styre syredosering.
