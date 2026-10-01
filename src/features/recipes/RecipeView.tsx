@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { calculateRecipeMetrics, expectedGravities } from "../../domain/brewing-calculations/index.ts";
 import { fermentableTypeLabels, hopUseLabels, hopUses, type HopAddition, type RecipeDocument } from "../../domain/model/recipe.ts";
+import { getWaterAgent, ionInfo, ionKeys, waterValueBasisLabels } from "../../domain/model/water.ts";
 import { MetricCard, Section } from "../../design-system/index.ts";
 import { formatAmount, formatNumber, formatSg } from "../../lib/format.ts";
 
@@ -131,8 +132,37 @@ export function RecipeIngredients({ recipe }: { recipe: RecipeDocument }) {
         <Section title="Andre tilsetninger">
           <Rows>
             {recipe.miscs.map((m) => (
-              <Row key={m.id} primary={m.name} secondary={m.timeMin !== undefined ? `${m.timeMin} min` : m.use} trailing={formatAmount(m.amount, m.unit)} />
+              <Row
+                key={m.id}
+                primary={m.name}
+                secondary={[
+                  m.timeMin !== undefined ? `${m.timeMin} min` : m.use,
+                  (() => {
+                    const agent = getWaterAgent(m.waterAgent);
+                    return agent ? `${agent.kind === "acid" ? "Syre" : "Salt"}: ${agent.shortLabel}${m.acidStrengthPct !== undefined ? ` ${formatNumber(m.acidStrengthPct, 0)} %` : ""}` : null;
+                  })(),
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+                trailing={formatAmount(m.amount, m.unit)}
+              />
             ))}
+          </Rows>
+        </Section>
+      )}
+
+      {recipe.water && (recipe.water.profileName || recipe.water.notes || recipe.water.target) && (
+        <Section title={`Vann · ${waterValueBasisLabels.target.toLowerCase()}`}>
+          <Rows>
+            <Row
+              primary={recipe.water.profileName ?? "Planlagt vannprofil"}
+              secondary={recipe.water.notes}
+              trailing={
+                recipe.water.target
+                  ? ionKeys.flatMap((ion) => (recipe.water?.target?.[ion] === undefined ? [] : [`${ionInfo[ion].symbol} ${formatNumber(recipe.water.target[ion], 0)}`])).join(" · ") + " mg/L"
+                  : "ingen ionmål"
+              }
+            />
           </Rows>
         </Section>
       )}

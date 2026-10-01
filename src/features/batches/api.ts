@@ -80,6 +80,8 @@ export interface MeasurementInput {
   unit?: string;
   label?: string;
   instrument?: string | null;
+  /** Temperature of the sample, °C; matters for pH. */
+  sampleTempC?: number | null;
   stage?: BrewStage | null;
   splitId?: string | null;
   measuredAt?: number;
@@ -111,7 +113,7 @@ export function useLogMeasurement(batchId: string, currentUser: { id: string; na
           enteredUnit,
           valueMin: input.valueMin ?? null,
           valueMax: input.valueMax ?? null,
-          sampleTempC: null,
+          sampleTempC: input.sampleTempC ?? null,
           instrument: input.instrument ?? null,
           comment: input.comment ?? null,
         },

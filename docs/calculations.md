@@ -27,6 +27,12 @@ Alle mengder er metriske: kg, g, L, °C, minutter. Konvertering fra imperial skj
 | `calculateRecipeScaling` | Humle/gjær/tilsetninger skaleres med volum; meskede råvarer også med effektivitetsforhold så OG bevares; gjær i hele pakker rundes opp |
 | `calculateRecipeMetrics`, `expectedGravities` | Samlet OG/FG/ABV/IBU/farge for en oppskrift |
 | `measurementToCanonical`, `measurementFromCanonical` | Målinger normaliseres til °C, L, g, bar, SG og andre lagringsenheter; original enhet beholdes separat |
+| `alkalinityMmolFromBicarbonate`, `alkalinityAsCaCO3FromBicarbonate` | Alkalitet fra bikarbonat (gyldig for vann med pH 6–9): mmol/L = HCO₃ / 61,017; som CaCO₃ = mmol/L · 50,043 |
+| `hardnessMmol`, `hardnessDegreesDh` | Ca/40,078 + Mg/24,305 (mmol/L); 1 °dH = 10 mg/L CaO = 0,1783 mmol/L |
+| `residualAlkalinityAsCaCO3` | Kolbach: alkalitet − Ca/3,5 − Mg/7, med Ca og Mg omregnet til CaCO₃. En indeks, ikke en pH-prediksjon |
+| `sulfateToChlorideRatio` | SO₄ / Cl (retningen er viktig; noen kilder snur den). Udefinert uten klorid |
+| `saltMassFractions`, `saltIonIncrease`, `addSaltsToWater` | Støkiometri fra formelen med standard atommasser (krystallvann tas med). mg/L = andel · gram · 1000 / liter. Salt-katalogen ligger i `src/domain/model/water.ts` |
+| `deriveWaterValues` | Alle avledede vannverdier fra en ionprofil |
 | `convertUnitValue` | Brew-day-omregner for volum, temperatur, vekt, trykk, SG/°P og Brix/SG med WCF; gjæret Brix krever original Brix |
 
 En måling lagrer både kanonisk verdi/enhet og hva bryggeren skrev. Konvertering er en ren funksjon; API-et
@@ -36,6 +42,8 @@ av målerens nøyaktighet og WCF-kalibrering.
 
 ## Forenklinger (dokumentert, bevisste)
 
+- Vannkjemi: alle planlagte salter regnes som løst i hele brygge-vannet (mesk + skyll). Syrer regnes ikke med, og mesk-pH
+  predikeres ikke: det finnes ingen validert modell for Slump (se [water.md](water.md#7-hva-som-mangler)).
 - IBU: isomerisering fra kokehumle etter flameout (under whirlpool/kjøling) regnes ikke med.
 - IBU bruker oppskriftens batchvolum og estimert OG som kokegravitet.
 - Uten oppgitt utbytte antas 75 %; uten oppgitt forgjæring antas 75 %.

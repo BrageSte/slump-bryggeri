@@ -2,11 +2,13 @@ import { assumptionNames, buildBrewPlan, brewPlanPhaseLabels, brewPlanPhaseStatu
 import { resultNumbers } from "../brew-day/outcome.ts";
 import { deriveBrewDayState, deviationFromTarget, type TargetStatus, type TargetValue } from "../brew-day/state.ts";
 import { toBrewDayLog } from "../brew-day/timeline.ts";
-import { num } from "../format.ts";
+import { dateTimeOslo as time, num } from "../format.ts";
 import { packagingLabels, type BatchDetail, type TimelineItem } from "../model/api.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, formatMeasurementValue, measurementKindSpecs } from "../model/brewing.ts";
 import { getProfileParameter } from "../model/equipment-profile.ts";
+import { isTotalBrewingWaterAssumed, summarizeBatchWater, totalBrewingWaterL } from "../water/batch-water.ts";
 import { reviewCalibration } from "./tuning.ts";
+import { buildWaterSectionLines } from "./water-section.ts";
 
 /**
  * The brew document (M10): one plain-text (Markdown) account of a batch — plan, equipment
@@ -15,7 +17,6 @@ import { reviewCalibration } from "./tuning.ts";
  * Planned values are labelled as plan, calculated ones with "≈", and nothing unmeasured is filled in.
  */
 
-const TIME_ZONE = "Europe/Oslo";
 const targetStatusLabels: Record<TargetStatus, string> = {
   ok: "OK",
   low: "Lav",
@@ -23,17 +24,6 @@ const targetStatusLabels: Record<TargetStatus, string> = {
   uncertain: "Usikker",
   missing: "Ikke målt",
 };
-
-function time(timestamp: number): string {
-  return new Intl.DateTimeFormat("nb-NO", {
-    timeZone: TIME_ZONE,
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(timestamp));
-}
 
 function quantity(q: PlanQuantity | undefined, unit: string): string | null {
   if (!q) return null;
@@ -106,6 +96,7 @@ function logLine(item: TimelineItem, splits: BatchDetail["splits"]): string {
 export interface BrewDocumentSections {
   header: string;
   plan: string;
+  water: string;
   equipment: string;
   status: string;
   results: string;
@@ -178,6 +169,17 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
     planLines.push("");
   }
   planLines.push("Kilde: oppskrift/import = oppgitt verdi; ≈ = beregnet fra eksplisitt profilverdi; ≈ antatt = dokumentert standardverdi; faktisk/loggført = måling.", "");
+
+  const waterLines = buildWaterSectionLines(
+    summarizeBatchWater({
+      recipe,
+      water: batch.equipmentSnapshot.water,
+      timeline,
+      totalWaterL: totalBrewingWaterL(summary),
+      totalWaterAssumed: isTotalBrewingWaterAssumed(summary),
+    }),
+    registeredIngredientIds(log),
+  );
 
   const equipmentLines: string[] = [`## Utstyrsprofil i batchen${batch.equipmentSnapshot.profileVersion ? ` (v${batch.equipmentSnapshot.profileVersion})` : ""}`, ""];
   const profileLines = Object.entries(equipment).flatMap(([key, value]) => {
@@ -277,6 +279,7 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
   return {
     header: sectionText(headerLines),
     plan: sectionText(planLines),
+    water: sectionText(waterLines),
     equipment: sectionText(equipmentLines),
     status: sectionText(statusLines),
     results: sectionText(resultsLines),
@@ -285,7 +288,7 @@ export function buildBrewDocumentSections({ batch, timeline, now }: BrewDocument
   };
 }
 
-const documentSectionOrder: (keyof BrewDocumentSections)[] = ["header", "plan", "equipment", "status", "results", "calibration", "log"];
+const documentSectionOrder: (keyof BrewDocumentSections)[] = ["header", "plan", "water", "equipment", "status", "results", "calibration", "log"];
 
 export function buildBrewDocument(input: BrewDocumentInput): string {
   const sections = buildBrewDocumentSections(input);
@@ -314,7 +317,7 @@ function assistantPlanLine(batch: BatchDetail): string {
 export function buildAssistantBrief(input: BrewDocumentInput, sections = buildBrewDocumentSections(input)): string {
   const logLines = sections.log.split(/\r?\n/).slice(2).filter((line) => line.trim());
   const recentLog = logLines.slice(-8);
-  const retrievableSections: (keyof BrewDocumentSections)[] = ["plan", "equipment", "status", "results", "calibration", "log"];
+  const retrievableSections: (keyof BrewDocumentSections)[] = ["plan", "water", "equipment", "status", "results", "calibration", "log"];
   const recentLines = recentLog.length > 0 ? recentLog : ["- Ingenting logget ennå."];
 
   return [

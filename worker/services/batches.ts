@@ -17,6 +17,8 @@ import {
 import type { ProfileValueSources, ProfileValues } from "../../src/domain/model/equipment-profile.ts";
 import { calculateRecipeScaling } from "../../src/domain/brewing-calculations/index.ts";
 import { recipeDocumentSchema, type RecipeDocument } from "../../src/domain/model/recipe.ts";
+import type { WaterProfile } from "../../src/domain/model/water.ts";
+import { slumpBaseWater } from "../../src/domain/water/slump-water.ts";
 import type { SessionUser } from "../lib/context.ts";
 import { atomic, newId, parseJson, type DB } from "../lib/db.ts";
 import { HttpError, notFound } from "../lib/errors.ts";
@@ -109,7 +111,7 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
     listSplits(db, breweryId, batchId),
     listOutcomes(db, breweryId, batchId),
   ]);
-  const equipment = parseJson<{ values: ProfileValues; sources?: ProfileValueSources }>(equipmentSnapshot?.data ?? null);
+  const equipment = parseJson<{ values: ProfileValues; sources?: ProfileValueSources; water?: WaterProfile }>(equipmentSnapshot?.data ?? null);
   const legacySources = !equipment?.sources && equipmentSnapshot?.equipment_profile_id
     ? Object.fromEntries(
         (await db
@@ -131,6 +133,8 @@ export async function getBatch(db: DB, breweryId: string, batchId: string): Prom
       profileVersion: equipmentSnapshot?.profile_version ?? null,
       values: equipment?.values ?? {},
       sources: equipment?.sources ?? legacySources,
+      // Batches created before water chemistry have no frozen profile; readers say so rather than guess.
+      water: equipment?.water ?? null,
     },
     splits,
     outcomes,
@@ -209,6 +213,8 @@ export async function createBatch(
         values: profileValuesOf(profile),
         sources: Object.fromEntries(Object.entries(profile?.values ?? {}).map(([key, entry]) => [key, entry.source])),
         equipment,
+        // The source water this batch is brewed with, frozen like the rest so a later update never rewrites history.
+        water: slumpBaseWater,
       }),
       created_at: now,
     }),

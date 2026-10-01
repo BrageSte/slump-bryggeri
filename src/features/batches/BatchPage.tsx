@@ -166,7 +166,15 @@ function BrewDay({ batch, timeline }: { batch: BatchDetail; timeline: TimelineIt
       {
         type: "ingredient_added",
         stage: batch.currentStage,
-        data: { ingredientKind: addition.ingredientKind, ingredientId: addition.ingredientId, name: addition.name, amount: addition.amount, unit: addition.unit },
+        data: {
+          ingredientKind: addition.ingredientKind,
+          ingredientId: addition.ingredientId,
+          name: addition.name,
+          amount: addition.amount,
+          unit: addition.unit,
+          waterAgent: addition.waterAgent,
+          acidStrengthPct: addition.acidStrengthPct,
+        },
       },
       { onSuccess: () => (alarms.acknowledge(alarm.key), toast(`${addition.name} registrert`)) },
     );

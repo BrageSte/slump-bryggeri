@@ -35,6 +35,7 @@ const adaptRecipe = async () => ({ Component: (await import("../features/recipes
 const members = async () => ({ Component: (await import("../features/breweries/MembersPage.tsx")).MembersPage });
 const equipment = async () => ({ Component: (await import("../features/equipment/EquipmentPage.tsx")).EquipmentPage });
 const calibration = async () => ({ Component: (await import("../features/calibration/CalibrationPage.tsx")).CalibrationPage });
+const water = async () => ({ Component: (await import("../features/water/WaterPage.tsx")).WaterPage });
 const assistant = async () => ({ Component: (await import("../features/assistant/AssistantPage.tsx")).AssistantPage });
 const settings = async () => ({ Component: (await import("./SettingsPage.tsx")).SettingsPage });
 const newBatch = async () => ({ Component: (await import("../features/batches/NewBatchPage.tsx")).NewBatchPage });
@@ -73,6 +74,7 @@ export const router = createBrowserRouter([
           { path: "mer/omregner", element: <UnitConverterPage /> },
           { path: "mer/utstyr", lazy: equipment },
           { path: "mer/kalibrering", lazy: calibration },
+          { path: "mer/vann", lazy: water },
           { path: "mer/innstillinger", lazy: settings },
           { path: "*", element: <NotFound /> },
         ],

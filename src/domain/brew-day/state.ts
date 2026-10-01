@@ -11,6 +11,9 @@ import {
 } from "../model/brewing.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 import type { ProfileValueSources, ProfileValues } from "../model/equipment-profile.ts";
+import type { WaterAgentId } from "../model/water.ts";
+import { mashPhGuidance } from "../water/guidance.ts";
+import { isHotPhSample } from "../water/ph.ts";
 import { buildBrewPlan, registeredIngredientIds, type PlanQuantity, type PlanSource } from "./brew-plan.ts";
 
 /**
@@ -28,7 +31,14 @@ export interface BrewDayLogEntry {
   splitId?: string | null;
   occurredAt: number;
   data: Record<string, unknown> | null;
-  measurement: { kind: MeasurementKind; value: number; valueMin?: number | null; valueMax?: number | null; label?: string | null } | null;
+  measurement: {
+    kind: MeasurementKind;
+    value: number;
+    valueMin?: number | null;
+    valueMax?: number | null;
+    label?: string | null;
+    sampleTempC?: number | null;
+  } | null;
 }
 
 export type TargetValue = { kind: "value"; value: number } | { kind: "range"; min: number; max: number };
@@ -42,7 +52,16 @@ export interface StageTarget {
   unit: string;
   source?: PlanSource;
   assumptions?: string[];
-  actual: { value: number; occurredAt: number; valueMin?: number; valueMax?: number; derivedFrom?: "brix"; label?: string } | null;
+  actual: {
+    value: number;
+    occurredAt: number;
+    valueMin?: number;
+    valueMax?: number;
+    derivedFrom?: "brix";
+    label?: string;
+    /** Temperature of the sample, when the reading depends on it (pH). */
+    sampleTempC?: number;
+  } | null;
   status: TargetStatus;
 }
 
@@ -67,6 +86,8 @@ export interface PlannedAddition {
   amount: number;
   unit: string;
   variant?: string;
+  waterAgent?: WaterAgentId;
+  acidStrengthPct?: number;
   /** Minutes into the stage (boil/whirlpool) or fermentation day (dry hop) when due. */
   dueAt: number;
   dueLabel: string;
@@ -117,7 +138,7 @@ export interface BrewDayInput {
 
 const MINUTE = 60_000;
 const DAY = 86_400_000;
-const DEFAULT_MASH_PH = { min: 5.2, max: 5.4 } as const;
+const DEFAULT_MASH_PH = mashPhGuidance.planningTarget;
 const DEFAULT_WHIRLPOOL_MIN = 20;
 
 export function deriveBrewDayState(input: BrewDayInput): BrewDayState {
@@ -246,6 +267,8 @@ function plannedAdditions(
         name: misc.name,
         amount: misc.amount,
         unit: misc.unit,
+        ...(misc.waterAgent ? { waterAgent: misc.waterAgent } : {}),
+        ...(misc.acidStrengthPct !== undefined ? { acidStrengthPct: misc.acidStrengthPct } : {}),
         dueAt,
         dueLabel: `${timeMin} min`,
         status: status(misc.id, elapsedMin >= dueAt),
@@ -274,6 +297,8 @@ function plannedAdditions(
         name: misc.name,
         amount: misc.amount,
         unit: misc.unit,
+        ...(misc.waterAgent ? { waterAgent: misc.waterAgent } : {}),
+        ...(misc.acidStrengthPct !== undefined ? { acidStrengthPct: misc.acidStrengthPct } : {}),
         dueAt: 0,
         dueLabel: "Whirlpool",
         status: status(misc.id, true),
@@ -383,7 +408,13 @@ function stageTargets(
       source,
       assumptions,
       actual,
-      status: actual === null ? "missing" : compareMeasurementToTarget(measurementKind, target, actual),
+      status:
+        actual === null
+          ? "missing"
+          // The pH window is for a room-temperature sample; a hot one reads lower and is not judged against it.
+          : measurementKind === "ph" && isHotPhSample(actual.sampleTempC)
+            ? "uncertain"
+            : compareMeasurementToTarget(measurementKind, target, actual),
     });
   };
   const actualOf = (entry: BrewDayLogEntry | undefined): StageTarget["actual"] =>
@@ -394,6 +425,7 @@ function stageTargets(
           valueMax: entry.measurement.valueMax ?? undefined,
           occurredAt: entry.occurredAt,
           label: entry.measurement.label ?? undefined,
+          sampleTempC: entry.measurement.sampleTempC ?? undefined,
         }
       : null;
 

@@ -124,6 +124,7 @@ export function AssistantThread({
         unit: action.unit,
         label: action.label,
         splitId: action.splitId,
+        sampleTempC: action.sampleTempC,
         stage: batch.currentStage,
       });
       return result.id;

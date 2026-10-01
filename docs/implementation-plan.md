@@ -1,12 +1,13 @@
 # Implementeringsplan v0.5
 
-Oppdatert 2026-09-29 (bryggeplan, bryggeassistent, BeerSmith som grunnlag for kalibrering og
-meskehjelp, se B13–B15; bryggedagen bygges om i steg 12, se B16). Levende dokument: kryss av oppgaver i samme PR som gjør dem ferdige.
+Oppdatert 2026-10-01 (vann og pH som del av datamodellen, se B17 og steg 13; tidligere: bryggeplan, bryggeassistent, BeerSmith
+som grunnlag for kalibrering og meskehjelp, se B13–B15; bryggedagen bygges om i steg 12, se B16). Levende dokument: kryss av
+oppgaver i samme PR som gjør dem ferdige.
 
 Grunnlag: [implementation-package.md](implementation-package.md) (produktprinsipper),
 [architecture.md](architecture.md) (implementerte beslutninger), [AGENTS.md](../AGENTS.md) og
 Brages avklaringer 2026-09-24. Der eldre spesifikasjon beskriver inventar, AI, innlogging for andre,
-flere bryggerier eller vannkjemi, gjelder strykningene i denne planen.
+flere bryggerier eller vannkjemi, gjelder strykningene i denne planen (for vannkjemi med unntaket i B17).
 
 **Produktretning:** en enkel og konsis bryggeapp for Slump Bryggeri, uten hokus pokus. Bygg det som
 trengs på bryggedagen, under gjæring og når ølet tappes. Kjernen er fortsatt
@@ -40,7 +41,7 @@ før neste bryggedag.
 | B6 | Avslutning | Avslutning med faktiske tall og smaksnotater hører hjemme i **Brygg**. |
 | B7 | Graf | Gjæringsgraf implementeres. |
 | B8 | Redigering | Feilregistreringer kan korrigeres trygt. ✅ Rapporten skal være rikere enn Sunset-PDF-en. |
-| B9 | Vann/pH | pH-strips som intervall. ✅ Salter og syre planlegges som vanlige tilsetninger; ingen vannkjemi-kalkulator. |
+| B9 | Vann/pH | pH-strips som intervall. ✅ Salter og syre planlegges som vanlige tilsetninger; ingen vannkjemi-kalkulator. *Utvidet av B17: registrering og kunnskap er inn, kalkulatorer er fortsatt ute.* |
 | B10 | BeerSmith-målinger | `OG_MEASURED`, `FG_MEASURED`, `VOLUME_MEASURED`, `MASH_PH` o.l. er ikke historikk, **selv når `_SET = 1`**. |
 | B11 | Utstyr | Versjonerte utstyrsprofiler og uforanderlige batch-snapshots. Import overskriver aldri aktiv profil. |
 | B12 | Omfang | Enkel og konsis app: ingen plassholdere, inventar eller automatiske kalibreringsforslag. *AI: se B14.* |
@@ -48,6 +49,7 @@ før neste bryggedag.
 | B14 | AI (2026-09-28) | Bryggeassistent med Claude API, betalt per bruk (modell settes i `ASSISTANT_MODEL` i `wrangler.jsonc`), som svarer om brygget og leser et bryggedokument. Den regner ikke selv og endrer ingenting. Erstatter strykningen av AI i B12. |
 | B15 | BeerSmith (2026-09-28) | BeerSmith-oppskriftene er tunet for anlegget og er grunnlaget for oppstart og tuning av kalibreringen. Utstyret kan brukes som *forslag* til ny profilversjon, som en admin ser over og lagrer selv (B11). |
 | B16 | Bryggedagen (2026-09-29) | Bryggedagen skal ha ett **aktivt steg øverst** (mål, neste handling, timere) og resten av brygget som oversikt under. Ny batch går fra oppskrift via størrelse og utstyr til oversikt og «Start brygg». Utstyr: **se og advare**, ikke endre per batch. Første bryggedag: innen en uke. |
+| B17 | Vann og pH (2026-10-01) | Vannkjemi blir en førsteklasses del av datamodellen: Slumps basisvann (Holsfjorden, Asker og Bærum Vannverk) som kanonisk, kildebelagt profil, planlagt vann, salter og syre, og pH som standard målt i bryggeflyten. Oppgitt, beregnet, mål/anbefaling og målt holdes alltid fra hverandre, og generelle mål er veiledning, ikke regler. **Erstatter strykningen av «versjonert kildevannsprofil» (tidl. M6) delvis; salt-/syrekalkulator og pH-modell er fortsatt ikke bygget** og krever egen beslutning ([water.md](water.md#7-hva-som-mangler)). Eksisterende bryggedata og pH-målinger skal ikke skrives om. Brage bekreftet samme dag at vannet Slump bruker kommer fra Holsfjorden og at ABVs tabell (abvann.no/temasider/vannkvalitet) er kilden for alle verdiene; alle 31 parametere i kolonnen er lagret. |
 
 ---
 
@@ -306,13 +308,46 @@ Meldt av Brage etter første bruk: nedtellingen sto på «60», og alarmen ga in
 eller på låst skjerm). Hold «Skjerm på» aktiv under brygging. Lås-skjerm-varsler ville kreve push-varsler
 (strøket i B12); det er en egen beslutning.
 
+### Steg 13 — Vann og pH (B17) ✅
+
+Gjort 2026-10-01. Vannkjemi som del av datamodellen, ikke et dokument ved siden av. Kunnskap, begrunnelser og hva som mangler:
+[water.md](water.md); oppbygging: [architecture.md](architecture.md#vannkunnskap).
+
+- [x] **Kanonisk basisvann:** Holsfjorden (Asker og Bærum Vannverk) i `src/domain/water/slump-water.ts`, kontrollert mot ABVs side
+      2026-10-01 (alle 31 parametere i kolonnen, bekreftet av Brage som vannet Slump bruker), med kilde-URL, hentedato og at
+      kilden ikke oppgir prøvedato. Oppdateres ved å legge til en ny oppføring, aldri ved
+      å endre en gammel. Fryses i hver batch (`batch_equipment_snapshots.data.water`).
+- [x] **Fire slags verdier holdt fra hverandre** (oppgitt, beregnet, mål/anbefaling, målt) i data, bryggedokument, assistent og
+      Mer → Vann.
+- [x] **Beregninger** i `brewing-calculations/water-chemistry.ts` (alkalitet, hardhet, restalkalitet, sulfat:klorid, ionbidrag fra
+      salter) med tester mot kjente verdier. Ingen pH-modell og ingen syredosering.
+- [x] **Oppskrift:** planlagt vannprofil (`water`) og salter/syre som vanlige tilsetninger merket med `waterAgent`
+      (+ `acidStrengthPct`). Mesk-pH-målet var allerede i `targets`.
+- [x] **Logg:** salter og syre med middel og styrke; pH med prøvepunkt (steg + merkelapp), prøvetemperatur og instrument. En varm
+      prøve (> 35 °C) dømmes ikke mot målet (vises som «Usikker»).
+- [x] **Historikk urørt:** ingen migrasjon. Eldre pH-målinger leses uendret (punktet leses fra steg og merkelapp); eldre batcher
+      uten frosset profil merkes som antatt basisvann.
+- [x] **Bryggedokumentet** har seksjonen «Vann og pH». **Assistenten** har verktøyet `water_chemistry` (inkl. «hva om»-salter) og
+      `brewery_history` tar med vann og pH per batch.
+- [x] **Veiledning** som strukturert data (`guidance.ts`, merket som veiledning med kilder) og `docs/water.md`, med tallene generert
+      fra dataene (`npm run docs:water`) og sjekket av en test.
+- [x] Tester: kjente verdier for kjemien, kanonisk profil låst, dokument i synk, historiske pH-målinger, API (frysing, eldre batcher,
+      korrigering) og Playwright for Vann-siden, salt fra oppskrift til logg og pH-arket.
+
+**Akseptanse:** Basisvannet står ett sted. Bryggedokumentet viser kildevann, plan, beregnet og målt i hvert sitt avsnitt. pH kan
+loggføres med punkt, temperatur og instrument, og gamle målinger er urørt.
+
+**Ikke bygget (egne beslutninger):** omvendt saltberegning (målprofil til gram), syredosering, pH-modell, stilmaler, valg av vannkilde
+per batch. Anbefalt neste steg og full liste: [water.md](water.md#7-hva-som-mangler).
+
 ---
 
 ## 4. Strøket (bygg ikke uten ny beslutning)
 
 - **Innlogging for andre** (tidl. M9): Google/e-post, kobling av personer til kontoer, flere bryggerier.
   E-post-OTP-koden ligger igjen, men brukes ikke i bryggerimodus.
-- **Vannkjemi** (tidl. M6): versjonert kildevannsprofil, salt-/syrekalkulator og pH-modell.
+- **Vannkjemi-kalkulatorer** (tidl. M6): omvendt salt-/syrekalkulator, syredosering og pH-modell. Kildevannsprofil, vannplan, registrering
+  av salter/syre og pH er bygget (B17, steg 13); kalkulatorene er det ikke.
 - **Kalibreringsobservasjoner og automatiske forslag.** Kalibrering endres for hånd som ny profilversjon.
 - Eget, selvstendig kort for mesketemperatur-korrigering er fortsatt strøket. Et kontekstuelt hint på
   det aktive meskesteget ble lagt til 2026-09-29. BeerXML-import/-eksport og CSV-eksport er også strøket.

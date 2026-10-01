@@ -4,7 +4,8 @@ import { assistantToolDefinitions, runAssistantTool } from "../../worker/assista
 import { ASSISTANT_SYSTEM_PROMPT, runAssistant, type MessagesClient } from "../../worker/assistant/run.ts";
 import { estimateCostUsd } from "../../worker/assistant/pricing.ts";
 import { calculateStrikeTemperature } from "../../src/domain/brewing-calculations/index.ts";
-import { makeBatch } from "../helpers/batch.ts";
+import { holsfjordenWater20261001 } from "../../src/domain/water/slump-water.ts";
+import { makeBatch, sunsetTimeline } from "../helpers/batch.ts";
 
 const batch = makeBatch({
   equipmentSnapshot: { profileId: "p", profileVersion: 2, values: { grain_temperature_c: 16, mash_thickness_l_per_kg: 2.6, strike_temp_offset_c: 1.5 } },
@@ -14,6 +15,7 @@ const batch = makeBatch({
 const brewDocumentSections = {
   header: "# Bryggedokument: Sunset IPA",
   plan: "## Plan og mål\nPlanlagt OG 1,061",
+  water: "## Vann og pH\n- Ingen pH-målinger registrert.",
   equipment: "## Utstyrsprofil\nFordampning: 13,2 L/h",
   status: "## Status nå\nNeste handling: Mål temperatur",
   results: "",
@@ -62,6 +64,7 @@ describe("assistant tools", () => {
       "brewhouse_efficiency",
       "observed_boil_off",
       "convert_units",
+      "water_chemistry",
       "get_batch_section",
       "brewery_history",
       "propose_actions",
@@ -128,6 +131,65 @@ describe("assistant tools", () => {
     expect(proposedActions[0]).toMatchObject({ kind: "log_measurement", value: 64 });
     expect(proposedActions[1]).toMatchObject({ kind: "log_event", type: "water_added" });
     expect(proposedActions[2]).toMatchObject({ kind: "start_timer", durationMin: 10 });
+  });
+
+  it("reports the water story in four labelled parts, from the frozen profile and the log", async () => {
+    const frozen = makeBatch({ equipmentSnapshot: { profileId: "p", profileVersion: 1, values: {}, water: holsfjordenWater20261001 } });
+    const result = await runAssistantTool("water_chemistry", {}, { batch: frozen, timeline: sunsetTimeline() });
+    expect(result.isError).toBe(false);
+    const water = JSON.parse(result.content);
+    expect(Object.keys(water)).toEqual(["sourceWater", "calculated", "plan", "measured", "guidance"]);
+    expect(water.sourceWater).toMatchObject({ basis: "Oppgitt (kilde)", frozenInBatch: true, ionsMgL: { ca: 6.6, hco3: 16.5 } });
+    expect(water.sourceWater.source.url).toBe("https://www.abvann.no/temasider/vannkvalitet");
+    expect(water.sourceWater.confirmedUse).toMatchObject({ confirmedBy: "Brage", confirmedAt: "2026-10-01" });
+    expect(water.sourceWater.otherReported).toHaveLength(22);
+    expect(water.sourceWater.otherReported).toContainEqual({ name: "Kalium", value: 0.53, unit: "mg/L", limit: null });
+    expect(water.calculated).toMatchObject({ basis: "Beregnet", fromSourceWater: { alkalinityAsCaCO3MgL: 13.5, residualAlkalinityAsCaCO3MgL: 8.3 } });
+    expect(water.plan.basis).toBe("Mål / anbefaling");
+    expect(water.measured.basis).toBe("Målt i brygget");
+    expect(water.measured.ph).toEqual([expect.objectContaining({ point: "pre_boil", value: 5.9, sampleTempC: null, instrument: null })]);
+    expect(water.guidance.disclaimer).toMatch(/ikke regler/);
+  });
+
+  it("says plainly when an older batch has no frozen profile", async () => {
+    const water = JSON.parse((await runAssistantTool("water_chemistry", {}, { batch, timeline: [] })).content);
+    expect(water.sourceWater.frozenInBatch).toBe(false);
+    expect(water.measured.ph).toEqual([]);
+  });
+
+  it("calculates what-if salts with the tested functions and needs a water volume", async () => {
+    const withVolume = JSON.parse((await runAssistantTool("water_chemistry", { whatIfSalts: [{ agent: "gypsum", grams: 10 }, { agent: "calcium_chloride_dihydrate", grams: 20 }], totalWaterL: 100 }, { batch, timeline: [] })).content);
+    expect(withVolume.calculated.whatIf).toMatchObject({ basis: "Beregnet", totalWaterL: 100 });
+    expect(withVolume.calculated.whatIf.resultingIonsMgL.ca).toBeCloseTo(84.4, 1);
+    expect(withVolume.calculated.whatIf.resultingIonsMgL.cl).toBeCloseTo(99, 1);
+    const noVolume = JSON.parse((await runAssistantTool("water_chemistry", { whatIfSalts: [{ agent: "gypsum", grams: 10 }] }, { batch: makeBatch({ equipmentSnapshot: { profileId: "p", profileVersion: 1, values: {} }, recipeSnapshot: { ...batch.recipeSnapshot, mashSteps: [], fermentables: [] } }), timeline: [] })).content);
+    expect(noVolume.calculated.whatIf).toHaveProperty("error");
+  });
+
+  it("rejects an acid as a what-if salt and refuses to answer without the log", async () => {
+    expect((await runAssistantTool("water_chemistry", { whatIfSalts: [{ agent: "lactic_acid", grams: 5 }], totalWaterL: 50 }, { batch, timeline: [] })).isError).toBe(true);
+    expect(JSON.parse((await runAssistantTool("water_chemistry", {}, { batch })).content)).toEqual({ error: "not available" });
+  });
+
+  it("accepts a proposed pH reading with its sample temperature and sample point label", async () => {
+    const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
+    const result = await runAssistantTool("propose_actions", {
+      actions: [
+        { kind: "log_measurement", measurementKind: "ph", value: 5.34, unit: "pH", label: "pH før kok", sampleTempC: 22 },
+        { kind: "log_measurement", measurementKind: "ph", value: 5.34, unit: "pH", sampleTempC: 900 },
+      ],
+    }, { batch, proposedActions });
+    const output = JSON.parse(result.content) as { accepted: unknown[]; rejected: { index: number }[] };
+    expect(output.accepted).toHaveLength(1);
+    expect(output.rejected.map((entry) => entry.index)).toEqual([1]);
+    expect(proposedActions[0]).toMatchObject({ kind: "log_measurement", measurementKind: "ph", sampleTempC: 22, label: "pH før kok" });
+  });
+
+  it("tells the model to keep the four kinds of water value apart and never to predict mash pH", () => {
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("use the water_chemistry tool");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("never compute ion concentrations, alkalinity, hardness or salt amounts yourself");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("recommended targets (general guidance windows, not rules");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("no mash pH prediction and no acid dosing");
   });
 
   it("tells the model not to do arithmetic and to propose reported log entries", () => {

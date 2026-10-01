@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { brixToSg, refractometerFinalGravity } from "../../domain/brewing-calculations/index.ts";
 import type { BatchDetail, TimelineItem } from "../../domain/model/api.ts";
+import { getWaterAgent } from "../../domain/model/water.ts";
+import { isHotPhSample } from "../../domain/water/ph.ts";
 import { batchStatusLabels, brewStageLabels, eventTypeLabels, fermentationHasStarted, measurementKindSpecs, type BatchStatus } from "../../domain/model/brewing.ts";
 import { BottomSheet, Button, ConfirmDialog, Icon, InlineError, StatusChip, TextArea, useToast, type IconName } from "../../design-system/index.ts";
 import { formatAmount, formatDuration, formatLogTime, formatNumber, formatSg, formatTime } from "../../lib/format.ts";
@@ -86,7 +88,13 @@ function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: 
         : formatMeasurementInUnit(m.kind, m.enteredValue, m.enteredUnit),
       // Don't repeat the unit when it is also the label ("5,34 pH pH").
       unit: m.enteredUnit === kindLabel ? undefined : m.enteredUnit,
-      detail: [canonicalDetail, brixDetail, m.instrument ? `Instrument: ${m.instrument}` : null, m.comment].filter(Boolean).join(" · ") || undefined,
+      detail: [
+        canonicalDetail,
+        brixDetail,
+        m.kind === "ph" && m.sampleTempC !== null ? `Prøve ${formatNumber(m.sampleTempC, 1)} °C${isHotPhSample(m.sampleTempC) ? " (varm)" : ""}` : null,
+        m.instrument ? `Instrument: ${m.instrument}` : null,
+        m.comment,
+      ].filter(Boolean).join(" · ") || undefined,
     };
   }
   if (item.comment) return { title: item.comment.body };
@@ -94,9 +102,11 @@ function describe(item: TimelineItem, wcf = 1, originalBrix?: number): { title: 
   const data = item.data ?? {};
   if ((item.type === "ingredient_added" || item.type === "yeast_pitched") && typeof data.name === "string") {
     const amount = typeof data.amount === "number" && typeof data.unit === "string" ? `${formatAmount(data.amount, data.unit)} ` : "";
+    const agent = getWaterAgent(typeof data.waterAgent === "string" ? data.waterAgent : undefined);
+    const strength = typeof data.acidStrengthPct === "number" ? ` ${formatNumber(data.acidStrengthPct, 0)} %` : "";
     return {
       title: `${item.type === "yeast_pitched" ? "Gjær tilsatt" : "Tilsatt"}: ${amount}${data.name}`,
-      detail: typeof data.note === "string" ? data.note : undefined,
+      detail: [agent ? `${agent.kind === "acid" ? "Syre" : "Salt"}: ${agent.shortLabel}${strength}` : null, typeof data.note === "string" ? data.note : null].filter(Boolean).join(" · ") || undefined,
     };
   }
   if (item.type === "timer_started" && typeof data.label === "string") {

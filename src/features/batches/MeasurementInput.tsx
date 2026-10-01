@@ -10,6 +10,9 @@ import {
 import { compareMeasurementToTarget, type TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchSplit } from "../../domain/model/api.ts";
 import { commonPhStripIntervals, fermentationHasStarted, measurementKindSpecs, type BrewStage, type MeasurementKind } from "../../domain/model/brewing.ts";
+import { phSamplePointLabels, phSamplePoints, type PhSamplePoint } from "../../domain/model/water.ts";
+import { mashPhGuidance } from "../../domain/water/guidance.ts";
+import { classifyPhSamplePoint, isHotPhSample, labelForPhSamplePoint } from "../../domain/water/ph.ts";
 import { Button, cx, Field, InlineError, parseDecimal, Select, TargetStatusChip, TextInput } from "../../design-system/index.ts";
 import { formatLogTime, formatSg, toDateTimeLocal } from "../../lib/format.ts";
 import { formatMeasurement, formatMeasurementInUnit, formatTargetInUnit, normalizeMeasurementValue } from "./helpers.ts";
@@ -23,6 +26,8 @@ export interface MeasurementSubmit {
   unit?: string;
   label?: string;
   instrument?: string | null;
+  /** Temperature of the sample, °C. Only pH asks for it; null means «ikke oppgitt», absent means not asked. */
+  sampleTempC?: number | null;
   stage: BrewStage | null;
   splitId: string | null;
   measuredAt?: number;
@@ -76,6 +81,7 @@ export function MeasurementInput({
     label: string | null;
     comment: string | null;
     instrument: string | null;
+    sampleTempC?: number | null;
   };
   onSubmit: (value: MeasurementSubmit) => void;
 }) {
@@ -98,6 +104,11 @@ export function MeasurementInput({
     return range ? `${range.min.toFixed(1)}-${range.max.toFixed(1)}` : null;
   });
   const [label, setLabel] = useState(initial?.label ?? presetLabel ?? "");
+  // Where the pH sample was taken. Read from the stage and label, so older entries show their point too;
+  // the label is only rewritten when the brewer picks a point.
+  const [phPoint, setPhPoint] = useState<PhSamplePoint | null>(() => classifyPhSamplePoint({ stage, label: initial?.label ?? presetLabel }));
+  const [sampleTempRaw, setSampleTempRaw] = useState(initial?.sampleTempC == null ? "" : String(initial.sampleTempC).replace(".", ","));
+  const [instrument, setInstrument] = useState(initial?.instrument && initial.instrument !== "pH-strips" ? initial.instrument : "");
   const [comment, setComment] = useState(initial?.comment ?? "");
   const [showMore, setShowMore] = useState(Boolean(initial?.comment));
   const [customTime, setCustomTime] = useState<string | null>(initial ? toDateTimeLocal(initial.occurredAt) : null);
@@ -122,6 +133,9 @@ export function MeasurementInput({
     : kind === "custom"
       ? enteredValue
       : measurementToCanonical(kind, enteredValue, unit) ?? undefined;
+  const sampleTemp = parseDecimal(sampleTempRaw);
+  const sampleTempValid = sampleTemp === undefined || (!Number.isNaN(sampleTemp) && sampleTemp >= -10 && sampleTemp <= 110);
+  const hotSample = kind === "ph" && sampleTemp !== undefined && !Number.isNaN(sampleTemp) && isHotPhSample(sampleTemp);
   const orderedPhRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin <= intervalMax);
   const boundsInRange = !isPhStrips || (intervalMin !== undefined && intervalMax !== undefined && intervalMin >= spec.min && intervalMax <= spec.max);
   const inRange = value !== undefined && value >= spec.min && value <= spec.max && orderedPhRange && boundsInRange;
@@ -145,6 +159,7 @@ export function MeasurementInput({
       return setValidation(`Verdien må være mellom ${formatMeasurementInUnit(kind, min, unit)} og ${formatMeasurementInUnit(kind, max, unit)} ${unit}.`);
     }
     if (kind === "custom" && (!customUnit.trim() || !label.trim())) return setValidation("Egendefinerte målinger trenger navn og enhet.");
+    if (kind === "ph" && !sampleTempValid) return setValidation("Prøvetemperaturen må være mellom −10 og 110 °C.");
     setValidation(null);
     onSubmit({
       kind,
@@ -153,7 +168,8 @@ export function MeasurementInput({
       valueMax: isPhStrips ? intervalMax : undefined,
       unit: kind === "custom" ? customUnit.trim() : unit,
       label: label.trim() || undefined,
-      instrument: isPhStrips ? "pH-strips" : initial?.instrument ?? null,
+      instrument: isPhStrips ? "pH-strips" : kind === "ph" ? instrument || null : initial?.instrument ?? null,
+      ...(kind === "ph" ? { sampleTempC: sampleTemp === undefined || Number.isNaN(sampleTemp) ? null : sampleTemp } : {}),
       stage,
       splitId,
       // "Nå" while correcting an entry means the current time, not the entry's original one.
@@ -277,7 +293,9 @@ export function MeasurementInput({
               Mål <strong className="text-text">{formatTargetInUnit(kind, target, unit)}</strong>
             </span>
           )}
-          {target && value !== undefined && inRange && <TargetStatusChip status={compareMeasurementToTarget(kind, target, { value, valueMin: intervalMin, valueMax: intervalMax })} />}
+          {target && value !== undefined && inRange && (
+            <TargetStatusChip status={hotSample ? "uncertain" : compareMeasurementToTarget(kind, target, { value, valueMin: intervalMin, valueMax: intervalMax })} />
+          )}
           {kind !== "custom" && unit !== spec.unit && value !== undefined && inRange && (
             <span className="tabular">{formatMeasurementInUnit(kind, enteredValue ?? value, unit)} {unit} = {formatMeasurement(kind, value)} {spec.unit}</span>
           )}
@@ -308,6 +326,58 @@ export function MeasurementInput({
         </div>
       </div>
       }
+
+      {kind === "ph" && (
+        <div className="space-y-3">
+          <fieldset>
+            <legend className="mb-2 text-small font-semibold">Hvor i brygget?</legend>
+            <div className="flex flex-wrap gap-2">
+              {phSamplePoints.map((point) => (
+                <button
+                  key={point}
+                  type="button"
+                  aria-pressed={phPoint === point}
+                  onClick={() => {
+                    setPhPoint(point);
+                    // The stage already implies some points; then no label is needed (and an old one is dropped).
+                    setLabel(labelForPhSamplePoint(point, stage) ?? "");
+                  }}
+                  className={cx(
+                    "min-h-11 rounded-full border px-4 text-small font-semibold",
+                    phPoint === point ? "border-primary bg-primary text-on-primary" : "border-border bg-surface",
+                  )}
+                >
+                  {phSamplePointLabels[point]}
+                </button>
+              ))}
+            </div>
+            {phPoint === null && <p className="mt-2 text-small text-muted">Ikke angitt. Velg et punkt så målingen kan sammenlignes med andre brygg.</p>}
+          </fieldset>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Prøvetemperatur (°C)" error={sampleTempValid ? undefined : "Mellom −10 og 110 °C"}>
+              {(p) => (
+                <TextInput {...p} inputMode="decimal" value={sampleTempRaw} onChange={(e) => setSampleTempRaw(e.target.value)} placeholder="22" className="tabular" />
+              )}
+            </Field>
+            {!isPhStrips && (
+              <Field label="Instrument">
+                {(p) => (
+                  <Select {...p} value={instrument} onChange={(e) => setInstrument(e.target.value)}>
+                    <option value="">Ikke oppgitt</option>
+                    <option value="pH-meter">pH-meter</option>
+                    {instrument && instrument !== "pH-meter" && <option value={instrument}>{instrument}</option>}
+                  </Select>
+                )}
+              </Field>
+            )}
+          </div>
+          <p className={cx("text-small", hotSample ? "font-semibold text-warning" : "text-muted")}>
+            {hotSample
+              ? `Varm prøve (over ${mashPhGuidance.hotSampleAboveC} °C): leser lavere enn ved romtemperatur, så den dømmes ikke mot målet.`
+              : mashPhGuidance.note}
+          </p>
+        </div>
+      )}
 
       {splits.length > 0 && (
         <fieldset>

@@ -42,7 +42,8 @@ src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk,
 src/domain/brew-day/mash-adjustment.ts  deterministisk vannforslag fra meskemåling, oppskrift og utstyrssnapshot
 src/domain/brew-day/equipment-overview.ts  utstyrsprofilen i en batch: nøkkelverdier, kilde og advarsler (skrivebeskyttet)
 src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalibreringen
-src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, API-kontrakter
+src/domain/water/                  vannkunnskap: kanonisk kildevann, veiledning, tolkning, pH-prøvepunkter (docs/water.md)
+src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, vann (`water.ts`), API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
 worker/                            Hono-app, auth, middleware, services (én fil per domene)
 worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, forslag og priser
@@ -135,7 +136,8 @@ valgt enhet gjelder bare for den aktuelle inntastingen og lagres ikke som en pre
 et avledet FG når batchloggen inneholder en Brix-måling før gjæring; resultatet merkes som estimat.
 Stripmålinger kan lagre `value_min/value_max`; `value` er midtpunktet. Bryggedagens målstatus sammenligner
 hele intervallet og viser «Usikker» når det bare overlapper målet delvis. pH-input starter med stripintervall;
-enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt.
+enkeltverdier får bare et instrument hvis det er uttrykkelig oppgitt. pH tar i tillegg prøvepunkt og prøvetemperatur
+([Vannkunnskap](#vannkunnskap)).
 
 ### Bryggeplan og verdikilder
 
@@ -176,6 +178,30 @@ og brygghuseffektivitet regnes ut ved visning (`src/domain/brew-day/outcome.ts`)
 dokument: plan mot faktisk, malt, humle (plan mot registrert), gjær og fordeling, bryggedagsmålinger,
 gjæringsgraf med tabell, resultater, kommentarer og usikkerheter. Ingen server-PDF: `@page`/`@media print` i
 `tokens.css` gir A4 i lys palett, og appens navigasjon har `print:hidden`.
+
+## Vannkunnskap
+
+Vann og pH er en del av datamodellen, ikke et eget dokument. Appen har ingen egen «kunnskapsmodul»; vannkunnskapen følger de
+mønstrene som finnes: skjema og registre i `model/`, rene funksjoner i `brewing-calculations/`, kunnskapsdata i
+`src/domain/water/`, og bryggeloggen for alt som måles. Forklaring, kilder og hva som mangler: [water.md](water.md).
+
+| Lag | Fil | Innhold |
+|---|---|---|
+| Skjema og vokabular | `src/domain/model/water.ts` | ioner, de fire verdislagene (oppgitt, beregnet, mål, målt), kildevannsprofil med kildemetadata, oppskriftens vannplan, katalogen over salter og syrer (`waterAgents`), pH-prøvepunkter |
+| Regning | `src/domain/brewing-calculations/water-chemistry.ts` | alkalitet, hardhet, restalkalitet (Kolbach), sulfat:klorid, ionbidrag fra salter. Støkiometri og definisjoner; ingen pH-modell |
+| Kanonisk data | `src/domain/water/slump-water.ts` | Slumps basisvann (Holsfjorden, ABV): alle 31 parametere i ABVs tabell, bekreftet i bruk av Brage. Det eneste stedet tallene står. Oppdateres ved å legge til en ny oppføring |
+| Veiledning | `src/domain/water/guidance.ts` | vinduer for ioner og mesk-pH med kilder, merket som veiledning. Aldri stilspesifikke mål |
+| Tolkning | `src/domain/water/describe.ts`, `batch-water.ts`, `ph.ts` | merker verdier som oppgitt eller beregnet; samler kilde, plan, beregnet og målt for én batch; leser hvor i brygget en pH ble tatt |
+
+- **Lagring uten migrasjon.** Kildevannet fryses i `batch_equipment_snapshots.data.water` når batchen opprettes (null for eldre
+  batcher, som leses som antatt basisvann). Planlagt vann ligger i oppskriftsdokumentet (`water`, og `waterAgent`/`acidStrengthPct`
+  på tilsetninger). Salter og syre som faktisk ble tilsatt er `ingredient_added` med `waterAgent`. pH er en vanlig måling med
+  `sample_temp_c` og `instrument`; **prøvepunktet** (mesk, før kok, etter kok, under gjæring, ferdig øl) leses av steg og merkelapp
+  (`classifyPhSamplePoint`), så eldre målinger tolkes uten å skrives om.
+- **Hvem leser det.** Siden Mer → Vann; bryggedokumentets seksjon «Vann og pH»; assistentverktøyet `water_chemistry`;
+  `brewery_history` (kildevann, mesk-pH-mål, pH-målinger og tilsatte salter/syre per batch).
+- **Regler.** En beregning gis aldri ut som oppgitt eller målt, et mål er aldri en måling, og generelle vinduer overstyrer aldri en
+  oppskrifts mål eller en måling. En prøve over 35 °C dømmes ikke mot et pH-vindu som gjelder romtemperatur.
 
 ## Bryggeri-eksport
 
@@ -267,7 +293,7 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 
 ## Kjente begrensninger
 
-- Hovedbundelen er ~119 kB gzip. Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
+- Hovedbundelen er ~124 kB gzip (Vite-rapport; vannkunnskapen la til ca. 3 kB i hovedbundelen og ca. 11 kB gzip i total oppstarts-JS). Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
 

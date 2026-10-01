@@ -3,6 +3,7 @@ import { summarizeBreweryHistory } from "../../src/domain/brew-document/brewery-
 import { sunsetIpaRecipe } from "../../src/domain/fixtures/sunset-ipa.ts";
 import { makeBatch } from "../helpers/batch.ts";
 import type { BatchDetail, BatchOutcome, TimelineItem } from "../../src/domain/model/api.ts";
+import { holsfjordenWater20261001 } from "../../src/domain/water/slump-water.ts";
 
 const variants = [
   { id: "tropical", name: "Sunset Tropical", vessel: null, volumeL: 38, notes: null },
@@ -176,5 +177,42 @@ describe("brewery history", () => {
     expect(history.aggregates.boilOffLPerH).toEqual({ n: 0, mean: null, min: null, max: null });
     expect(history.aggregates.brewhouseEfficiencyPct).toEqual({ n: 0, mean: null, min: null, max: null });
     expect(history.aggregates.strikeOffsetDeviationC).toEqual({ n: 0, mean: null, min: null, max: null });
+  });
+
+  it("carries each batch's water and pH facts so similar batches can be compared later", () => {
+    const withWater = { ...older, equipmentSnapshot: { ...older.equipmentSnapshot, water: holsfjordenWater20261001 } };
+    const base = measuredTimeline("old", 75, 65, 67.5);
+    const ph = (id: string, stage: "mash" | "lauter", value: number, label: string | null, sampleTempC: number | null): TimelineItem => {
+      const item = measurement(id, stage, "temperature", value, 10);
+      return { ...item, measurement: { ...item.measurement!, kind: "ph", unit: "pH", label, sampleTempC, instrument: "pH-meter" } };
+    };
+    const acid: TimelineItem = {
+      ...measurement("acid", "mash", "temperature", 0, 11),
+      measurement: null,
+      type: "ingredient_added",
+      data: { ingredientKind: "misc", name: "Melkesyre", amount: 8, unit: "ml", waterAgent: "lactic_acid", acidStrengthPct: 80 },
+    };
+    const history = summarizeBreweryHistory([
+      { batch: withWater, timeline: [...base, ph("p1", "mash", 5.31, null, 22), ph("p2", "lauter", 5.6, "Før kok", null), acid] },
+      { batch: unmeasured, timeline: [] },
+    ]);
+
+    expect(history.batches[0]?.water).toEqual({
+      sourceWaterId: "abv-holsfjorden-2026-10-01",
+      sourceWaterFrozenInBatch: true,
+      mashPhTarget: { min: 5.2, max: 5.4, source: "assumed" },
+      phReadings: [
+        { point: "mash", value: 5.31, sampleTempC: 22, instrument: "pH-meter" },
+        { point: "pre_boil", value: 5.6, sampleTempC: null, instrument: "pH-meter" },
+      ],
+      saltsAndAcidsAdded: [{ agent: "lactic_acid", amount: 8, unit: "ml", acidStrengthPct: 80 }],
+    });
+    // A batch with nothing logged has no readings or additions to report, and its source water is marked as assumed.
+    expect(history.batches[1]?.water).toEqual({
+      sourceWaterId: "abv-holsfjorden-2026-10-01",
+      sourceWaterFrozenInBatch: false,
+      mashPhTarget: { min: 5.2, max: 5.4, source: "assumed" },
+    });
+    expect(JSON.parse(JSON.stringify(history))).toEqual(history);
   });
 });

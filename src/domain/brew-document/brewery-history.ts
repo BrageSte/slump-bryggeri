@@ -2,6 +2,7 @@ import { splitIdForVariant } from "../brew-day/fermentation.ts";
 import { resultNumbers } from "../brew-day/outcome.ts";
 import { round } from "../format.ts";
 import type { BatchDetail, TimelineItem } from "../model/api.ts";
+import { summarizeWaterOfBatch } from "../water/batch-water.ts";
 import { reviewCalibration } from "./tuning.ts";
 
 export interface BreweryHistoryMetric {
@@ -36,6 +37,31 @@ function culturesForOutcome(batch: BatchDetail, splitId: string | null): string[
 function brewDateKey(batch: BatchDetail): string {
   if (batch.brewDate && Number.isFinite(Date.parse(batch.brewDate))) return batch.brewDate;
   return new Date(batch.createdAt).toISOString().slice(0, 10);
+}
+
+/**
+ * What a batch says about water and pH: the source water it used, the mash pH it aimed for, the pH
+ * readings and the salts and acids actually logged. Nothing predicted; the raw material for asking
+ * what similar batches needed.
+ */
+function waterHistory(batch: BatchDetail, timeline: TimelineItem[]) {
+  const water = summarizeWaterOfBatch(batch, timeline);
+  const ph = water.measured.ph.map((reading) => ({
+    point: reading.point,
+    value: reading.value,
+    ...(reading.valueMin !== null && reading.valueMax !== null ? { valueMin: reading.valueMin, valueMax: reading.valueMax } : {}),
+    sampleTempC: reading.sampleTempC,
+    instrument: reading.instrument,
+  }));
+  const additions = water.measured.additions.map(({ agent, amount, unit, acidStrengthPct }) => ({ agent, amount, unit, acidStrengthPct }));
+  return {
+    sourceWaterId: water.source.profile.id,
+    sourceWaterFrozenInBatch: water.source.frozen,
+    mashPhTarget: water.plan.mashPh,
+    ...(water.plan.target ? { plannedIonsMgL: water.plan.target } : {}),
+    ...(ph.length > 0 ? { phReadings: ph } : {}),
+    ...(additions.length > 0 ? { saltsAndAcidsAdded: additions } : {}),
+  };
 }
 
 /** Summarizes measured results across batches without substituting recipe targets for missing data. */
@@ -99,6 +125,7 @@ export function summarizeBreweryHistory(batches: { batch: BatchDetail; timeline:
           ...(profileEfficiencyPct === undefined ? {} : { brewhouseEfficiencyPct: profileEfficiencyPct }),
           ...(profileStrikeOffsetC === undefined ? {} : { strikeTempOffsetC: profileStrikeOffsetC }),
         },
+        water: waterHistory(batch, timeline),
         outcomes,
       },
     };

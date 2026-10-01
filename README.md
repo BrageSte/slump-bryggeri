@@ -29,6 +29,7 @@ Under «Importer oppskrift» ligger Sunset IPA som eksempel, og under Oppskrifte
 | `npm run build` | Produksjonsbygg |
 | `npm run deploy` | Bygg og deploy til Cloudflare (se [docs/architecture.md](docs/architecture.md#deploy-cloudflare)) |
 | `npm run icons` | Generer PWA-ikoner på nytt |
+| `npm run docs:water` | Skriv om de genererte tabellene i `docs/water.md` fra de kanoniske vanndataene (en test feiler hvis de er utdaterte) |
 
 Administratorer kan laste ned en versjonert JSON-sikkerhetskopi under **Mer → Eksport**. Vedleggsmetadata og
 nedlastingslenker følger med; bilde- og PDF-bytes gjør det ikke, og gjenoppretting støttes ikke ennå.
@@ -53,14 +54,16 @@ kan endres fra batchmenyen.
 
 Bryggedagen viser hele bryggeplanen samtidig (2026-09-28). Meskekortet kan foreslå og loggføre vann for
 temperaturjustering. BeerSmith-kalibreringsstartpunkt viser veiledende advarsel ved store avvik eller gammel
-kildedato. Inventar, smart import, automatiske kalibreringsforslag, vannkjemi og innlogging for andre er
-strøket. Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
+kildedato. Vann og pH er en del av datamodellen (2026-10-01): Slumps basisvann fra Holsfjorden med kilde, planlagt vann,
+salter og syre, og pH med prøvepunkt og temperatur ([docs/water.md](docs/water.md)); kalkulatorer for salt, syre og pH-modell
+er ikke bygget. Inventar, smart import, automatiske kalibreringsforslag og innlogging for andre er strøket. Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
 
 ## Dokumentasjon
 
-- **[Implementeringsplan v0.5](docs/implementation-plan.md)** — steg 1–10 og oppdateringer
+- **[Implementeringsplan v0.5](docs/implementation-plan.md)** — steg 1–13 og oppdateringer
 - [Arkitektur](docs/architecture.md)
 - [Bryggeassistenten](docs/assistant.md) — oppsett, oppførsel, kostnad
 - [Designsystem](docs/design-system.md)
+- [Vann og pH](docs/water.md) — Slumps basisvann, kunnskap, målestrategi, hva som mangler
 - [Beregningsmotor](docs/calculations.md)
 - [BeerSmith-import (BSMX)](docs/import-bsmx.md)

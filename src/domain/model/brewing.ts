@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { waterAgentIdSchema } from "./water.ts";
 
 // ---------------------------------------------------------------------------
 // Brew stages
@@ -219,6 +220,10 @@ export const ingredientAddedDataSchema = z.object({
   name: z.string().trim().min(1).max(120),
   amount: z.number().positive().max(1_000_000),
   unit: z.string().trim().min(1).max(20),
+  /** A brewing-water salt or acid; lets the log say what was added to the water, not just its name. */
+  waterAgent: waterAgentIdSchema.optional(),
+  /** Concentration (% w/w) of an acid. */
+  acidStrengthPct: z.number().min(0.1).max(100).optional(),
   note: z.string().trim().max(500).optional(),
 });
 export type IngredientAddedData = z.infer<typeof ingredientAddedDataSchema>;

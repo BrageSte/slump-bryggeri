@@ -22,6 +22,7 @@ export function toBrewDayLog(items: TimelineItem[]): BrewDayLogEntry[] {
           valueMin: item.measurement.valueMin,
           valueMax: item.measurement.valueMax,
           label: item.measurement.label,
+          sampleTempC: item.measurement.sampleTempC,
         }
       : null,
   }));

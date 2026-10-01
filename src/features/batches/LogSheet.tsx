@@ -3,6 +3,7 @@ import { splitIdForVariant } from "../../domain/brew-day/fermentation.ts";
 import type { PlannedAddition, TargetValue } from "../../domain/brew-day/state.ts";
 import type { BatchDetail } from "../../domain/model/api.ts";
 import { eventTypeLabels, ingredientKinds, measurementKindSpecs, type BrewStage, type IngredientKind, type MeasurementKind } from "../../domain/model/brewing.ts";
+import { getWaterAgent, isAcidAgent, waterAgents, type WaterAgentId } from "../../domain/model/water.ts";
 import { BottomSheet, Button, cx, Field, Icon, InlineError, parseDecimal, Select, TextArea, TextInput, useToast, type IconName } from "../../design-system/index.ts";
 import { prepareImageForUpload } from "../../lib/image.ts";
 import { formatAmount } from "../../lib/format.ts";
@@ -287,6 +288,8 @@ function AdditionForm({
   const [name, setName] = useState(preset?.name ?? "");
   const [amount, setAmount] = useState(preset ? String(preset.amount).replace(".", ",") : "");
   const [unit, setUnit] = useState(preset?.unit ?? "g");
+  const [waterAgent, setWaterAgent] = useState<WaterAgentId | "">(preset?.waterAgent ?? "");
+  const [acidStrength, setAcidStrength] = useState(preset?.acidStrengthPct === undefined ? "" : String(preset.acidStrengthPct).replace(".", ","));
   const [note, setNote] = useState("");
   const [splitId, setSplitId] = useState<string | null>(() => splitIdForVariant(batch.splits, preset?.variant));
   const [time, setTime] = useState<string | null>(null);
@@ -297,10 +300,15 @@ function AdditionForm({
     setName(addition.name);
     setAmount(String(addition.amount).replace(".", ","));
     setUnit(addition.unit);
+    setWaterAgent(addition.waterAgent ?? "");
+    setAcidStrength(addition.acidStrengthPct === undefined ? "" : String(addition.acidStrengthPct).replace(".", ","));
     setSplitId(splitIdForVariant(batch.splits, addition.variant));
   }
 
   const parsedAmount = parseDecimal(amount);
+  const agent = ingredientKind === "misc" ? getWaterAgent(waterAgent) : undefined;
+  const parsedStrength = parseDecimal(acidStrength);
+  const strengthValid = parsedStrength === undefined || (!Number.isNaN(parsedStrength) && parsedStrength >= 0.1 && parsedStrength <= 100);
 
   function submit(event: FormEvent) {
     event.preventDefault();
@@ -317,6 +325,8 @@ function AdditionForm({
           name: name.trim(),
           amount: parsedAmount,
           unit,
+          waterAgent: agent?.id,
+          acidStrengthPct: isAcidAgent(agent) && parsedStrength !== undefined && !Number.isNaN(parsedStrength) ? parsedStrength : undefined,
           note: note.trim() || undefined,
         },
       },
@@ -381,11 +391,45 @@ function AdditionForm({
           )}
         </Field>
       </div>
+      {ingredientKind === "misc" && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Salt eller syre i vannet" hint="Valgfritt. Gjør at vann og pH kan sammenlignes mellom brygg.">
+            {(p) => (
+              <Select
+                {...p}
+                value={waterAgent}
+                onChange={(e) => {
+                  const next = e.target.value as WaterAgentId | "";
+                  setWaterAgent(next);
+                  const chosen = getWaterAgent(next);
+                  if (chosen) {
+                    setUnit(isAcidAgent(chosen) ? "ml" : "g");
+                    if (!name.trim()) setName(chosen.shortLabel);
+                  }
+                  if (!isAcidAgent(chosen)) setAcidStrength("");
+                }}
+              >
+                <option value="">Ingen</option>
+                {waterAgents.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.shortLabel}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </Field>
+          {isAcidAgent(agent) && (
+            <Field label="Styrke (%)" hint={`Vanlig: ${agent.typicalStrengthsPct.join(", ")} %`} error={strengthValid ? undefined : "Mellom 0,1 og 100"}>
+              {(p) => <TextInput {...p} inputMode="decimal" value={acidStrength} onChange={(e) => setAcidStrength(e.target.value)} className="tabular" />}
+            </Field>
+          )}
+        </div>
+      )}
       <Field label="Notat (valgfritt)">{(p) => <TextInput {...p} value={note} onChange={(e) => setNote(e.target.value)} />}</Field>
       <SplitChooser batch={batch} value={splitId} onChange={setSplitId} />
       <OccurredAtInput value={time} onChange={setTime} />
       {logEvent.error && <InlineError>{logEvent.error.message}</InlineError>}
-      <Button type="submit" variant="primary" size="lg" block loading={logEvent.isPending} disabled={!name.trim() || !parsedAmount}>
+      <Button type="submit" variant="primary" size="lg" block loading={logEvent.isPending} disabled={!name.trim() || !parsedAmount || !strengthValid}>
         Registrer tilsetning
       </Button>
     </form>
