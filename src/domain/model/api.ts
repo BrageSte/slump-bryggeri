@@ -14,6 +14,7 @@ import { BSMX_MAX_BYTES, type BsmxSourceData } from "../import/bsmx.ts";
 import { equipmentKinds, type ProfileValueSources, type ProfileValues } from "./equipment-profile.ts";
 import { libraryCategoryKeys, type LibraryCategory } from "./library.ts";
 import { recipeDocumentSchema, type RecipeDocument } from "./recipe.ts";
+import type { WaterProfile } from "./water.ts";
 
 /**
  * Request schemas and response types shared by the Worker API and the React client.
@@ -303,7 +304,14 @@ export interface BatchSplit {
 export interface BatchDetail extends BatchSummary {
   recipeVersion: { id: string; version: number };
   recipeSnapshot: RecipeDocument;
-  equipmentSnapshot: { profileId: string | null; profileVersion: number | null; values: ProfileValues; sources?: ProfileValueSources };
+  equipmentSnapshot: {
+    profileId: string | null;
+    profileVersion: number | null;
+    values: ProfileValues;
+    sources?: ProfileValueSources;
+    /** Source water frozen when the batch was created; null for batches created before water chemistry. */
+    water?: WaterProfile | null;
+  };
   splits: BatchSplit[];
   outcomes: BatchOutcome[];
 }
@@ -553,6 +561,8 @@ export const assistantProposedActionSchema = z.discriminatedUnion("kind", [
     unit: z.string().trim().min(1).max(20),
     label: z.string().trim().max(80).optional(),
     splitId: z.string().min(1).nullable().optional(),
+    /** Temperature of the sample, °C; matters for pH. */
+    sampleTempC: z.number().min(-10).max(110).optional(),
   }).strict(),
   z.object({
     kind: z.literal("log_event"),

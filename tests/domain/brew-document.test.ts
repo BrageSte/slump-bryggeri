@@ -18,7 +18,7 @@ describe("brew document", () => {
   it("joins named sections into the unchanged full document", () => {
     const sections = buildBrewDocumentSections(input);
     expect(Object.values(sections).filter(Boolean).join("\n\n") + "\n").toBe(doc);
-    expect(Object.keys(sections)).toEqual(["header", "plan", "equipment", "status", "results", "calibration", "log"]);
+    expect(Object.keys(sections)).toEqual(["header", "plan", "water", "equipment", "status", "results", "calibration", "log"]);
   });
 
   it("builds a compact assistant brief with current status, next action and recent log", () => {
@@ -34,6 +34,9 @@ describe("brew document", () => {
     expect(brief).toContain("Antakelser (ikke kalibrert)");
     expect(brief).toContain(latestLogLine);
     expect(brief).toContain(`Loggen har ${timeline.length} oppføringer`);
+    // The assistant can ask for the water section; the brief only names it.
+    expect(brief).toContain("Hentbare seksjoner: plan, water, equipment");
+    expect(brief).not.toContain("Kildevann (oppgitt)");
   });
 
   it("covers plan, equipment, status and the full log", () => {
@@ -44,7 +47,8 @@ describe("brew document", () => {
     expect(doc).toContain("- Fordampning: 13,2 L/h");
     expect(doc).toContain("Skyllevann: 74,0 °C");
     expect(doc).toContain("## Logg");
-    expect(doc.match(/^- \d\d\.\d\d\.\d{4}/gm)?.length).toBe(timeline.length);
+    // The log section has one dated line per entry; the water section repeats the pH readings, so count the log alone.
+    expect(buildBrewDocumentSections(input).log.match(/^- \d\d\.\d\d\.\d{4}/gm)?.length).toBe(timeline.length);
   });
 
   it("marks recipe, calculated and assumed values while keeping measurements separate", () => {

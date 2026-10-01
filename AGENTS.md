@@ -32,6 +32,10 @@ and tick the plan's checkboxes in the same PR. Merging to `main` deploys (once t
   write a new version. DB triggers enforce this.
 - **Calculations**: brewing maths lives only in `src/domain/brewing-calculations/` as pure functions
   with tests (known input, expected output, tolerance). Never let an LLM compute these values.
+- **Water chemistry**: Slump's source water lives only in `src/domain/water/slump-water.ts` (append a new entry with its own
+  `id` and `retrievedAt`, never edit one; then `npm run docs:water`). Keep four kinds of value apart everywhere: reported
+  (supplier), calculated, target/guidance, measured. Guidance windows are never rules, and there is no mash pH prediction
+  or acid dosing until one is validated against Slump's own readings (docs/water.md).
 - **Domain code** (`src/domain/`) must not import React, the database or anything from `worker/`.
 - **Atomic writes**: multi-table writes go through `atomic()` (D1 batch) in `worker/lib/db.ts`.
 - **Migrations**: add a new file in `db/migrations/`; never edit an applied one. Keep

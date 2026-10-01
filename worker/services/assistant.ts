@@ -184,6 +184,7 @@ export async function askAssistant(input: {
       loadBreweryHistory: input.loadBreweryHistory ?? (() => loadBreweryHistory(db, breweryId, { excludeBatchId: input.batchId })),
       history: input.messages,
       batch,
+      timeline,
       webSearchEnabled: webSearchEnabled(env),
       onUsage: (round) => {
         usage.inputTokens += round.inputTokens;

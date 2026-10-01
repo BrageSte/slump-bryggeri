@@ -15,3 +15,4 @@ export * from "./recipe-metrics.ts";
 export * from "./scaling.ts";
 export * from "./units.ts";
 export * from "./water.ts";
+export * from "./water-chemistry.ts";

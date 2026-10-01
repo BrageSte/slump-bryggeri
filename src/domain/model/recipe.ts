@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { recipeWaterPlanSchema, waterAgentIdSchema } from "./water.ts";
 
 /**
  * Normalized recipe document — the internal representation every import adapter
@@ -76,6 +77,10 @@ export const miscSchema = z.object({
   use: z.enum(miscUses),
   /** Boil: minutes before end of boil. */
   timeMin: z.number().min(0).max(600).optional(),
+  /** Marks a brewing-water salt or acid so its effect can be calculated and compared later. */
+  waterAgent: waterAgentIdSchema.optional(),
+  /** Concentration (% w/w) of an acid, e.g. 80 for 80 % lactic acid. */
+  acidStrengthPct: z.number().min(0.1).max(100).optional(),
   notes: note,
 });
 
@@ -133,6 +138,8 @@ export const recipeDocumentSchema = z.object({
   miscs: z.array(miscSchema).max(50),
   mashSteps: z.array(mashStepSchema).max(20),
   fermentationSteps: z.array(fermentationStepSchema).max(20),
+  /** Planned brewing water. The mash pH target is in `targets`; salts and acids are `miscs` with a `waterAgent`. */
+  water: recipeWaterPlanSchema.optional(),
   targets: recipeTargetsSchema,
   notes: z.string().trim().max(10_000).optional(),
 });

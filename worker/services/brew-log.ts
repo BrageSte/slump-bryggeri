@@ -392,7 +392,8 @@ export async function correctLogEntry(
     const bounds = [value, ...(valueMin === null ? [] : [valueMin]), ...(valueMax === null ? [] : [valueMax])];
     if (bounds.some((candidate) => candidate < spec.min || candidate > spec.max)) throw badRequest("Verdien er utenfor gyldig område.");
     const unit = spec.unit ?? input.unit;
-    const instrument = valueMin !== null ? "pH-strips" : input.instrument ?? current.measurement_instrument;
+    // undefined keeps the entry's instrument; null clears it (a pH reading corrected to «ikke oppgitt»).
+    const instrument = valueMin !== null ? "pH-strips" : input.instrument === undefined ? current.measurement_instrument : input.instrument;
     queries.push(
       db.insertInto("measurements").values({
         id: newId(),

@@ -24,8 +24,12 @@ import {
   mashedGrainKg,
   refractometerFinalGravity,
 } from "../../src/domain/brewing-calculations/index.ts";
-import type { BatchDetail } from "../../src/domain/model/api.ts";
+import type { BatchDetail, TimelineItem } from "../../src/domain/model/api.ts";
 import { profileValue } from "../../src/domain/model/equipment-profile.ts";
+import { addSaltsToWater, deriveWaterValues } from "../../src/domain/brewing-calculations/water-chemistry.ts";
+import { ionInfo, isSaltAgent, waterAgents, waterValueBasisLabels, getWaterAgent, type IonConcentrations } from "../../src/domain/model/water.ts";
+import { guidanceDisclaimer, ionGuidance, mashPhGuidance } from "../../src/domain/water/guidance.ts";
+import { summarizeWaterOfBatch } from "../../src/domain/water/batch-water.ts";
 
 /**
  * The assistant's tools: thin wrappers around `src/domain/brewing-calculations`, so every number
@@ -36,6 +40,7 @@ import { profileValue } from "../../src/domain/model/equipment-profile.ts";
 
 interface ToolContext {
   batch: BatchDetail;
+  timeline?: TimelineItem[];
   brewDocumentSections?: BrewDocumentSections;
   loadBreweryHistory?: () => Promise<unknown>;
   proposedActions?: AssistantProposedAction[];
@@ -68,6 +73,7 @@ function validateProposedAction(value: unknown, context: ToolContext): { action?
       unit: action.unit,
       label: action.label,
       splitId: action.splitId,
+      sampleTempC: action.sampleTempC,
     });
     if (!measurement.success) return { error: measurement.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
     if (!isSupportedMeasurementUnit(action.measurementKind, action.unit)) return { error: `Unsupported unit for ${action.measurementKind}: ${action.unit}` };
@@ -106,6 +112,24 @@ function validateProposedAction(value: unknown, context: ToolContext): { action?
   }
   if (JSON.stringify(validatedData).length > 10_000) return { error: "Event data is too large." };
   return { action: { ...action, data: validatedData } };
+}
+
+
+const saltIds = waterAgents.filter((agent) => agent.kind === "salt").map((agent) => agent.id) as [string, ...string[]];
+
+function derivedRounded(ions: IonConcentrations) {
+  const derived = deriveWaterValues(ions);
+  return {
+    alkalinityMmolL: round(derived.alkalinityMmolL, 2),
+    alkalinityAsCaCO3MgL: round(derived.alkalinityAsCaCO3MgL, 1),
+    hardnessDh: round(derived.hardnessDh, 2),
+    residualAlkalinityAsCaCO3MgL: round(derived.residualAlkalinityAsCaCO3MgL, 1),
+    sulfateToChlorideRatio: derived.sulfateToChlorideRatio === null ? null : round(derived.sulfateToChlorideRatio, 2),
+  };
+}
+
+function ionsRounded(ions: IonConcentrations) {
+  return Object.fromEntries(Object.entries(ions).map(([key, value]) => [key, round(value, 1)]));
 }
 
 const tools = [
@@ -246,21 +270,82 @@ const tools = [
     },
   }),
   tool({
+    name: "water_chemistry",
+    description:
+      "This batch's water chemistry in four separate parts: sourceWater (ions as the supplier reports them, frozen into the batch; frozen=false means an older batch assumed to have used the brewery's base water), calculated (values we derive from it: alkalinity, residual alkalinity, hardness, and the profile after the recipe's planned salts), plan (the recipe's target ions, mash pH target, planned salts and acids) and measured (pH readings with sample point, sample temperature and instrument, and the salts and acids actually logged). Optionally pass whatIfSalts to see the profile after dissolving salts (grams) in totalWaterL (defaults to the plan's mash plus sparge water). guidance holds general windows, not rules. There is no mash pH prediction and no acid dosing: do not estimate them.",
+    input: z.object({
+      whatIfSalts: z.array(z.object({ agent: z.enum(saltIds), grams: z.number().positive().max(100_000) })).max(10).optional(),
+      totalWaterL: z.number().positive().max(10_000).optional(),
+    }),
+    run: (input, { batch, timeline }) => {
+      if (!timeline) return { error: "not available" };
+      const summary = summarizeWaterOfBatch(batch, timeline);
+      const { source, plan, calculated, measured } = summary;
+      const whatIf = (() => {
+        if (!input.whatIfSalts || input.whatIfSalts.length === 0) return undefined;
+        const totalWaterL = input.totalWaterL ?? calculated.totalWaterL;
+        if (totalWaterL === null) return { error: "Water volume unknown: not in the plan and not given as totalWaterL." };
+        const salts = input.whatIfSalts.flatMap((salt) => {
+          const agent = getWaterAgent(salt.agent);
+          return isSaltAgent(agent) ? [{ composition: agent.composition, grams: salt.grams }] : [];
+        });
+        const resulting = addSaltsToWater(source.profile.ions, salts, totalWaterL);
+        return { basis: waterValueBasisLabels.calculated, totalWaterL, resultingIonsMgL: ionsRounded(resulting), derived: derivedRounded(resulting), note: "All salts counted as dissolved in the whole water volume; acids are not modelled." };
+      })();
+      return {
+        sourceWater: {
+          basis: waterValueBasisLabels.reported,
+          frozenInBatch: source.frozen,
+          name: source.profile.name,
+          ionsMgL: source.profile.ions,
+          reportedAlkalinityMmolL: source.profile.alkalinityMmolL,
+          reportedHardnessDh: source.profile.hardnessDh,
+          reportedWaterPh: source.profile.ph,
+          otherReported: (source.profile.otherReported ?? []).map(({ name, value, unit, limit }) => ({ name, value, unit, limit })),
+          confirmedUse: source.profile.confirmedUse ?? null,
+          source: { organization: source.profile.source.organization, url: source.profile.source.url, retrievedAt: source.profile.source.retrievedAt, publishedAt: source.profile.source.publishedAt },
+          caveats: source.profile.caveats,
+        },
+        calculated: {
+          basis: waterValueBasisLabels.calculated,
+          fromSourceWater: derivedRounded(source.profile.ions),
+          totalWaterL: calculated.totalWaterL === null ? null : round(calculated.totalWaterL, 1),
+          totalWaterAssumed: calculated.totalWaterAssumed,
+          afterPlannedSalts: calculated.afterPlannedSalts ? { ionsMgL: ionsRounded(calculated.afterPlannedSalts), derived: derivedRounded(calculated.afterPlannedSalts) } : null,
+          note: calculated.note,
+          whatIf,
+        },
+        plan: { basis: waterValueBasisLabels.target, ...plan },
+        measured: {
+          basis: waterValueBasisLabels.measured,
+          ph: measured.ph.map(({ point, stage, value, valueMin, valueMax, sampleTempC, instrument, comment, at }) => ({ point, stage, value, valueMin, valueMax, sampleTempC, instrument, comment, at: new Date(at).toISOString() })),
+          additions: measured.additions.map(({ agent, name, amount, unit, acidStrengthPct, at }) => ({ agent, name, amount, unit, acidStrengthPct, at: new Date(at).toISOString() })),
+        },
+        guidance: {
+          basis: waterValueBasisLabels.target,
+          disclaimer: guidanceDisclaimer,
+          mashPh: { windowAtRoomTemperature: mashPhGuidance.window, planningTarget: mashPhGuidance.planningTarget, note: mashPhGuidance.note },
+          ionsMgL: ionGuidance.filter((entry) => entry.typical).map((entry) => ({ ion: ionInfo[entry.ion].name, typical: entry.typical, cautionAbove: entry.cautionAbove ?? null })),
+        },
+      };
+    },
+  }),
+  tool({
     name: "get_batch_section",
     description: "Return the requested section of this batch's brew document. An empty section means no section content is available.",
-    input: z.object({ section: z.enum(["plan", "equipment", "status", "results", "calibration", "log"]) }),
+    input: z.object({ section: z.enum(["plan", "water", "equipment", "status", "results", "calibration", "log"]) }),
     run: ({ section }, context) => context.brewDocumentSections?.[section] ?? { error: "not available" },
   }),
   tool({
     name: "brewery_history",
-    description: "The brewery's own observed boil-off, brewhouse efficiency, strike-temperature offset and attenuation across earlier batches, with counts. Use only for calibration or questions about what is normal for this brewery.",
+    description: "The brewery's own observed boil-off, brewhouse efficiency, strike-temperature offset and attenuation across earlier batches, with counts; per batch also the source water used, mash pH target, pH readings (sample point, temperature, instrument) and salts and acids added. Use only for calibration, questions about what is normal for this brewery, or how earlier batches' water and pH compare.",
     input: z.object({}),
     run: async (_input, context) => (context.loadBreweryHistory ? context.loadBreweryHistory() : { error: "not available" }),
   }),
   tool({
     name: "propose_actions",
     description:
-      "Suggest log entries or a timer for the brewer to confirm. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?}; {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
+      "Suggest log entries or a timer for the brewer to confirm. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?,sampleTempC?} (for pH, label «pH før kok», «pH etter kok» or «Slutt-pH» when the stage does not already say where the sample was taken, and sampleTempC when the brewer states it); {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
     // Expose the strict action union to Claude; runAssistantTool has a tolerant item-wise fallback
     // so invalid suggestions are still reported without discarding valid siblings.
     input: z.object({ actions: z.array(assistantProposedActionSchema).max(12) }).strict(),

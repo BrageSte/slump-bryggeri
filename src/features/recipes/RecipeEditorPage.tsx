@@ -3,6 +3,8 @@ import { useState, type ReactNode } from "react";
 import { useFieldArray, useForm, useWatch, type Control, type FieldError, type UseFormRegister } from "react-hook-form";
 import { useNavigate, useParams } from "react-router";
 import { calculateRecipeMetrics } from "../../domain/brewing-calculations/index.ts";
+import { ionInfo, ionKeys, isAcidAgent, getWaterAgent, waterAgents } from "../../domain/model/water.ts";
+import { slumpBaseWater } from "../../domain/water/slump-water.ts";
 import {
   cultureForms,
   emptyRecipe,
@@ -193,6 +195,46 @@ function HopRow({ index, register, control, errors, onRemove }: { index: number;
   );
 }
 
+/** Salt/acid marker for an «Andre tilsetninger» row, with the strength an acid needs. */
+function MiscWaterAgent({ index, register, control, errors }: { index: number; register: Register; control: Control<RecipeDocument>; errors: any }) {
+  const agent = getWaterAgent(useWatch({ control, name: `miscs.${index}.waterAgent` }));
+  return (
+    <>
+      <Input label="Salt eller syre i vannet" className="col-span-2">
+        <select {...register(`miscs.${index}.waterAgent`, optionalText)} className={inputClasses}>
+          <option value="">Ingen</option>
+          {waterAgents.map((option) => (
+            <option key={option.id} value={option.id}>
+              {option.shortLabel}
+            </option>
+          ))}
+        </select>
+      </Input>
+      {isAcidAgent(agent) && (
+        <Input label="Styrke" unit="%" error={errors.miscs?.[index]?.acidStrengthPct}>
+          {num(register, `miscs.${index}.acidStrengthPct`, errors.miscs?.[index]?.acidStrengthPct, String(agent.typicalStrengthsPct[0]))}
+        </Input>
+      )}
+    </>
+  );
+}
+
+/**
+ * An untouched water card stays out of the saved recipe instead of becoming an empty object, and an acid
+ * strength left behind on a row that is no longer an acid is dropped.
+ */
+function withoutEmptyWater(recipe: RecipeDocument): RecipeDocument {
+  const target = Object.fromEntries(Object.entries(recipe.water?.target ?? {}).filter(([, value]) => value !== undefined));
+  const water = {
+    ...(Object.keys(target).length > 0 ? { target } : {}),
+    ...(recipe.water?.profileName ? { profileName: recipe.water.profileName } : {}),
+    ...(recipe.water?.notes ? { notes: recipe.water.notes } : {}),
+  };
+  const { water: _water, ...rest } = recipe;
+  const miscs = rest.miscs.map(({ acidStrengthPct, ...misc }) => (isAcidAgent(getWaterAgent(misc.waterAgent)) && acidStrengthPct !== undefined ? { ...misc, acidStrengthPct } : misc));
+  return Object.keys(water).length > 0 ? { ...rest, miscs, water } : { ...rest, miscs };
+}
+
 function RecipeForm({
   initial,
   recipeId,
@@ -225,8 +267,9 @@ function RecipeForm({
   const fermentationSteps = useFieldArray({ control, name: "fermentationSteps" });
   const e = errors as any;
 
-  async function onSubmit(recipe: RecipeDocument) {
+  async function onSubmit(parsed: RecipeDocument) {
     setServerError(null);
+    const recipe = withoutEmptyWater(parsed);
     try {
       if (recipeId && baseVersionId) {
         await save.mutateAsync({ recipe, baseVersionId, changeNote: changeNote.trim() || undefined });
@@ -384,6 +427,7 @@ function RecipeForm({
             <Input label="Minutter igjen av kok" unit="min" error={e.miscs?.[i]?.timeMin}>
               {num(register, `miscs.${i}.timeMin`, e.miscs?.[i]?.timeMin)}
             </Input>
+            <MiscWaterAgent index={i} register={register} control={control} errors={e} />
           </ItemCard>
         ))}
       </EditorSection>
@@ -414,6 +458,26 @@ function RecipeForm({
             {num(register, "targets.mashPhMax", e.targets?.mashPhMax, "5,4")}
           </Input>
         </div>
+      </EditorSection>
+
+      <EditorSection title="Vann">
+        <p className="text-small text-muted">
+          Valgfritt. Planlagt vann er et mål, ikke en måling. Basisvannet er {slumpBaseWater.name}: svært bløtt og mineralfattig, så kalsium, sulfat og klorid må tilsettes.
+          Salter og syre legger du inn under «Andre tilsetninger» og merker som salt eller syre.
+        </p>
+        <Input label="Navn på planen (valgfritt)" error={e.water?.profileName}>
+          {text(register, "water.profileName", e.water?.profileName, true, "Kloridfremhevet")}
+        </Input>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {ionKeys.map((ion) => (
+            <Input key={ion} label={`${ionInfo[ion].name} (${ionInfo[ion].symbol})`} unit="mg/L" error={e.water?.target?.[ion]}>
+              {num(register, `water.target.${ion}`, e.water?.target?.[ion])}
+            </Input>
+          ))}
+        </div>
+        <Input label="Vannnotat (valgfritt)" error={e.water?.notes}>
+          {text(register, "water.notes", e.water?.notes, true)}
+        </Input>
       </EditorSection>
 
       <EditorSection

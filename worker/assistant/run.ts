@@ -1,6 +1,6 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
-import type { AssistantCitation, AssistantProposedAction, BatchDetail } from "../../src/domain/model/api.ts";
+import type { AssistantCitation, AssistantProposedAction, BatchDetail, TimelineItem } from "../../src/domain/model/api.ts";
 import { ASSISTANT_WEB_SEARCH_SOURCES, assistantWebSourceForUrl } from "../../src/domain/model/assistant-sources.ts";
 import { assistantToolDefinitions, runAssistantTool } from "./tools.ts";
 
@@ -10,10 +10,11 @@ export const ASSISTANT_SYSTEM_PROMPT = `You are the brewing assistant for Slump 
 Check before answering:
 1. Answer from the brief when it contains enough information.
 2. Otherwise fetch only the section needed with get_batch_section, one section at a time. Fetch the full log only for history or timeline questions.
-3. Use brewery_history only for calibration questions or "what is normal for us?" questions.
+3. Use brewery_history only for calibration questions, "what is normal for us?" questions, or how earlier batches' water, salts, acid and pH compare.
 4. Never do arithmetic yourself, including sums and differences. Use a calculation tool or state the individual values.
 5. Say "ikke målt" instead of guessing. Keep answers short and practical for a brewer using a phone; use metric units.
-6. Search the web only when the answer depends on specific external facts absent from the batch context and tools (hop alpha acids or oil, yeast temperature or attenuation ranges, malt color or extract, or style guideline ranges), or when the brewer explicitly asks for a source. Never search this batch's data, brewery history, or anything a calculation tool answers. Prefer one focused query. If no reliable result is found, say so instead of guessing. For web facts, name the organization and link; note crop-year and lot variation for hops. Answer well-established brewing practice without searching, labelled as general guidance rather than a fact about this batch.
+6. Water chemistry (source water, planned water, salts, acids, pH): use the water_chemistry tool or the "water" section; never compute ion concentrations, alkalinity, hardness or salt amounts yourself. Always say which of four things you mean and keep them apart: values the supplier reports (source water), values the app calculates, recommended targets (general guidance windows, not rules; sources disagree at the edges), and measurements from this brew. The app has no mash pH prediction and no acid dosing: do not estimate them. Say so, and suggest measuring a cooled sample (about 20-25 °C). The pH of the raw water says little about mash pH, which depends on the grain bill, calcium and acid.
+7. Search the web only when the answer depends on specific external facts absent from the batch context and tools (hop alpha acids or oil, yeast temperature or attenuation ranges, malt color or extract, or style guideline ranges), or when the brewer explicitly asks for a source. Never search this batch's data, brewery history, or anything a calculation tool answers. Prefer one focused query. If no reliable result is found, say so instead of guessing. For web facts, name the organization and link; note crop-year and lot variation for hops. Answer well-established brewing practice without searching, labelled as general guidance rather than a fact about this batch.
 
 When the brewer reports a reading or something that happened, propose logging it with propose_actions instead of telling them to log it. Proposed actions are only suggestions: the brewer must confirm each one, and you never execute a write. Keep planned recipe values, calculated values marked "≈", and measured values distinct. Explain calibration observations without applying them; one batch is weak evidence and an admin decides whether to save a new profile version. If a needed calculation tool is unavailable, say so instead of estimating. For unrelated questions, answer briefly or say they are outside your scope.`;
 
@@ -59,6 +60,7 @@ export async function runAssistant(input: {
   loadBreweryHistory?: () => Promise<unknown>;
   history: { role: "user" | "assistant"; content: string }[];
   batch: BatchDetail;
+  timeline?: TimelineItem[];
   webSearchEnabled?: boolean;
   /** Called after every API response, so usage is recorded even if a later round fails. */
   onUsage: (usage: AssistantUsage) => void;
@@ -123,6 +125,7 @@ export async function runAssistant(input: {
           toolCalls.push(block.name);
           const result = await runAssistantTool(block.name, block.input, {
             batch: input.batch,
+            timeline: input.timeline,
             brewDocumentSections: input.brewDocumentSections,
             loadBreweryHistory: input.loadBreweryHistory,
             proposedActions: actions,

@@ -9,7 +9,7 @@ export interface BrewDocumentSection {
   blocks: BrewDocumentBlock[];
 }
 
-const sectionHeadings = new Set(["Plan og mål", "Status nå", "Resultat", "Hva brygget sier om kalibreringen", "Logg"]);
+const sectionHeadings = new Set(["Plan og mål", "Vann og pH", "Status nå", "Resultat", "Hva brygget sier om kalibreringen", "Logg"]);
 
 function isSectionHeading(title: string): boolean {
   return sectionHeadings.has(title) || title.startsWith("Utstyrsprofil i batchen");
@@ -71,6 +71,6 @@ export function parseBrewDocument(markdown: string): BrewDocumentSection[] {
   }
 
   return rawSections
-    .map(({ title, lines }) => ({ title, blocks: parseBlocks(lines, title === "Plan og mål") }))
+    .map(({ title, lines }) => ({ title, blocks: parseBlocks(lines, title === "Plan og mål" || title === "Vann og pH") }))
     .filter((section) => section.blocks.length > 0);
 }

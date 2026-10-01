@@ -11,12 +11,16 @@ spørsmålene som faktisk stilles.
 2. Workeren sender et **kort brief** og spørsmålet til Claude (`worker/services/assistant.ts`). Briefet inneholder
    batchhodet, status og neste handling, én linje med planens nøkkeltall, de siste åtte logglinjene og totalt antall
    loggoppføringer. Briefet mellomlagres (prompt caching).
-3. Hvis briefet ikke er nok, henter Claude bare én relevant seksjon om gangen med `get_batch_section`: plan, utstyr,
-   status, resultater, kalibrering eller logg. Hele loggen hentes bare for spørsmål om historikk eller tidslinje.
-   `brewery_history` er forbeholdt kalibrering og spørsmål om hva som er normalt for bryggeriet.
+3. Hvis briefet ikke er nok, henter Claude bare én relevant seksjon om gangen med `get_batch_section`: plan, vann,
+   utstyr, status, resultater, kalibrering eller logg. Hele loggen hentes bare for spørsmål om historikk eller tidslinje.
+   `brewery_history` er forbeholdt kalibrering, spørsmål om hva som er normalt for bryggeriet og hvordan tidligere batchers
+   vann, salter, syre og pH ser ut.
 4. Claude gjør **aldri aritmetikk selv**, heller ikke summer eller differanser. Den kaller appens egne beregninger som verktøy (`worker/assistant/tools.ts`):
    innmeskingstemperatur, vannmengder, mesketemperatur-justering, Brix → SG, ABV/forgjæring, brygghuseffektivitet,
    observert fordampning og enhetsomregning. Standardverdiene kommer fra batchens utstyrssnapshot.
+   `water_chemistry` gir batchens vannkjemi i fire adskilte deler (oppgitt kildevann, beregnet, plan, målt) og kan regne «hva om»
+   med salter; veiledningsvinduer følger med merket som veiledning. Den predikerer ikke mesk-pH og doserer ikke syre, og
+   assistenten er bedt om å si det i stedet for å anslå ([water.md](water.md)).
 5. Planlagte verdier, beregnede verdier merket «≈» og målte verdier holdes atskilt. Manglende målinger omtales som
    «ikke målt»; assistenten gjetter ikke.
 6. Når bryggeren forteller om en måling eller noe som har skjedd, foreslår assistenten en loggføring med
@@ -56,7 +60,9 @@ maksimalt to nettsøk per spørsmål, også når Claude fortsetter en pauset sam
 ## Bryggeriets egne tall
 
 Verktøyet `brewery_history` oppsummerer bryggeriets 10 nyeste andre batcher med målte tall for fordampning,
-brygghuseffektivitet, innmeskingsavvik og forgjæring per gjær, med antall, snitt og spredning. Verdiene i hver
+brygghuseffektivitet, innmeskingsavvik og forgjæring per gjær, med antall, snitt og spredning. Per batch følger også
+vann og pH med: kildevannet som ble brukt, mesk-pH-målet, pH-målinger med prøvepunkt, temperatur og instrument, og
+tilsatte salter og syre med mengde og styrke. Ingenting av det er predikert. Verdiene i hver
 batchs utstyrssnapshot vises ved siden av, så «profil mot målt» synes. Det leser bare batcher, logg og resultater
 i eget bryggeri og skriver aldri til dem. Assistenten henter det bare ved spørsmål om kalibrering eller hva som er
 normalt for bryggeriet.

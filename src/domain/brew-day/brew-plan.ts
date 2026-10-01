@@ -1,5 +1,6 @@
 import { calculateStrikeTemperature, calculateWaterVolumes, expectedGravities, isMashed, mashedGrainKg, pointsToSg, sgToPoints, type WaterVolumeResult } from "../brewing-calculations/index.ts";
 import { brewStages, type BrewStage, type IngredientKind } from "../model/brewing.ts";
+import type { WaterAgentId } from "../model/water.ts";
 import { getProfileParameter, type ProfileValueSources, type ProfileValues } from "../model/equipment-profile.ts";
 import type { RecipeDocument } from "../model/recipe.ts";
 
@@ -44,6 +45,9 @@ export interface PlanAddition {
   amount: number;
   unit: string;
   variant?: string;
+  /** A brewing-water salt or acid, so the log can say what was added to the water. */
+  waterAgent?: WaterAgentId;
+  acidStrengthPct?: number;
   /** Yeast is recorded as `yeast_pitched`, everything else as `ingredient_added`. */
   eventType: "ingredient_added" | "yeast_pitched";
 }
@@ -320,6 +324,8 @@ export function buildBrewPlan({ recipe: doc, equipment, equipmentSources, doneIn
       name: misc.name,
       amount: misc.amount,
       unit: misc.unit,
+      ...(misc.waterAgent ? { waterAgent: misc.waterAgent } : {}),
+      ...(misc.acidStrengthPct !== undefined ? { acidStrengthPct: misc.acidStrengthPct } : {}),
       eventType: "ingredient_added",
     },
     done: done(misc.id),

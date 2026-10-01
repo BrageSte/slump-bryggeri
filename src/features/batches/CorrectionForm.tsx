@@ -62,12 +62,14 @@ function MeasurementCorrection({
         valueMin: input.valueMin,
         valueMax: input.valueMax,
         unit: input.unit ?? measurement.unit,
-        label: input.label ?? measurement.label,
+        // A custom measurement needs its name; for the rest an emptied label clears it (e.g. a pH sample point the stage already implies).
+        label: measurement.kind === "custom" ? (input.label ?? measurement.label) : (input.label ?? null),
         occurredAt: input.measuredAt ?? item.occurredAt,
         stage,
         splitId: input.splitId,
-        sampleTempC: measurement.sampleTempC,
-        instrument: input.instrument ?? measurement.instrument,
+        // Only pH asks for the temperature; other kinds keep what the entry had.
+        sampleTempC: input.sampleTempC === undefined ? measurement.sampleTempC : input.sampleTempC,
+        instrument: input.instrument === undefined ? measurement.instrument : input.instrument,
         comment: input.comment ?? null,
       },
       { onSuccess: () => (toast("Loggføringen er korrigert"), onSaved()) },
@@ -107,6 +109,7 @@ function MeasurementCorrection({
           label: measurement.label,
           comment: measurement.comment,
           instrument: measurement.instrument,
+          sampleTempC: measurement.sampleTempC,
         }}
         onSubmit={submit}
       />

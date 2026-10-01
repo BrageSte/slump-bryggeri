@@ -2,6 +2,9 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { equipmentOverview, type EquipmentOverview, type EquipmentValueStatus } from "../../domain/brew-day/equipment-overview.ts";
 import type { BatchDetail } from "../../domain/model/api.ts";
+import { getWaterAgent, ionInfo, ionKeys, waterValueBasisLabels } from "../../domain/model/water.ts";
+import { summarizeWaterOfBatch } from "../../domain/water/batch-water.ts";
+import { describeSourceWater } from "../../domain/water/describe.ts";
 import { Button, Card, Icon, SectionLabel, StatusChip, type Tone } from "../../design-system/index.ts";
 import { formatNumber } from "../../lib/format.ts";
 import { RecipeMetrics } from "../recipes/RecipeView.tsx";
@@ -38,7 +41,75 @@ export function PreBrewOverview({ batch, onStart, starting }: { batch: BatchDeta
         </Button>
       </Card>
       <EquipmentCard profileVersion={batch.equipmentSnapshot.profileVersion} overview={equipment} />
+      <WaterCard batch={batch} />
     </>
+  );
+}
+
+/**
+ * The batch's water at a glance, with the four kinds of value apart: what the supplier reports (frozen into
+ * the batch), what the recipe aims for, and the salts and acids it plans. Nothing measured yet before the start.
+ */
+function WaterCard({ batch }: { batch: BatchDetail }) {
+  const water = summarizeWaterOfBatch(batch, []);
+  const { profile } = water.source;
+  const description = describeSourceWater(profile);
+  const lowMineral = description.lowMineral;
+  // The supplier's own numbers keep the decimals it published; a plan is rounded to whole mg/L.
+  const reportedIons = description.reported.filter((row) => (ionKeys as readonly string[]).includes(row.key));
+  const sourceIons = reportedIons.map((row) => `${ionInfo[row.key as (typeof ionKeys)[number]].symbol} ${formatNumber(row.value, row.decimals)}`).join(" · ");
+  const plannedIons = (values: Partial<Record<(typeof ionKeys)[number], number>>) =>
+    ionKeys.flatMap((key) => (values[key] === undefined ? [] : [`${ionInfo[key].symbol} ${formatNumber(values[key], 0)}`])).join(" · ");
+  const { plan } = water;
+  return (
+    <Card className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SectionLabel>Vann</SectionLabel>
+        <StatusChip tone={water.source.frozen ? "neutral" : "warning"}>{water.source.frozen ? "Kildevann frosset" : "Basisvann antatt"}</StatusChip>
+      </div>
+      <dl className="divide-y divide-border text-small">
+        <div className="space-y-1 py-2">
+          <dt className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">Kildevann</span>
+            <StatusChip tone="info">{waterValueBasisLabels.reported}</StatusChip>
+          </dt>
+          <dd>{profile.name}</dd>
+          <dd className="tabular text-muted">{sourceIons} mg/L</dd>
+        </div>
+        <div className="space-y-1 py-2">
+          <dt className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold">Plan</span>
+            <StatusChip>{waterValueBasisLabels.target}</StatusChip>
+          </dt>
+          <dd>
+            Mesk-pH {formatNumber(plan.mashPh.min, 1)}–{formatNumber(plan.mashPh.max, 1)}
+            <span className="text-muted"> ({plan.mashPh.source === "recipe" ? "oppskrift" : "≈ antatt veiledning"})</span>
+          </dd>
+          {plan.target ? (
+            <dd>
+              {plan.profileName ? `${plan.profileName}: ` : "Vannprofil: "}
+              <span className="tabular">{plannedIons(plan.target)} mg/L</span>
+            </dd>
+          ) : (
+            <dd className="text-muted">Ingen planlagt vannprofil i oppskriften.</dd>
+          )}
+          {plan.additions.map((addition) => (
+            <dd key={addition.ingredientId} className="tabular">
+              {formatNumber(addition.amount, 1)} {addition.unit} {getWaterAgent(addition.agent)?.shortLabel ?? addition.name}
+              {addition.acidStrengthPct !== null ? ` ${formatNumber(addition.acidStrengthPct, 0)} %` : ""}
+            </dd>
+          ))}
+        </div>
+      </dl>
+      {lowMineral && <p className="text-small text-muted">Basisvannet er svært bløtt og mineralfattig, så kalsium må vanligvis tilsettes.</p>}
+      <p className="text-small text-muted">
+        pH måles på bryggedagen og vises som «{waterValueBasisLabels.measured}». Mer under{" "}
+        <Link to="/mer/vann" className="font-semibold text-primary-strong underline underline-offset-4">
+          Vann
+        </Link>
+        .
+      </p>
+    </Card>
   );
 }
 
