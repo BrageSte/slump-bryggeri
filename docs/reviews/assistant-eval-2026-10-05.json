@@ -303,7 +303,7 @@
           "elapsedMs": 6653,
           "proseReview": {
             "reviewer": "Codex (manual reading, not an independent blind rating)",
-            "notes": "Feil: intet substansielt svar, bare måleforslag og appens fallbacktekst. Oppfølgende kode legger inn ett nytt svarforsøk."
+            "notes": "Det viste svaret manglet råd og hadde bare måleforslag/fallback. Den gamle løperen lagret ikke teksten fra verktøyrundene, så dette kan ikke tilskrives modellen alene. Senere kode bevarer all svartekst og krever svar sammen med forslag."
           }
         },
         {

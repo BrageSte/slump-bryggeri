@@ -85,12 +85,20 @@ export function Conversation({
   const user = me.data?.user ?? { id: "", name: "" };
   const [draft, setDraft] = useState("");
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const endRef = useRef<HTMLLIElement>(null);
+  const replyStartRef = useRef<HTMLLIElement>(null);
   const messages = thread.messages;
+  const latest = messages.at(-1);
 
   useEffect(() => {
-    void endRef.current?.scrollIntoView({ block: "end", behavior: "smooth" });
-  }, [messages.length, post.isPending]);
+    // Start with the advice, not a confirmation card below a long answer. The id also changes when
+    // a full 100-message window advances without changing its length.
+    if (!post.isPending && !pendingQuestion && !post.error && latest?.role === "assistant") {
+      replyStartRef.current?.scrollIntoView({ block: "start", behavior: "auto" });
+    } else {
+      endRef.current?.scrollIntoView({ block: "end", behavior: "auto" });
+    }
+  }, [latest?.id, latest?.role, pendingQuestion, post.isPending, post.error]);
 
   async function send(content: string) {
     const clean = content.trim();
@@ -138,11 +146,11 @@ export function Conversation({
         </div>
       )}
 
-      <ol className="max-h-[48dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 md:max-h-[54dvh]">
+      <ol aria-label="Samtale" className="max-h-[48dvh] space-y-3 overflow-y-auto overscroll-contain pr-1 md:max-h-[54dvh]">
         {visibleMessages.map((message) => {
           const mine = message.role === "user" && message.author?.id === user.id;
           return (
-            <li key={message.id} className={cx("flex", mine ? "justify-end" : "justify-start")}>
+            <li key={message.id} ref={message.role === "assistant" && message.id === latest?.id ? replyStartRef : undefined} className={cx("flex", mine ? "justify-end" : "justify-start")}>
               <div className={cx("max-w-[94%] space-y-1", message.role === "user" ? "text-right" : "text-left")}>
                 <p className="tabular px-1 text-caption text-muted">
                   {message.role === "assistant" ? "Veileder" : message.author?.name ?? "Brygger"}
@@ -165,8 +173,8 @@ export function Conversation({
             </div>
           </li>
         )}
+        <li ref={endRef} aria-hidden="true" className="h-0" />
       </ol>
-      <div ref={endRef} />
 
       {actionError && <InlineError>{actionError}</InlineError>}
       {post.error && <InlineError>{post.error.message}</InlineError>}

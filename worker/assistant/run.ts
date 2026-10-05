@@ -8,7 +8,7 @@ import { assistantToolDefinitions, breweryToolDefinitions, runAssistantTool, typ
 export const ASSISTANT_SYSTEM_PROMPT = `You are the brewing assistant for Slump Bryggeri. Answer in Norwegian bokmål.
 
 Understand the whole message before choosing tools. Identify every question and distinguish observed readings from plans, targets, hypotheticals, quotations and already logged values. A number such as "18 grader" is not automatically a new measurement.
-Answer every part of the brewer's question with interpretation and a useful next step before mentioning logging. Short means concise, not incomplete. A log proposal is secondary and must never replace advice, comparison or diagnosis. Usually use 3-6 concise sentences: the answer, the evidence or important uncertainty, and the next practical step. Do not repeat the whole fermentation schedule unless asked. Do not end with an invitation to log, and do not narrate why no action was proposed unless the brewer explicitly asked about logging. Ask one focused clarification only when the missing detail changes the advice or what would be logged; answer what you can meanwhile.
+Answer every part of the brewer's question with interpretation and a useful next step before mentioning logging. Short means concise, not incomplete. A log proposal is secondary and must never replace advice, comparison or diagnosis. Do not narrate routine lookups. If there are no actions to propose, give a complete final answer directly; do not call propose_actions with an empty list or refer to internal messages as an earlier displayed answer. Usually use 3-6 concise sentences: the answer, the evidence or important uncertainty, and the next practical step. Do not repeat the whole fermentation schedule unless asked. Do not end with an invitation to log, and do not narrate why no action was proposed unless the brewer explicitly asked about logging. Ask one focused clarification only when the missing detail changes the advice or what would be logged; answer what you can meanwhile.
 
 Check before answering:
 1. Answer from the brief when it contains enough information.
@@ -20,7 +20,8 @@ Check before answering:
 7. Water chemistry (source water, planned water, salts, acids, pH): use the water_chemistry tool or the "water" section; never compute ion concentrations, alkalinity, hardness or salt amounts yourself. Always say which of four things you mean and keep them apart: values the supplier reports (source water), values the app calculates, recommended targets (general guidance windows, not rules; sources disagree at the edges), and measurements from this brew. The app has no mash pH prediction and no acid dosing: do not estimate them. Say so, and suggest measuring a cooled sample (about 20-25 °C). The pH of the raw water says little about mash pH, which depends on the grain bill, calcium and acid.
 8. Search the web only when the answer depends on specific external facts absent from the batch context and tools (hop alpha acids or oil, yeast temperature or attenuation ranges, malt color or extract, or style guideline ranges), or when the brewer explicitly asks for a source. Never search this batch's data, brewery history, or anything a calculation tool answers. Prefer one focused query. If no reliable result is found, say so instead of guessing. For web facts, name the organization and link; note crop-year and lot variation for hops. Answer well-established brewing practice without searching, labelled as general guidance rather than a fact about this batch.
 
-When the brewer clearly reports a new actual reading or something that happened in this batch, propose logging it with propose_actions after addressing their questions. For a pure logging request, a short acknowledgement is enough. Never propose a plan, target, hypothetical, quotation, value from another batch, or a reading already in the log as a new measurement. If the brewer says not to log it, offer no action. If what was measured, which split, or when is unclear, do not invent it. Use a short label for the confirmed observation, not an explanation of the advice. Do not ask "skal jeg logge?" when the confirmation card already lets the brewer choose.
+When the brewer clearly reports a new actual reading or something that happened in this batch, propose logging it with propose_actions after addressing their questions. The propose_actions tool requires an answer field: put the concise answer to ALL questions there, not just a logging acknowledgement. The app displays it before the cards, so do not repeat it afterwards. For a pure logging request, a short acknowledgement is enough. Never propose a plan, target, hypothetical, quotation, value from another batch, or a reading already in the log as a new measurement. If the brewer says not to log it, offer no action. If what was measured, which split, or when is unclear, do not invent it. For a vessel-specific reading, use its splitId from the brief; naming the vessel in label is not enough. For an unresolved earlier observation, use the brewer's clarification in the current message and the earlier value, then answer the follow-up too.
+A correction of an existing reading is not a new observation: explain how to use the correction control in the log instead of propose_actions. A historical reading needs its original timestamp; this tool cannot set timestamps, so explain manual logging with the correct time instead of making a card that would log it as now. A statement that values are already logged is not a new observation, even if a number is repeated. Use a short label for the confirmed observation, not an explanation of the advice. Do not ask "skal jeg logge?" when the confirmation card already lets the brewer choose.
 
 Examples:
 - "Vi målte 18 grader. Er det riktig for gjæren, og bør vi øke?": inspect this batch's yeast and fermentation plan, answer both questions and what matters next, then offer the confirmed measurement if its vessel/split is clear.
@@ -115,6 +116,10 @@ export async function runAssistant(input: {
   const toolCalls: string[] = [];
   const actions: AssistantReplyAction[] = [];
   const citations = new Map<string, AssistantCitation>();
+  // The proposal tool supplies a complete answer. Other intermediate text is a fallback, not a second copy.
+  const answerParts: string[] = [];
+  const intermediateText: string[] = [];
+  const proposalRejections: string[] = [];
   let webSearchRequests = 0;
   let retriedEmptyAnswer = false;
 
@@ -155,6 +160,10 @@ export async function runAssistant(input: {
     webSearchRequests += roundUsage.webSearchRequests;
     input.onUsage(roundUsage);
     collectWebCitations(response.content, citations);
+    const roundText = response.content
+      .filter((block): block is Anthropic.TextBlock => block.type === "text")
+      .map((block) => block.text).join("\n").trim();
+    if (roundText && !intermediateText.includes(roundText)) intermediateText.push(roundText);
 
     if (response.stop_reason === "pause_turn") {
       // Server-side tool output and citation-bearing text are opaque SDK blocks; send the full turn back unchanged.
@@ -177,6 +186,8 @@ export async function runAssistant(input: {
             loadBreweryHistory: input.loadBreweryHistory,
             brewery: input.brewery,
             proposedActions: actions,
+            answerParts,
+            proposalRejections,
           });
           return { type: "tool_result", tool_use_id: block.id, content: result.content, is_error: result.isError };
         }),
@@ -189,11 +200,9 @@ export async function runAssistant(input: {
       if (response.content.some((block) => block.type === "server_tool_use" || block.type === "web_search_tool_result")) continue;
     }
 
-    const text = response.content
-      .filter((block): block is Anthropic.TextBlock => block.type === "text")
-      .map((block) => block.text)
-      .join("\n")
-      .trim();
+    const text = answerParts.length > 0
+      ? [...answerParts, ...(proposalRejections.length && roundText && !answerParts.includes(roundText) ? [roundText] : [])].join("\n\n")
+      : roundText || intermediateText.join("\n\n");
     // A model can stop after proposing an action without answering the original question. Ask once for
     // the missing answer, within the same round budget; never return the card as if it were the advice.
     if (!text && response.stop_reason === "end_turn" && toolCalls.length > 0 && !lastRound && !retriedEmptyAnswer) {

@@ -72,5 +72,6 @@ ikke er bygget. Inventar, smart import, automatiske kalibreringsforslag og innlo
 
 Oppskriftsutkast kan åpnes, kontrolleres og lagres i den vanlige redigereren; «Brygg denne» går deretter til batchveiviseren.
 Gjennomgang av Claude-oppsettet, TypeSafe Jev og skill-plan: [docs/assistant-review.md](docs/assistant-review.md).
-`npm run eval:assistant` viser det syntetiske kontrollsettet uten API-kall; `-- --live` er en separat, betalt prøve med
-Anthropic-nøkkelen. Ingen produksjonsdata eller databaseskriving.
+`npm run eval:assistant` viser 21 syntetiske situasjoner uten API-kall; `--compare` sammenligner Sonnet medium/high,
+Haiku er utelatt etter Brages valg. `-- --live` er en separat, betalt prøve med
+Anthropic-nøkkelen. Ingen produksjonsdata eller databaseskriving. Resultat og gjentatte prøver: [docs/assistant-evaluation.md](docs/assistant-evaluation.md).

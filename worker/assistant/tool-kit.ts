@@ -39,6 +39,9 @@ export interface ToolContext {
   loadBreweryHistory?: () => Promise<unknown>;
   /** Suggestions collected during one reply: log entries and timers, or recipe drafts. */
   proposedActions?: AssistantReplyAction[];
+  /** User-facing advice supplied with a proposal; never just a tool acknowledgement. */
+  answerParts?: string[];
+  proposalRejections?: string[];
   brewery?: BreweryToolContext;
 }
 export type BatchToolContext = ToolContext & { batch: BatchDetail };

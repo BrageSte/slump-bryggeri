@@ -215,7 +215,7 @@ describe("brewing assistant", () => {
             role: "assistant",
             model: "claude-sonnet-5",
             content: toolRound
-              ? [{ type: "tool_use", id: "proposal", name: "propose_actions", input: { actions: [
+              ? [{ type: "tool_use", id: "proposal", name: "propose_actions", input: { answer: "Målingen ligger klar til bekreftelse.", actions: [
                   { kind: "log_measurement", measurementKind: "temperature", value: 64, unit: "°C", label: "Mesketemperatur" },
                   { kind: "start_timer", label: "Mesk", durationMin: 10 },
                 ] } }]
@@ -251,6 +251,27 @@ describe("brewing assistant", () => {
       logEntryId: "client-log-id",
     });
     expect(thread.body.messages[1].actions[1]).toMatchObject({ status: "dismissed", resolvedBy: { id: user.id, name: user.name }, resolvedAt: expect.any(Number) });
+    expect((await user.get(`/breweries/${brewery}/batches/${batch}/timeline`)).body).toEqual([]);
+  });
+
+  it("stores the advice from a tool-use turn in the shared thread, ahead of its logging acknowledgement", async () => {
+    const user = await createUser("Full answer brewer");
+    const brewery = await createBrewery(user, "Full answer test");
+    const recipe = (await user.post(`/breweries/${brewery}/recipes`, { recipe: sunsetIpaRecipe })).body.id;
+    const batch = (await user.post(`/breweries/${brewery}/batches`, { recipeId: recipe })).body.id;
+    let round = 0;
+    const client: MessagesClient = { messages: { create: async () => ({
+      id: `answer-${round}`, type: "message", role: "assistant", model: "claude-sonnet-5-5",
+      content: round++ === 0 ? [
+        { type: "text", text: "18 °C følger planen. Vent med å øke, og mål SG før du vurderer gjæringen." },
+        { type: "tool_use", id: "proposal", name: "propose_actions", input: { answer: "18 °C følger planen. Vent med å øke, og mål SG før du vurderer gjæringen.", actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] } },
+      ] : [{ type: "text", text: "Målingen ligger klar til bekreftelse." }],
+      stop_reason: round === 1 ? "tool_use" : "end_turn", usage: { input_tokens: 100, output_tokens: 20 },
+    }) as Anthropic.Message } };
+    await sendAssistantMessage({ env, db: createDb(env.DB), breweryId: brewery, batchId: batch, user, content: "Vi målte 18. Bør vi øke, og hva bør vi måle?", client });
+    const thread = (await user.get(`/breweries/${brewery}/batches/${batch}/assistant/messages`)).body.messages;
+    expect(thread[1].content).toBe("18 °C følger planen. Vent med å øke, og mål SG før du vurderer gjæringen.");
+    expect(thread[1].actions).toHaveLength(1);
     expect((await user.get(`/breweries/${brewery}/batches/${batch}/timeline`)).body).toEqual([]);
   });
 

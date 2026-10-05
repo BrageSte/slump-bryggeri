@@ -133,7 +133,7 @@ Testene setter alltid en tom nøkkel og kaller aldri det ekte API-et.
 
 | Variabel | Standard | Betydning |
 |---|---|---|
-| `ASSISTANT_MODEL` | `claude-sonnet-5-5` | Modellen. `claude-haiku-4-5` er billigst, `claude-opus-5-5` er sterkest og dyrest. |
+| `ASSISTANT_MODEL` | `claude-sonnet-5-5` | Modellen. Slump bruker bare Sonnet etter Brages valg 2026-10-05; ingen automatisk Haiku-ruting. |
 | `ASSISTANT_DAILY_LIMIT` | `40` | Maks spørsmål per bryggeri per døgn (UTC). |
 | `ASSISTANT_WEB_SEARCH` | `on` | `off` deaktiverer nettsøket. |
 
@@ -144,14 +144,27 @@ og grunnversjonen av direkte nettsøk. Standardmodellen er fortsatt Sonnet 5.5.
 
 ## Kvalitet og videre plan
 
-[Gjennomgang 2026-10-05](assistant-review.md) dekker API-tilgang, modellvalg, Jev og skills. `npm run eval:assistant` viser
-åtte syntetiske norske spørsmål uten API-kall. `npm run eval:assistant -- --live` bruker den eksisterende Anthropic-nøkkelen
-og koster penger; `--model claude-haiku-4-5` sammenligner et rimeligere alternativ. Testene leser aldri produksjonsdata og
-skriver aldri en bryggelogg. Nøkkel tas fra miljøet eller `.dev.vars`, aldri fra kommandolinjen. Hvert forsøk har en estimert
-stoppgrense på 1 USD, sjekket etter hver fullførte API-respons (én respons kan gå over grensen).
-Resultater lagres under `test-results/`, som Playwright kan tømme; kopier en rapport som skal beholdes før `npm run e2e`.
-De automatiske sjekkene gjelder handlingene. Svarteksten må vurderes separat mot kriteriene i rapporten.
-Enhets-/integrasjonstestene med fake-klient tester kodekontraktene og beviser ikke modellens forståelse.
+[Gjennomgang 2026-10-05](assistant-review.md) dekker API-tilgang, modellvalg, Jev og skills.
+`npm run eval:assistant` viser 21 syntetiske norske situasjoner uten å lese API-nøkkelen eller gjøre API-kall.
+`npm run eval:assistant -- --compare --repeats 2` viser oppsettet for en gjentatt sammenligning av Sonnet medium/high.
+Legg til `--live` for betalte kall; eksempel:
+
+```bash
+npm run eval:assistant -- --live --compare --repeats 2 --concurrency 2 --budget-usd 1.35
+```
+
+Haiku er tatt ut av evalverktøyet etter Brages valg. Produksjonsmodellen og dens medium-innstilling endres ikke av en prøve.
+Testene leser aldri produksjonsdata og skriver aldri en bryggelogg. Nøkkel tas fra miljøet eller `.dev.vars`, aldri fra
+kommandolinjen. Stoppbudsjettet deles mellom alle profiler og repetisjoner og sjekkes før nye kall. Allerede sendte kall kan
+føre anslaget over grensen. Prisene er estimater; Anthropic-fakturaen er fasit.
+
+Resultater og delresultater lagres atomisk i `eval-results/`, som ikke tømmes av Playwright.
+`--resume <rapport>` kan fullføre bare budsjett-hoppede oppgaver; forbruket fra forrige del bæres videre.
+Kontekst, prompt, verktøy, profiler og repetisjoner må være identiske. Feilede API-kall krever en separat prøve. `--output` kan velge en annen fil,
+og `--case` en situasjon. Rapporten lagrer fast fixturedato, hash av kontekst/prompt/verktøy, tidligere samtaleturene,
+modellinnstilling, ordantall, svartid, cache-/tokenbruk og teksten fra hver API-runde, i tillegg til svaret appen viser.
+De automatiske sjekkene gjelder handlinger, datagrunnlag og manglende svar. Hele svarteksten må vurderes separat mot
+kriteriene i rapporten. Enhets-/integrasjonstestene med fake-klient tester kodekontraktene og beviser ikke modellens forståelse.
 
 ## Kostnad
 

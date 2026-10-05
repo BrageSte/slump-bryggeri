@@ -83,7 +83,8 @@ hva gjennomsnittskostnaden blir i produksjon. Handlingssjekkene alene skjuler vi
 
 - Sonnet besvarte delspørsmålene og hentet relevant plan. Flere svar var for lange. Et hypotetisk svar slo for sikkert fast
   at temperaturen ikke kunne være problemet. Disse funnene står fortsatt på kvalitetslisten.
-- Haiku ga i ett tilfelle ingen svartekst etter loggforslaget. Andre svar hadde dårligere forankring i planen, feil retning
+- Den gamle løperen viste i ett Haiku-tilfelle ingen svartekst etter loggforslaget. Senere fant vi at løperen kastet bort tekst
+  fra verktøyrundene, så dette kan ikke tilskrives modellen alene. Andre svar hadde dårligere forankring i planen, feil retning
   på SG ved hop creep og språkfeil. Derfor anbefales ikke automatisk overgang til Haiku som bryggrådgiver.
 - Etter denne sammenligningen er ett begrenset nytt forsøk ved tomt svar implementert og dekket med fake-klient-tester.
   Evalskriptet markerer nå fallback uten substansielt svar som feil. Det gjør ikke andre Haiku-svar bedre.
@@ -109,7 +110,7 @@ fortsatt forklaringen; appen regner tall og validerer handlinger. Skjema/kode m�
 tillatelse til å skrive eller som garanti for riktig forståelse. [TypeSafe Confidence](https://docs.typesafe.ai/confidence)
 forklarer sammenhengen mellom confidence og sannsynlighetsfordelingen.
 
-**Beslutningskriterium:** utvid til minst 20 norske tilfeller og tre kjøringer, inkludert flere kar, gamle målinger,
+**Beslutningskriterium for en eventuell senere Jev-prøve:** minst 20 norske tilfeller og tre kjøringer, inkludert flere kar, gamle målinger,
 korrigeringer og oppfølgingsspørsmål. Jev må gi færre uriktige måleforslag og bevare alle rådsspørsmål, uten alvorlige feil i
 «ikke logg»/hypoteser, og total ventetid/kostnad må være akseptabel. En måling+råd-melding skal aldri rutes til bare logging.
 Ved feil, lav sikkerhet eller timeout skal Claude beholde mulighet til å svare; ingen handling skal utføres automatisk.
@@ -146,3 +147,15 @@ Ingen nye skills eller plugins er installert i denne leveransen. Jev-skill og AP
 
 Lokal verifikasjon: `npm run typecheck`, `npm test` (465 + 1 KV = 466 tester), `npm run build`, `npm run e2e` (23 mobiltester)
 og `git diff --check`. Live-eval er separat fra CI; normale tester bruker aldri den virkelige Anthropic-nøkkelen.
+
+## Oppfølging: større evalsett og Sonnet alene
+
+Brage valgte 2026-10-05 å droppe Haiku. Videre arbeid sammenligner bare Sonnet medium/high, uten et ekstra AI-kall som
+ruter enkle spørsmål til en annen modell. De historiske tallene ovenfor er beholdt som prøvehistorikk, ikke som et forslag
+om Haiku i produksjon.
+
+Oppfølgingsarbeidet har 21 norske situasjoner, samtaleforløp, delte kar og korrigeringer. Det fant to kodefeil: tekst fra
+verktøyrunder kunne forsvinne fra brukerens svar, og variant-id-ene manglet i maskinbriefet. Begge er rettet. Loggforslag
+krever nå også en svartekst som appen viser før kortene. Modellen får ikke lage en ny «nå»-oppføring for en korreksjon eller
+historisk måling; dette håndteres i den eksisterende loggflyten med riktig tidspunkt. Fullt sammenligningsresultat og vurdering
+følger i [assistant-evaluation.md](assistant-evaluation.md).

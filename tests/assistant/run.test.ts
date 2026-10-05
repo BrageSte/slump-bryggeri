@@ -54,6 +54,20 @@ function fakeClient(responses: Anthropic.Message[]) {
 }
 
 describe("assistant tools", () => {
+  it("requires a real split id for a fermented vessel reading, even when label names the vessel", async () => {
+    const splitBatch = makeBatch({ currentStage: "fermentation" });
+    const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
+    const result = await runAssistantTool("propose_actions", { answer: "Her er rådet før loggforslagene.", actions: [
+      { kind: "log_measurement", measurementKind: "temperature", value: 18.5, unit: "°C", label: "Tropical" },
+      { kind: "log_measurement", measurementKind: "temperature", value: 20.2, unit: "°C", splitId: "pine" },
+      { kind: "log_measurement", measurementKind: "temperature", value: 19, unit: "°C", splitId: "outside-this-batch" },
+    ] }, { batch: splitBatch, proposedActions });
+    const parsed = JSON.parse(result.content);
+    expect(parsed.accepted).toHaveLength(1);
+    expect(parsed.rejected).toHaveLength(2);
+    expect(parsed.rejected[0].reason).toContain("needs a vessel's splitId");
+    expect(proposedActions).toEqual([expect.objectContaining({ splitId: "pine", value: 20.2 })]);
+  });
   it("exposes JSON schemas the Messages API accepts", () => {
     expect(assistantToolDefinitions.map((t) => t.name)).toEqual([
       "strike_temperature",
@@ -112,6 +126,7 @@ describe("assistant tools", () => {
   it("keeps valid proposed actions, reports invalid ones, and does not execute them", async () => {
     const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
     const result = await runAssistantTool("propose_actions", {
+      answer: "Her er rådet før loggforslagene.",
       actions: [
         { kind: "log_measurement", measurementKind: "temperature", value: 64, unit: "°C", label: "Mesketemperatur" },
         { kind: "log_event", type: "water_added", data: { volumeL: 3.5, temperatureC: 95 } },
@@ -174,6 +189,7 @@ describe("assistant tools", () => {
   it("accepts a proposed pH reading with its sample temperature and sample point label", async () => {
     const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
     const result = await runAssistantTool("propose_actions", {
+      answer: "Her er rådet før loggforslagene.",
       actions: [
         { kind: "log_measurement", measurementKind: "ph", value: 5.34, unit: "pH", label: "pH før kok", sampleTempC: 22 },
         { kind: "log_measurement", measurementKind: "ph", value: 5.34, unit: "pH", sampleTempC: 900 },
@@ -203,18 +219,57 @@ describe("assistant tools", () => {
 });
 
 describe("assistant loop", () => {
-  it("asks once for a missing answer after a log proposal without duplicating it", async () => {
-    const { client, requests } = fakeClient([
-      message([{ type: "tool_use", id: "t", name: "propose_actions", input: { actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] } }], "tool_use"),
-      message([], "end_turn"),
-      message([{ type: "text", text: "18 °C følger planen. Ikke øk ennå; følg målt SG." }], "end_turn"),
+  it("shows the complete answer supplied inside the proposal, without a redundant final acknowledgement", async () => {
+    const answer = "18 °C følger planen. Vent med å øke, og mål SG før du vurderer gjæringen.";
+    const { client } = fakeClient([
+      message([{ type: "tool_use", id: "proposal", name: "propose_actions", input: { answer, actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] } }], "tool_use"),
+      message([{ type: "text", text: "Målingen ligger klar til bekreftelse." }], "end_turn"),
     ]);
-    const result = await runAssistant({ client, model: "claude-haiku-4-5", brief: "Brief", batch,
-      history: [{ role: "user", content: "Vi målte 18 grader. Bør vi øke?" }], onUsage: () => {} });
-    expect(result.text).toContain("Ikke øk ennå");
+    const result = await runAssistant({ client, model: "claude-sonnet-5-5", brief: "Brief", batch, history: [{ role: "user", content: "Vi målte 18. Bør vi øke?" }], onUsage: () => {} });
+    expect(result.text).toBe(answer);
     expect(result.actions).toHaveLength(1);
-    expect(requests).toHaveLength(3);
-    expect(requests[2]?.messages.at(-1)?.content).toContain("Answer every part");
+    expect((await runAssistantTool("propose_actions", { answer, actions: [] }, { batch })).isError).toBe(true);
+  });
+
+  it("keeps the final explanation when some proposed actions were rejected", async () => {
+    const { client } = fakeClient([
+      message([{ type: "tool_use", id: "proposal", name: "propose_actions", input: { answer: "Her er rådet.", actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }, { kind: "log_measurement", measurementKind: "temperature", value: 164, unit: "°C" }] } }], "tool_use"),
+      message([{ type: "text", text: "164 °C er utenfor gyldig område og er ikke foreslått." }], "end_turn"),
+    ]);
+    const result = await runAssistant({ client, model: "claude-sonnet-5-5", brief: "Brief", batch, history: [{ role: "user", content: "18 i kar A, 164 i kar B." }], onUsage: () => {} });
+    expect(result.actions).toHaveLength(1);
+    expect(result.text).toContain("164 °C er utenfor");
+  });
+  it("returns advice that precedes a proposal instead of showing only the last acknowledgement", async () => {
+    const advice = "18 °C følger planen for dag 0. Ikke øk ennå; følg målt SG.";
+    const { client } = fakeClient([
+      message([{ type: "text", text: advice }, { type: "tool_use", id: "proposal", name: "propose_actions", input: { answer: advice, actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] } }], "tool_use"),
+      message([{ type: "text", text: "Målingen ligger klar til bekreftelse." }], "end_turn"),
+    ]);
+    const result = await runAssistant({ client, model: "claude-sonnet-5-5", brief: "Brief", batch, history: [{ role: "user", content: "Vi målte 18. Bør vi øke?" }], onUsage: () => {} });
+    expect(result.text).toBe(advice);
+    expect(result.actions).toHaveLength(1);
+  });
+
+  it("preserves earlier advice with an empty final turn and needs no extra retry", async () => {
+    const { client, requests } = fakeClient([
+      message([{ type: "text", text: "Mål SG før du konkluderer." }, { type: "tool_use", id: "plan", name: "get_batch_section", input: { section: "plan" } }], "tool_use"),
+      message([], "end_turn"),
+    ]);
+    const result = await runAssistant({ client, model: "claude-sonnet-5-5", brief: "Brief", batch, brewDocumentSections, history: [{ role: "user", content: "Er ølet ferdig?" }], onUsage: () => {} });
+    expect(result.text).toBe("Mål SG før du konkluderer.");
+    expect(requests).toHaveLength(2);
+  });
+  it("requires a prose answer with a proposal and rejects an answer-free tool call", async () => {
+    const result = await runAssistantTool("propose_actions", { actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] }, { batch, proposedActions: [] });
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain("answer");
+    const answerParts: string[] = [];
+    const proposedActions: import("../../src/domain/model/api.ts").AssistantProposedAction[] = [];
+    const answer = "18 °C følger planen. Ikke øk ennå; mål SG før du vurderer gjæringen.";
+    expect((await runAssistantTool("propose_actions", { answer, actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] }, { batch, proposedActions, answerParts })).isError).toBe(false);
+    expect(answerParts).toEqual([answer]);
+    expect(proposedActions).toHaveLength(1);
   });
 
   it("bounds an empty-answer retry even if the model stays silent", async () => {

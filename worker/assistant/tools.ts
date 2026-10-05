@@ -52,6 +52,7 @@ const waterAddedDataSchema = z.object({
   temperatureC: z.number().min(0).max(110),
   reason: z.string().trim().max(300).optional(),
 }).strict();
+const proposalAnswerSchema = z.string().trim().min(1).max(4000).describe("A concise Norwegian answer to ALL parts of the brewer's question, including advice, its basis or uncertainty and the next practical step. A logging acknowledgement is not enough when the brewer also asks for advice. For a pure logging request, a short confirmation is enough. The app displays this answer before the proposed cards.");
 
 function validateProposedAction(value: unknown, context: BatchToolContext): { action?: AssistantProposedAction; error?: string } {
   const actionResult = assistantProposedActionSchema.safeParse(value);
@@ -77,6 +78,12 @@ function validateProposedAction(value: unknown, context: BatchToolContext): { ac
     }
     if (action.splitId && !context.batch.splits.some((split) => split.id === action.splitId)) {
       return { error: "splitId does not belong to this batch." };
+    }
+    if (context.batch.splits.length > 0
+      && ["fermentation", "conditioning", "packaging"].includes(context.batch.currentStage ?? "")
+      && ["temperature", "sg", "brix", "ph", "pressure"].includes(action.measurementKind)
+      && !action.splitId) {
+      return { error: `This reading needs a vessel's splitId, not just its name in label. Available splits: ${JSON.stringify(context.batch.splits.map(({ id, name }) => ({ id, name })))}. Ask which vessel if unclear.` };
     }
     return { action };
   }
@@ -337,11 +344,12 @@ const tools = [
   batchTool({
     name: "propose_actions",
     description:
-      "Suggest only new, actual observations from this batch, or a timer the brewer requested, for confirmation. First address all questions; this tool never replaces advice. Do not propose targets, plans, hypotheticals, already logged values, or anything the brewer says not to log. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?,sampleTempC?} (for pH, label «pH før kok», «pH etter kok» or «Slutt-pH» when the stage does not already say where the sample was taken, and sampleTempC when the brewer states it); {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
+      "Suggest only new, actual observations from this batch, or a timer the brewer requested, for confirmation. Use only when there is at least one actual action to propose; otherwise answer directly without this tool. Supply answer with concise Norwegian advice addressing every question before the optional actions; the app displays answer before the cards. This tool never replaces advice. Do not propose targets, plans, hypotheticals, already logged values, corrections, historical readings needing a timestamp (this tool cannot set one), or anything the brewer says not to log. For a vessel-specific reading use splitId from the brief; the vessel name in label does not scope a measurement. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?,sampleTempC?} (for pH, label «pH før kok», «pH etter kok» or «Slutt-pH» when the stage does not already say where the sample was taken, and sampleTempC when the brewer states it); {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
     // Expose the strict action union to Claude; runAssistantTool has a tolerant item-wise fallback
     // so invalid suggestions are still reported without discarding valid siblings.
-    input: z.object({ actions: z.array(assistantProposedActionSchema).max(12) }).strict(),
-    run: ({ actions }, context) => {
+    input: z.object({ answer: proposalAnswerSchema, actions: z.array(assistantProposedActionSchema).min(1).max(12) }).strict(),
+    run: ({ answer, actions }, context) => {
+      if (!context.answerParts?.includes(answer)) context.answerParts?.push(answer);
       const accepted: { index: number; action: AssistantProposedAction }[] = [];
       const rejected: { index: number; reason: string }[] = [];
       actions.forEach((candidate, index) => {
@@ -353,7 +361,8 @@ const tools = [
           rejected.push({ index, reason: result.error ?? "Invalid action." });
         }
       });
-      return { accepted, rejected };
+      context.proposalRejections?.push(...rejected.map(({ reason }) => reason));
+      return { accepted, rejected, answerDisplayed: true, nextStep: "The app will show your supplied answer before the cards. Do not repeat it. Briefly acknowledge the proposals, or correct any rejected actions." };
     },
   }),
   ...breweryTools,
@@ -387,7 +396,7 @@ export async function runAssistantTool(name: string, input: unknown, context: To
   if (parsed.success) {
     parsedInput = parsed.data;
   } else if (name === "propose_actions") {
-    const raw = z.object({ actions: z.array(z.unknown()).max(12) }).strict().safeParse(input);
+    const raw = z.object({ answer: proposalAnswerSchema, actions: z.array(z.unknown()).min(1).max(12) }).strict().safeParse(input);
     if (!raw.success) return { content: `Invalid input: ${raw.error.message}`, isError: true };
     parsedInput = raw.data;
   } else {

@@ -341,3 +341,23 @@ får egen `recipe_sources`-rad atomisk med versjonen. Oppskriftens opprinnelige 
 Batchprompten krever svar på hele spørsmålet før et valgfritt loggforslag. Modellen skiller observasjon, mål, plan og hypotese;
 Zod og loggvalideringen håndhever datakontraktene, ikke språkforståelsen. Syntetiske live-evals er separat fra CI og vanlige
 fake-klient-tester. Claude beholdes; Jev er bare en mulig senere skyggetest, se [assistant-review.md](assistant-review.md).
+
+### Assistentens komplette svar og kar (oppfølging 2026-10-05)
+
+`runAssistant` bevarer verktøyets komplette svar foran handlingskortene; en avsluttende loggkvittering erstatter ikke rådet.
+Uten forslag brukes den fullstendige sluttteksten. Tidligere runders tekst er en reserve hvis sluttteksten mangler.
+`propose_actions` krever `answer` (bokmål, hele spørsmålet) og en ikke-tom `actions`-liste; svarteksten legges før handlingskortene.
+En redundant sluttkvittering vises ikke en gang til. Forklaringer på avviste forslag beholdes.
+Dette endrer ikke det offentlige handlingsskjemaet og krever ingen migrasjon. Maskinbriefet har karenes `splitId` ved siden av
+navn og kar. Disse id-ene legges ikke i det menneskelige bryggedokumentet. Ved gjæring/modning/pakking krever assistentens
+måleforslag for temperatur, SG/Brix, pH og trykk en variant-id når batchen har varianter; en karbeskrivelse i label er ikke nok.
+Korreksjoner og historiske målinger med tidspunkt føres gjennom den vanlige loggflyten, siden forslag ikke kan sette tid.
+
+Evalverktøyet er delt i CLI, flaggvalidering og en løper med injiserbar klient. CI kjører bare fake-klienter. Live-prøver bruker
+samme syntetiske kontekst og samtalehistorikk for Sonnet medium/high, deler stoppbudsjett og bevarer delresultater under
+`eval-results/`. Haiku-ruting er ikke i produktet; Brage valgte Sonnet alene.
+
+Samtalen åpner et nytt assistentsvar ved starten av meldingen, fremfor å rulle til bekreftelseskortet under et langt råd.
+Det gjelder også når 100-meldingersvinduet flytter seg uten å endre lengde. Sending/venting følger siste spørsmål; API-feil
+utløser ikke rulling tilbake til et gammelt assistentsvar. Mobilregresjon dekker synlig første rådslinje og ingen automatisk
+måleskriving.

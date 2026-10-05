@@ -1,69 +1,42 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import { parseEnv } from "node:util";
-import { buildAssistantBrief, buildBrewDocumentSections } from "../src/domain/brew-document/brew-document.ts";
-import { assistantIntentCases, checkIntentActions } from "../tests/fixtures/assistant-intent.ts";
-import { makeBatch } from "../tests/helpers/batch.ts";
-import { runAssistant, type AssistantUsage } from "../worker/assistant/run.ts";
-import { estimateCostUsd } from "../worker/assistant/pricing.ts";
+import { selectIntentCases } from "../tests/fixtures/assistant-intent.ts";
+import { parseEvalOptions } from "./assistant-eval/options.ts";
+import { runIntentEvaluation, summarizeEvaluation, type EvalReport } from "./assistant-eval/runner.ts";
 
-const caseFlag = process.argv.indexOf("--case");
-const cases = caseFlag < 0 ? assistantIntentCases : assistantIntentCases.filter((test) => test.id === process.argv[caseFlag + 1]);
-if (!cases.length) throw new Error("Unknown --case. Run without --live to list the case ids.");
+const options = parseEvalOptions(process.argv.slice(2));
+const cases = selectIntentCases(options.caseId);
+if (!cases.length) throw new Error("Unknown --case. Run without --live to list case ids.");
+const count = cases.length * options.profiles.length * options.repeats;
 
-/** Explicit opt-in. This never reads D1, writes a log, or sends production data. */
-if (!process.argv.includes("--live")) {
-  console.log("Synthetic intent cases (no API calls):");
-  for (const test of cases) console.log(`${test.id}: ${test.question}\n  Logging: ${test.logging}. Review: ${test.review}`);
-  console.log("Run npm run eval:assistant -- --live to use the existing Anthropic key (paid API calls, $1 estimated stop budget). Reports contain synthetic questions and answers only.");
+/** No credential access or paid calls without an explicit live flag. */
+if (!options.live) {
+  console.log(`Dry run: ${cases.length} synthetic cases, ${options.profiles.length} Sonnet profiles, ${options.repeats} repetition(s) = ${count} questions. No API calls.`);
+  for (const test of cases) console.log(`${test.id} [${test.category}]: ${test.question}\n  Expected proposals: ${test.expectedReadings.length}. Review: ${test.review}`);
+  console.log("Use --live to run paid calls. --compare selects Sonnet medium/high; --repeats 3 repeats the same fixture set. --budget-usd controls the shared estimated stop budget (default $1). Haiku is no longer evaluated.");
   process.exit(0);
 }
-
-const modelFlag = process.argv.indexOf("--model");
-const model = modelFlag >= 0 ? process.argv[modelFlag + 1] : "claude-sonnet-5-5";
-if (model !== "claude-sonnet-5-5" && model !== "claude-haiku-4-5" && model !== "claude-opus-5-5") throw new Error("Choose a model with known pricing: claude-sonnet-5-5, claude-haiku-4-5 or claude-opus-5-5.");
 const local: Record<string, string | undefined> = await readFile(".dev.vars", "utf8").then(parseEnv).catch((error: NodeJS.ErrnoException) => { if (error.code === "ENOENT") return {}; throw error; });
 const apiKey = process.env.ANTHROPIC_API_KEY?.trim() || local.ANTHROPIC_API_KEY?.trim();
-if (!apiKey) throw new Error("ANTHROPIC_API_KEY is missing. Never put a key in the command line or report.");
+if (!apiKey) throw new Error("ANTHROPIC_API_KEY is missing. Never put a key in a command line or report.");
 const client = new Anthropic({ apiKey, maxRetries: 0, timeout: 60_000 });
-const now = Date.now();
-const batch = makeBatch({ currentStage: "fermentation", stageStartedAt: now, status: "fermenting", splits: [] });
-const context = { batch, timeline: [], now };
-const sections = buildBrewDocumentSections(context);
-const brief = buildAssistantBrief(context, sections);
-let totalEstimatedUsd = 0;
-let failed = false;
-const results: unknown[] = [];
-for (const test of cases) {
-  const started = performance.now();
-  const usage: AssistantUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 };
-  try {
-    const result = await runAssistant({ client, model, brief, brewDocumentSections: sections, batch, timeline: [],
-      history: [{ role: "user", content: test.question }], webSearchEnabled: false,
-      loadBreweryHistory: async () => ({ batches: [], note: "No other measured batches in this synthetic fixture." }),
-      onUsage: (round) => {
-        for (const key of Object.keys(usage) as (keyof AssistantUsage)[]) usage[key] += round[key];
-        totalEstimatedUsd += estimateCostUsd(model, round) ?? 0;
-        // Checked after each completed response: one response can overshoot this stop budget.
-        if (totalEstimatedUsd >= 1) throw new Error("Estimated $1 stop budget reached.");
-      },
-    });
-    const errors = checkIntentActions(test.logging, result.actions);
-    if (result.stopReason !== "end_turn") errors.push(`Unexpected stop reason: ${result.stopReason}`);
-    if (!result.text.trim() || result.text.startsWith("Assistenten ga ikke noe svar")) errors.push("Missing substantive answer.");
-    failed ||= errors.length > 0;
-    results.push({ ...test, result, errors, usage, estimatedUsd: estimateCostUsd(model, usage), elapsedMs: Math.round(performance.now() - started), proseReview: "pending human review" });
-    console.log(`${test.id}: ${errors.length ? "FAIL" : "actions OK"} (${Math.round(performance.now() - started)} ms); prose needs review`);
-  } catch (error) {
-    failed = true;
-    // Avoid serialising API errors: they can contain request headers.
-    results.push({ id: test.id, error: error instanceof Anthropic.APIError ? { type: error.name, status: error.status } : { type: error instanceof Error ? error.name : "unknown" }, usage });
-    console.log(`${test.id}: stopped after an API or budget error`);
-    break;
-  }
+const path = options.output ?? options.resume ?? `eval-results/assistant-eval-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+const previous = options.resume ? JSON.parse(await readFile(options.resume, "utf8")) as EvalReport : undefined;
+await mkdir(dirname(path), { recursive: true });
+let checkpoint = Promise.resolve();
+function save(report: EvalReport) {
+  const snapshot = JSON.stringify({ ...report, summary: summarizeEvaluation(report) }, null, 2);
+  checkpoint = checkpoint.then(async () => { await writeFile(`${path}.tmp`, snapshot); await rename(`${path}.tmp`, path); });
+  return checkpoint;
 }
-await mkdir("test-results", { recursive: true });
-const path = `test-results/assistant-eval-${model}-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
-await writeFile(path, JSON.stringify({ model, webSearchEnabled: false, createdAt: new Date().toISOString(), totalEstimatedUsd, results }, null, 2));
-console.log(`Report: ${path}; estimated cost $${totalEstimatedUsd.toFixed(4)}. Inspect answers against the review criteria; action checks do not establish answer quality.`);
-process.exitCode = failed ? 1 : 0;
+console.log(`Live: ${count} questions, ${options.concurrency} concurrent tasks, estimated $${options.budgetUsd} shared stop budget. Synthetic data only; web search disabled; no database writes.`);
+const report = await runIntentEvaluation({ options, cases, client, previous, onProgress: async (record, partial) => {
+  console.log(`${partial.results.length}/${count} ${record.profileId} r${record.repetition} ${record.caseId}: ${record.status}${record.contractErrors.length ? ` FAIL ${record.contractErrors.join(" ")}` : ""}; ${record.wordCount ?? 0} words; total ~$${partial.budget.estimatedUsd.toFixed(3)}`);
+  await save(partial);
+} });
+await save(report);
+console.log(JSON.stringify(summarizeEvaluation(report), null, 2));
+console.log(`Report: ${path}. Prose needs separate review; contract checks do not establish answer quality. The estimated stop budget is checked between calls, so in-flight responses can overshoot it.`);
+process.exitCode = report.results.some((result) => result.status !== "completed" || result.contractErrors.length) ? 1 : 0;

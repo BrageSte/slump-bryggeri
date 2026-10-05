@@ -9,6 +9,34 @@ import { expect, test } from "./fixtures.ts";
  * the e2e server cannot call Anthropic.
  */
 test.describe("bryggeritråden på mobil", () => {
+  test("et langt nytt råd starter synlig foran loggkortet og oppretter ingen måling", async ({ page, request, batch }) => {
+    const usage = { requests: 0, inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0, estimatedUsd: 0 };
+    await page.route("**/api/breweries/*/assistant", (route) => route.fulfill({ json: { configured: true, model: "claude-sonnet-5-5", dailyLimit: 40, today: usage, month: usage } }));
+    const advice = "18 °C følger planen. Vent med å øke, og mål SG først.";
+    const context = Array.from({ length: 10 }, (_, index) => `${index + 1}. Følg målt SG og oppskriftens kriterier før neste steg.`).join("\n");
+    const action = { kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C", status: "pending", resolvedBy: null, resolvedAt: null, logEntryId: null };
+    let posted = false;
+    await page.route(`**/api/breweries/*/batches/${batch.id}/assistant/messages`, async (route) => {
+      if (route.request().method() === "POST") { posted = true; return route.fulfill({ json: {} }); }
+      return route.fulfill({ json: { messages: posted ? [
+        { id: "q", role: "user", content: "Vi målte 18. Bør vi øke, og hva måler vi videre?", actions: null, citations: [], author: { id: "u", name: "Brage" }, createdAt: 1 },
+        { id: "a", role: "assistant", content: `${advice}\n\n${context}`, actions: [action], citations: [], author: null, createdAt: 2 },
+      ] : [] } });
+    });
+    await page.goto(`/assistent?batch=${batch.id}`);
+    await page.getByRole("textbox", { name: "Spør Veileder" }).fill("Vi målte 18. Bør vi øke, og hva måler vi videre?");
+    await page.getByRole("button", { name: "Spør", exact: true }).click();
+    const start = page.getByText(advice, { exact: true });
+    await expect(start).toBeInViewport();
+    const conversation = page.getByRole("list", { name: "Samtale" });
+    // The answer is deliberately taller than the conversation. Its first advice must not be hidden by scrolling to the card.
+    expect(await conversation.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+    const me = await (await request.get("/api/me")).json();
+    const timeline = await (await request.get(`/api/breweries/${me.memberships[0].brewery.id}/batches/${batch.id}/timeline`)).json();
+    expect(timeline.some((entry: { measurement: unknown }) => entry.measurement)).toBe(false);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.screenshot({ path: "test-results/assistant-advice-first.png", fullPage: true });
+  });
   test("Assistent-siden gir en egen samtale om oppskrifter og bryggeriet, ved siden av batchene", async ({ page, batch }) => {
     await page.goto("/assistent");
     await expect(page.getByRole("heading", { name: "Bryggeassistent", level: 1 })).toBeVisible();
