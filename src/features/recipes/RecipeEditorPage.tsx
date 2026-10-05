@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useState, type ReactNode } from "react";
 import { useFieldArray, useForm, useWatch, type Control, type FieldError, type UseFormRegister } from "react-hook-form";
-import { useNavigate, useParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { calculateRecipeMetrics } from "../../domain/brewing-calculations/index.ts";
 import { ionInfo, ionKeys, isAcidAgent, getWaterAgent, waterAgents } from "../../domain/model/water.ts";
 import { slumpBaseWater } from "../../domain/water/slump-water.ts";
@@ -20,6 +20,8 @@ import { Button, Card, cx, ErrorState, IconButton, InlineError, inputClasses, Lo
 import { ApiError } from "../../lib/api.ts";
 import { formatNumber, formatSg } from "../../lib/format.ts";
 import { useCreateRecipe, useRecipe, useSaveRecipeVersion } from "./api.ts";
+import { useBrewery } from "../breweries/BreweryContext.tsx";
+import { readAssistantDraft, type AssistantDraftState } from "./assistant-draft.ts";
 import { SaltSuggestion } from "./SaltSuggestion.tsx";
 
 const numeric = { setValueAs: parseDecimal };
@@ -29,15 +31,22 @@ const newId = () => crypto.randomUUID();
 export function RecipeEditorPage() {
   const { recipeId } = useParams();
   const existing = useRecipe(recipeId);
+  const location = useLocation();
+  const { breweryId } = useBrewery();
+  const draft = readAssistantDraft(location.state, breweryId, recipeId);
+  // Refuse an invalid handoff rather than silently opening an empty form or another brewery's draft.
+  if (location.state?.assistantDraft && !draft) return <ErrorState error={new Error("Utkastet kan ikke åpnes her. Gå tilbake til assistenten i riktig bryggeri.")} />;
   if (recipeId && existing.isPending) return <LoadingState />;
   if (recipeId && existing.error) return <ErrorState error={existing.error} onRetry={() => void existing.refetch()} />;
   return (
     <RecipeForm
-      key={existing.data?.current.id ?? "new"}
-      initial={existing.data?.current.data ?? emptyRecipe({ mashSteps: [{ id: newId(), name: "Mesk", temperatureC: 67, durationMin: 60 }] })}
+      key={`${existing.data?.current.id ?? "new"}-${location.key}`}
+      initial={draft?.recipe ?? existing.data?.current.data ?? emptyRecipe({ mashSteps: [{ id: newId(), name: "Mesk", temperatureC: 67, durationMin: 60 }] })}
       recipeId={recipeId}
-      baseVersionId={existing.data?.current.id}
+      baseVersionId={draft ? draft.baseVersionId ?? undefined : existing.data?.current.id}
       version={existing.data?.current.version}
+      assistantDraft={draft}
+      staleDraft={Boolean(draft && recipeId && draft.baseVersionId !== existing.data?.current.id)}
     />
   );
 }
@@ -241,11 +250,15 @@ function RecipeForm({
   recipeId,
   baseVersionId,
   version,
+  assistantDraft,
+  staleDraft = false,
 }: {
   initial: RecipeDocument;
   recipeId?: string;
   baseVersionId?: string;
   version?: number;
+  assistantDraft?: AssistantDraftState | null;
+  staleDraft?: boolean;
 }) {
   const navigate = useNavigate();
   const toast = useToast();
@@ -271,17 +284,19 @@ function RecipeForm({
   const e = errors as any;
 
   async function onSubmit(parsed: RecipeDocument) {
+    if (staleDraft) return;
     setServerError(null);
+    const source = assistantDraft ? { kind: "assistant" as const, originalText: assistantDraft.request } : undefined;
     const recipe = withoutEmptyWater(parsed);
     try {
       if (recipeId && baseVersionId) {
-        await save.mutateAsync({ recipe, baseVersionId, changeNote: changeNote.trim() || undefined });
+        await save.mutateAsync({ recipe, baseVersionId, changeNote: changeNote.trim() || undefined, source });
         toast(`Lagret som v${(version ?? 0) + 1}`);
-        navigate(`/oppskrifter/${recipeId}`);
+        navigate(assistantDraft?.brewAfterSave ? `/brygg/ny?oppskrift=${recipeId}` : `/oppskrifter/${recipeId}`);
       } else {
-        const { id } = await create.mutateAsync({ recipe, source: { kind: "manual" } });
+        const { id } = await create.mutateAsync({ recipe, source: source ?? { kind: "manual" } });
         toast("Oppskriften er lagret");
-        navigate(`/oppskrifter/${id}`, { replace: true });
+        navigate(assistantDraft?.brewAfterSave ? `/brygg/ny?oppskrift=${id}` : `/oppskrifter/${id}`, { replace: true });
       }
     } catch (error) {
       setServerError(error instanceof ApiError || error instanceof Error ? error.message : "Kunne ikke lagre.");
@@ -295,6 +310,11 @@ function RecipeForm({
         title={recipeId ? "Rediger oppskrift" : "Ny oppskrift"}
         subtitle={recipeId ? `Lagring oppretter versjon ${(version ?? 0) + 1}. Tidligere batcher påvirkes ikke.` : undefined}
       />
+      {assistantDraft && <Card className="space-y-2">
+        <p className="text-small">Utkast fra assistenten. Se over ingredienser og mål før du lagrer. Ingen batch opprettes før du fullfører batchveiviseren.</p>
+        {staleDraft && <InlineError>Oppskriften har fått en nyere versjon, eller dette utkastet mangler versjonsgrunnlag. Be assistenten om et nytt utkast før du lagrer.</InlineError>}
+        {staleDraft && <Link to="/assistent?tema=bryggeri" className="inline-flex min-h-11 items-center text-primary-strong underline">Tilbake til assistenten</Link>}
+      </Card>}
       <LiveMetrics control={control} />
 
       <EditorSection title="Grunnleggende">
@@ -542,7 +562,7 @@ function RecipeForm({
       {Object.keys(errors).length > 0 && <InlineError>Noen felter må rettes før du kan lagre.</InlineError>}
       {serverError && <InlineError>{serverError}</InlineError>}
       <div className="sticky bottom-20 z-10 md:bottom-4">
-        <Button type="submit" variant="primary" size="lg" block loading={isSubmitting} className="shadow-lg">
+        <Button type="submit" variant="primary" size="lg" block loading={isSubmitting} disabled={staleDraft} className="shadow-lg">
           {recipeId ? "Lagre ny versjon" : "Lagre oppskrift"}
         </Button>
       </div>

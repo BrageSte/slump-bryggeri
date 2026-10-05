@@ -322,6 +322,10 @@ export function buildAssistantBrief(input: BrewDocumentInput, sections = buildBr
 
   return [
     sections.header,
+    // Only the machine brief needs database ids; the human brew document keeps readable names.
+    ...(input.batch.splits.length ? [
+      `Variant-id-er for verktøy (bruk splitId, ikke bare navnet i label): ${JSON.stringify(input.batch.splits.map(({ id, name, vessel }) => ({ id, name, vessel })))}`,
+    ] : []),
     sections.status,
     assistantPlanLine(input.batch),
     "## Siste logg",

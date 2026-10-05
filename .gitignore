@@ -10,3 +10,6 @@ coverage
 test-results
 playwright-report
 e2e/.auth
+
+# Explicit opt-in AI evaluations (separate from Playwright cleanup)
+eval-results

@@ -21,7 +21,8 @@
     "library:build": "node scripts/build-recipe-library.ts",
     "docs:water": "node scripts/sync-water-docs.ts",
     "db:seed:library:local": "wrangler d1 execute DB --local --file db/seeds/recipe-library.sql",
-    "db:seed:library:remote": "wrangler d1 execute DB --remote --env production --file db/seeds/recipe-library.sql"
+    "db:seed:library:remote": "wrangler d1 execute DB --remote --env production --file db/seeds/recipe-library.sql",
+    "eval:assistant": "node scripts/eval-assistant.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.129.0",

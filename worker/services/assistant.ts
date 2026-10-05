@@ -1,14 +1,19 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { sql } from "kysely";
 import { buildAssistantBrief, buildBrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
+import { buildBreweryBrief } from "../../src/domain/brew-document/brewery-brief.ts";
 import type { AssistantReply, AssistantStatus, AssistantUsageSummary } from "../../src/domain/model/api.ts";
+import type { ProfileValueSources, ProfileValues } from "../../src/domain/model/equipment-profile.ts";
+import { slumpBaseWater } from "../../src/domain/water/slump-water.ts";
 import { estimateCostUsd } from "../assistant/pricing.ts";
 import { runAssistant, type AssistantUsage, type MessagesClient } from "../assistant/run.ts";
 import type { DB } from "../lib/db.ts";
-import { HttpError } from "../lib/errors.ts";
+import { HttpError, notFound } from "../lib/errors.ts";
 import { getBatch } from "./batches.ts";
 import { getTimeline } from "./brew-log.ts";
 import { loadBreweryHistory } from "./brewery-history.ts";
+import { getActiveProfile } from "./equipment.ts";
+import { listRecipeDocuments } from "./recipes.ts";
 
 const DEFAULT_MODEL = "claude-sonnet-5-5";
 const DEFAULT_DAILY_LIMIT = 40;
@@ -139,11 +144,64 @@ function toHttpError(error: unknown, model: string): unknown {
   return error;
 }
 
+type RunScope = Pick<Parameters<typeof runAssistant>[0], "batch" | "timeline" | "brewDocumentSections" | "brewery" | "loadBreweryHistory">;
+
+/** The batch thread's grounding: the batch's own brew document, snapshots and log. */
+async function batchScope(db: DB, breweryId: string, batchId: string, now: number, history?: () => Promise<unknown>): Promise<{ brief: string; scope: RunScope }> {
+  // Scoped by brewery first: another brewery's batch id is a 404 whatever else is wrong.
+  const [batch, timeline] = await Promise.all([getBatch(db, breweryId, batchId), getTimeline(db, breweryId, batchId)]);
+  const documentInput = { batch, timeline, now };
+  const brewDocumentSections = buildBrewDocumentSections(documentInput);
+  return {
+    brief: buildAssistantBrief(documentInput, brewDocumentSections),
+    scope: {
+      batch,
+      timeline,
+      brewDocumentSections,
+      // Loaded only if the model asks for it; scoped to this brewery, excluding the batch in question.
+      loadBreweryHistory: history ?? (() => loadBreweryHistory(db, breweryId, { excludeBatchId: batchId })),
+    },
+  };
+}
+
+/** The brewery thread's grounding: the active equipment profile, the base water and the recipes of this brewery only. */
+async function breweryScope(db: DB, breweryId: string, history?: () => Promise<unknown>): Promise<{ brief: string; scope: RunScope }> {
+  const [brewery, profile, recipes] = await Promise.all([
+    db.selectFrom("breweries").select("name").where("id", "=", breweryId).executeTakeFirst(),
+    getActiveProfile(db, breweryId),
+    listRecipeDocuments(db, breweryId),
+  ]);
+  if (!brewery) throw notFound("Bryggeriet");
+  const entries = Object.entries(profile?.values ?? {});
+  const equipmentValues = Object.fromEntries(entries.map(([key, entry]) => [key, entry.value])) as ProfileValues;
+  const equipmentSources = Object.fromEntries(entries.map(([key, entry]) => [key, entry.source])) as ProfileValueSources;
+  return {
+    brief: buildBreweryBrief({
+      breweryName: brewery.name,
+      equipment: profile ? { name: profile.name, version: profile.version, values: profile.values } : null,
+      baseWater: slumpBaseWater,
+      recipes: recipes.map(({ name, style }) => ({ name, style })),
+    }),
+    scope: {
+      brewery: {
+        equipmentValues,
+        equipmentSources,
+        sourceWater: slumpBaseWater,
+        // The list is the brewery's own, so a recipe id from anywhere else is simply not found.
+        listRecipes: async () => recipes,
+        getRecipe: async (recipeId) => recipes.find((recipe) => recipe.id === recipeId) ?? null,
+      },
+      loadBreweryHistory: history ?? (() => loadBreweryHistory(db, breweryId)),
+    },
+  };
+}
+
 export async function askAssistant(input: {
   env: AssistantEnv;
   db: DB;
   breweryId: string;
-  batchId: string;
+  /** The batch whose thread this is; null for the brewery's own thread (recipes, equipment, history). */
+  batchId: string | null;
   messages: { role: "user" | "assistant"; content: string }[];
   /** Injected in tests; defaults to the real SDK client. */
   client?: MessagesClient;
@@ -156,16 +214,15 @@ export async function askAssistant(input: {
   const day = today(now);
   const model = assistantModel(env);
 
-  // Scoped by brewery first: another brewery's batch id is a 404 whatever else is wrong.
-  const [batch, timeline] = await Promise.all([getBatch(db, breweryId, input.batchId), getTimeline(db, breweryId, input.batchId)]);
+  const { brief, scope } =
+    input.batchId === null
+      ? await breweryScope(db, breweryId, input.loadBreweryHistory)
+      : await batchScope(db, breweryId, input.batchId, now, input.loadBreweryHistory);
 
   const apiKey = env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey && !input.client) {
     throw new HttpError(503, "assistant_not_configured", "Assistenten er ikke satt opp: ANTHROPIC_API_KEY mangler.");
   }
-  const documentInput = { batch, timeline, now };
-  const brewDocumentSections = buildBrewDocumentSections(documentInput);
-  const brief = buildAssistantBrief(documentInput, brewDocumentSections);
   if (!(await reserveDailyRequest(db, breweryId, day, dailyLimit(env)))) {
     throw new HttpError(429, "assistant_daily_limit", `Dagens grense på ${dailyLimit(env)} spørsmål er nådd. Den nullstilles ved midnatt (UTC).`);
   }
@@ -179,12 +236,8 @@ export async function askAssistant(input: {
       client,
       model,
       brief,
-      brewDocumentSections,
-      // Loaded only if the model asks for it; scoped to this brewery, excluding the batch in question.
-      loadBreweryHistory: input.loadBreweryHistory ?? (() => loadBreweryHistory(db, breweryId, { excludeBatchId: input.batchId })),
+      ...scope,
       history: input.messages,
-      batch,
-      timeline,
       webSearchEnabled: webSearchEnabled(env),
       onUsage: (round) => {
         usage.inputTokens += round.inputTokens;

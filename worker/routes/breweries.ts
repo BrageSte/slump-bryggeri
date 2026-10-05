@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import {
+  assistantActionStatusSchema,
+  assistantMessageInputSchema,
   createBrewerySchema,
   createInviteSchema,
   createProfileVersionSchema,
@@ -9,9 +11,11 @@ import {
 import { appBaseUrl } from "../auth/auth.ts";
 import { inviteEmail, sendEmail } from "../auth/email.ts";
 import type { AppEnv } from "../lib/context.ts";
-import { requireMember } from "../lib/middleware.ts";
+import { badRequest } from "../lib/errors.ts";
+import { enforceRateLimit, requireMember } from "../lib/middleware.ts";
 import { parseJsonBody } from "../lib/validate.ts";
 import { getAssistantStatus } from "../services/assistant.ts";
+import { getAssistantThread, resolveAssistantAction, sendAssistantMessage } from "../services/assistant-thread.ts";
 import { exportBrewery } from "../services/brewery-export.ts";
 import { attachmentRoutes } from "./attachments.ts";
 import { batchRoutes } from "./batches.ts";
@@ -119,6 +123,37 @@ export const breweryRoutes = new Hono<AppEnv>()
 
   // Brewing assistant: whether it is set up, and today's/this month's usage.
   .get("/:breweryId/assistant", async (c) => c.json(await getAssistantStatus(c.env, c.var.db, c.var.membership.breweryId)))
+
+  // The brewery's own shared thread (recipes, equipment, history), next to the per-batch threads under /batches.
+  .get("/:breweryId/assistant/messages", async (c) => c.json(await getAssistantThread(c.var.db, c.var.membership.breweryId, null)))
+  .post("/:breweryId/assistant/messages", async (c) => {
+    const { content } = await parseJsonBody(c, assistantMessageInputSchema);
+    await enforceRateLimit(c.env.ASSISTANT_RATE_LIMITER, `assistant:${c.var.membership.breweryId}`);
+    const result = await sendAssistantMessage({
+      env: c.env,
+      db: c.var.db,
+      breweryId: c.var.membership.breweryId,
+      batchId: null,
+      user: c.var.user,
+      content,
+    });
+    return c.json(result, 201);
+  })
+  .patch("/:breweryId/assistant/messages/:messageId/actions/:index", async (c) => {
+    const input = await parseJsonBody(c, assistantActionStatusSchema);
+    const actionIndex = Number(c.req.param("index"));
+    if (!Number.isSafeInteger(actionIndex) || actionIndex < 0) throw badRequest("Ugyldig handlingsnummer.");
+    await resolveAssistantAction({
+      db: c.var.db,
+      breweryId: c.var.membership.breweryId,
+      batchId: null,
+      messageId: c.req.param("messageId"),
+      actionIndex,
+      user: c.var.user,
+      ...input,
+    });
+    return c.body(null, 204);
+  })
 
   // Everything below is guarded by the membership middleware above.
   .route("/:breweryId/recipes", recipeRoutes)

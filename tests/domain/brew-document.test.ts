@@ -12,6 +12,12 @@ const batch = makeBatch({
 const timeline = sunsetTimeline();
 
 describe("brew document", () => {
+  it("provides split ids only in the machine brief, not the human document", () => {
+    const splitBatch = { ...batch, splits: [{ id: "private-split-id", name: "Tropical", vessel: "Kar A", volumeL: 10, notes: null }] };
+    const context = { batch: splitBatch, timeline: [], now: 0 };
+    expect(buildAssistantBrief(context)).toContain('"id":"private-split-id","name":"Tropical"');
+    expect(buildBrewDocument(context)).not.toContain("private-split-id");
+  });
   const input = { batch, timeline, now: Date.parse("2026-09-23T13:30:00+02:00") };
   const doc = buildBrewDocument(input);
 

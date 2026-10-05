@@ -204,7 +204,7 @@ export interface RecipeDetail {
   } | null;
 }
 
-export const recipeSourceKinds = ["manual", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
+export const recipeSourceKinds = ["manual", "assistant", "example", "library", "beerxml", "beerjson", "text", "url", "image", "pdf"] as const;
 
 export const createRecipeSchema = z.object({
   recipe: recipeDocumentSchema,
@@ -236,6 +236,8 @@ export const saveRecipeVersionSchema = z.object({
   recipe: recipeDocumentSchema,
   kind: z.enum(["normalized", "adaptation"]).default("normalized"),
   changeNote: z.string().trim().max(500).optional(),
+  /** A new source for this version; the original recipe source remains intact. */
+  source: z.object({ kind: z.literal("assistant"), originalText: z.string().min(1).max(4000) }).strict().optional(),
   /** Optimistic concurrency: the version the edit was based on. */
   baseVersionId: z.string().min(1),
 });
@@ -583,7 +585,23 @@ export const assistantActionStatusSchema = z.object({
 }).strict();
 export type AssistantActionStatusInput = z.output<typeof assistantActionStatusSchema>;
 
-export type AssistantMessageAction = AssistantProposedAction & {
+/**
+ * A recipe the brewery-level assistant designed. Only the `design_recipe` tool creates one, and every amount in it
+ * comes from the app's calculations (`designRecipe`), never from the model. Opening it as a draft saves nothing.
+ */
+export interface AssistantRecipeDraft {
+  kind: "recipe_draft";
+  recipe: RecipeDocument;
+  /** The recipe this is a new version of; null for a new recipe. */
+  baseRecipeId: string | null;
+  /** Frozen when the draft is designed, so saving a stale draft cannot overwrite a newer version. */
+  baseVersionId?: string | null;
+}
+
+/** What an assistant reply can propose: log entries and timers (batch thread) or recipe drafts (brewery thread). */
+export type AssistantReplyAction = AssistantProposedAction | AssistantRecipeDraft;
+
+export type AssistantMessageAction = AssistantReplyAction & {
   status: "pending" | "done" | "dismissed";
   resolvedBy: { id: string; name: string } | null;
   resolvedAt: number | null;
@@ -636,7 +654,7 @@ export interface AssistantStatus {
 
 export interface AssistantReply {
   reply: string;
-  actions: AssistantProposedAction[];
+  actions: AssistantReplyAction[];
   /** Calculations the assistant ran, by tool name, in order. */
   toolCalls: string[];
   citations: AssistantCitation[];

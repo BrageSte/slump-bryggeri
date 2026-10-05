@@ -108,7 +108,8 @@ export interface AssistantDailyRequestsTable {
 export interface AssistantMessagesTable {
   id: string;
   brewery_id: string;
-  batch_id: string;
+  /** NULL for the brewery-level thread (recipes, equipment, history). */
+  batch_id: string | null;
   role: "user" | "assistant";
   content: string;
   /** JSON serialized AssistantMessageAction[]; null when the assistant proposed no actions. */
