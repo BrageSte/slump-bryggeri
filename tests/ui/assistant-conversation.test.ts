@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { assistantActionLabel, assistantCitationLabel, assistantStageHint, starterQuestions } from "../../src/features/assistant/conversation.ts";
+import { emptyRecipe } from "../../src/domain/model/recipe.ts";
+import { assistantActionLabel, assistantCitationLabel, assistantStageHint, breweryStarterQuestions, starterQuestions } from "../../src/features/assistant/conversation.ts";
 
 describe("assistant thread helpers", () => {
   it("offers starter questions for the current brew stage", () => {
@@ -7,6 +8,17 @@ describe("assistant thread helpers", () => {
     expect(starterQuestions("boil")[0]).toContain("humletilsetning");
     expect(starterQuestions("fermentation")[0]).toContain("planen");
     expect(assistantStageHint("fermentation")).toContain("Spør om gjæring");
+  });
+
+  it("offers starters for the brewery thread that ask for a recipe, a change and the brewery's own numbers", () => {
+    const starters = breweryStarterQuestions();
+    expect(starters).toHaveLength(3);
+    expect(starters[0]).toContain("oppskrift");
+    expect(starters.join(" ")).toContain("historikken");
+  });
+
+  it("names a recipe draft by its recipe", () => {
+    expect(assistantActionLabel({ kind: "recipe_draft", recipe: emptyRecipe({ name: "Hazy IPA" }), baseRecipeId: null })).toBe("Utkast: Hazy IPA");
   });
 
   it("formats confirmation labels with Norwegian decimals", () => {

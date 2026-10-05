@@ -6,11 +6,12 @@ import type { MembershipContext, SessionUser } from "../lib/context.ts";
 import { atomic, isUniqueViolation, newId, parseJson, type DB } from "../lib/db.ts";
 import { conflict, forbidden, notFound } from "../lib/errors.ts";
 
-export async function listRecipes(db: DB, breweryId: string): Promise<RecipeSummary[]> {
+/** The brewery's recipes, newest change first, with the current version's document. */
+export async function listRecipeDocuments(db: DB, breweryId: string) {
   const rows = await db
     .selectFrom("recipes as r")
     .innerJoin("recipe_versions as v", "v.id", "r.current_version_id")
-    .select(["r.id", "r.name", "r.style", "r.updated_at", "v.version", "v.data"])
+    .select(["r.id", "r.name", "r.style", "r.updated_at", "v.version", "v.id as versionId", "v.data"])
     .where("r.brewery_id", "=", breweryId)
     .where("r.deleted_at", "is", null)
     .orderBy("r.updated_at", "desc")
@@ -20,9 +21,15 @@ export async function listRecipes(db: DB, breweryId: string): Promise<RecipeSumm
     name: r.name,
     style: r.style,
     version: r.version,
-    batchSizeL: (parseJson<RecipeDocument>(r.data) as RecipeDocument).batchSizeL,
+    versionId: r.versionId,
     updatedAt: r.updated_at,
+    document: parseJson<RecipeDocument>(r.data) as RecipeDocument,
   }));
+}
+
+export async function listRecipes(db: DB, breweryId: string): Promise<RecipeSummary[]> {
+  const recipes = await listRecipeDocuments(db, breweryId);
+  return recipes.map(({ document, versionId: _versionId, ...r }) => ({ ...r, batchSizeL: document.batchSizeL }));
 }
 
 /** Loads a recipe scoped to the brewery. Recipes in other breweries are reported as missing. */
@@ -212,15 +219,21 @@ export async function saveRecipeVersion(
 
   const now = Date.now();
   const versionId = newId();
+  const sourceId = input.source ? newId() : base.source_id;
   try {
     await atomic(d1, [
+      ...(input.source ? [db.insertInto("recipe_sources").values({
+        id: sourceId!, recipe_id: recipe.id, kind: input.source.kind,
+        original_text: input.source.originalText, url: null, attachment_id: null,
+        filename: null, data: null, created_by: user.id, created_at: now,
+      })] : []),
       db.insertInto("recipe_versions").values({
         id: versionId,
         recipe_id: recipe.id,
         version: base.version + 1,
         kind: input.kind,
         parent_version_id: input.baseVersionId,
-        source_id: base.source_id,
+        source_id: sourceId,
         equipment_profile_id: input.equipmentProfileId ?? null,
         data: JSON.stringify(input.recipe),
         change_note: input.changeNote ?? null,

@@ -41,12 +41,12 @@ src/domain/brew-day/state.ts       utleder «hva skjer nå / mål / målt / nest
 src/domain/brew-day/brew-plan.ts   samlet bryggeplan for alle faser (vann, mesk, kok, humle, gjær, gjæring)
 src/domain/brew-day/mash-adjustment.ts  deterministisk vannforslag fra meskemåling, oppskrift og utstyrssnapshot
 src/domain/brew-day/equipment-overview.ts  utstyrsprofilen i en batch: nøkkelverdier, kilde og advarsler (skrivebeskyttet)
-src/domain/brew-document/          bryggedokumentet og hva brygget sier om kalibreringen
+src/domain/brew-document/          bryggedokumentet, hva brygget sier om kalibreringen og briefen for bryggeritråden
 src/domain/water/                  vannkunnskap: kanonisk kildevann, veiledning, tolkning, pH-prøvepunkter (docs/water.md)
 src/domain/model/                  oppskriftsdokument (Zod), stadier, målingstyper, vann (`water.ts`), API-kontrakter
 src/domain/fixtures/sunset-ipa.ts  første referansebatch (§62)
 worker/                            Hono-app, auth, middleware, services (én fil per domene)
-worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, forslag og priser
+worker/assistant/                  bryggeassistenten: verktøy-løkke mot Claude, beregningsverktøy, oppskriftsverktøy, forslag og priser
 db/migrations/                     D1-migrasjoner (wrangler d1 migrations)
 tests/                             calculations, domain, integration
 ```
@@ -237,7 +237,7 @@ Fanen **Oppskrifter** har to visninger: bryggeriets egne oppskrifter og et søkb
 ## Navigasjon (avvik fra §5)
 
 Bunnmeny: Hjem · Brygg · Oppskrifter · Assistent · Mer (`src/components/AppShell.tsx`). Brygg viser bare batcher.
-`/assistent` er en batchliste som åpner batchens delte tråd.
+`/assistent` åpner bryggeriets egen tråd («Oppskrifter og bryggeriet», `?tema=bryggeri`) og en batchliste som åpner batchens delte tråd.
 
 ## Sanntid
 
@@ -293,7 +293,7 @@ Uten leverandør feiler innlogging utenfor localhost — med vilje, så koder al
 
 ## Kjente begrensninger
 
-- Hovedbundelen er ~124 kB gzip (Vite-rapport; vannkunnskapen la til ca. 3 kB i hovedbundelen og ca. 11 kB gzip i total oppstarts-JS). Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
+- Hovedbundelen er ~126 kB gzip (Vite-rapport; vannkunnskapen la til ca. 3 kB i hovedbundelen og ca. 11 kB gzip i total oppstarts-JS). Zod ligger i den fordi domenemodellen eksporterer schemas; å skille
   typer/etiketter fra schemas vil spare ~40–50 kB.
 - `compatibility_date` er satt til 2026-08-15 fordi test-poolens workerd ikke støtter nyere datoer ennå.
 
@@ -303,17 +303,41 @@ Claude via Anthropic-SDK-en i Workeren. Oppsett, oppførsel, verktøy, nettsøk,
 [assistant.md](assistant.md). Modell og grenser settes i `wrangler.jsonc` (`ASSISTANT_*`); nøkkelen er hemmeligheten
 `ANTHROPIC_API_KEY`.
 
-- **Kode:** `worker/services/assistant.ts` (dagskvote, bruk, feil, status), `worker/services/assistant-thread.ts`
-  (trådlagring og forslagsstatus), `worker/assistant/` (`run.ts` prompt og verktøyløkke mot Claude, `tools.ts` verktøy og
-  `propose_actions`, `pricing.ts` prisanslag). Ruter: tråd-endepunktene under `/batches/:batchId/assistant/messages` og
+- **Kode:** `worker/services/assistant.ts` (dagskvote, bruk, feil, status, og grunnlaget for hver tråd: batch eller bryggeri),
+  `worker/services/assistant-thread.ts` (trådlagring og forslagsstatus; `batchId` er `null` for bryggeritråden),
+  `worker/assistant/` (`run.ts` prompt og verktøyløkke mot Claude, `tool-kit.ts` verktøytyper og omfang, `tools.ts` verktøy og
+  `propose_actions`, `recipe-tools.ts` oppskriftsverktøyene, `pricing.ts` prisanslag). Ruter: tråd-endepunktene under
+  `/batches/:batchId/assistant/messages`, bryggeritråden under `/breweries/:id/assistant/messages` (samme tre endepunkter), og
   `GET /breweries/:id/assistant` (status og bruk). Modellen regner ikke selv; beregningsverktøyene kaller
   `src/domain/brewing-calculations/`.
+- **To tråder, to verktøysett.** Hvert verktøy har et omfang (`batch`, `brewery` eller `both`). Batchtråden får batchverktøyene
+  og de delte, bryggeritråden får de delte og `list_recipes`, `get_recipe` og `design_recipe`; løperen kjører bare verktøy i
+  trådens omfang. `runAssistant` tar enten en batch eller en `brewery` (utstyrsprofil, basisvann og oppskriftene til
+  *dette* bryggeriet, hentet med det verifiserte bryggeri-id-et), aldri begge.
+- **Oppskriftsutkast.** `design_recipe` bygger oppskriften med `designRecipe`/`applyWaterPlan` (modellen gir struktur, appen
+  regner mengdene), validerer den mot `recipeDocumentSchema` og legger den i svaret som en `recipe_draft`-handling. Bare det
+  verktøyet kan lage en slik handling; `propose_actions` kan ikke, så modellen kan ikke skrive et oppskriftsdokument selv.
+  Utkastet lagres som en del av meldingen, ikke som en oppskrift.
 - **Tabeller:** `assistant_usage` (`0009`, tokenbruk og nettsøk per modell og døgn), `assistant_daily_requests`
   (`0010`, atomisk dagskvote per bryggeri), `assistant_messages` (`0011`, én delt tråd per batch: personens id på
   spørsmål, NULL på svar, forslag som JSON), `assistant_messages.citations` og `assistant_usage.web_search_requests`
-  (`0012`). Alt er scoped til `c.var.membership.breweryId`; andre bryggerier og batcher gir 404.
+  (`0012`), og `assistant_messages.batch_id` er valgfri (`0013`; tabellen er bygget om, NULL = bryggeritråden). Alt er scoped til
+  `c.var.membership.breweryId`; andre bryggerier og batcher gir 404, og bryggeritråden og batchtrådene blandes aldri
+  (`batch_id IS NULL` mot `batch_id = ?`).
 - **Skriving:** `propose_actions` validerer forslag mot loggskjemaene og skriver aldri til bryggeloggen. Klienten
   kaller det eksisterende loggendepunktet ved bekreftelse og PATCH-er deretter utfall, person og tidspunkt på
   meldingen. Spørsmål lagres før Anthropic-kallet. Uten nøkkel svarer API-et 503 `assistant_not_configured`.
 - Batchsiden viser bryggedokumentet (`src/domain/brew-document/`) fra de eksisterende batch- og loggspørringene uten
   å skrive noe. Testene bruker bare fake Anthropic-klienter.
+
+### Assistentens utkast og intensjon (2026-10-05)
+
+Utkast overleveres i validert React Router-state med bryggeri-id, oppskrift, forespørsel og eventuell grunnversjon.
+Å åpne et utkast skriver ingenting. Vanlige oppskriftsendepunkter lagrer etter brukerens bekreftelse; hver assistentversjon
+får egen `recipe_sources`-rad atomisk med versjonen. Oppskriftens opprinnelige kilde og alle gamle versjoner beholdes.
+`baseVersionId` fryses av `design_recipe`; UI og API blokkerer gamle utkast, og medlemskontrollen gjelder som før.
+«Brygg denne» lagrer først via redigereren og åpner så eksisterende batchveiviser med valgt oppskrift.
+
+Batchprompten krever svar på hele spørsmålet før et valgfritt loggforslag. Modellen skiller observasjon, mål, plan og hypotese;
+Zod og loggvalideringen håndhever datakontraktene, ikke språkforståelsen. Syntetiske live-evals er separat fra CI og vanlige
+fake-klient-tester. Claude beholdes; Jev er bare en mulig senere skyggetest, se [assistant-review.md](assistant-review.md).

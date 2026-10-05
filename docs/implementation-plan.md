@@ -1,6 +1,6 @@
-# Implementeringsplan v0.5
+# Implementeringsplan v0.6
 
-Oppdatert 2026-10-01 (oppskrifter med assistenten, se B18 og steg 14; vann og pH som del av datamodellen, se B17 og steg 13; tidligere: bryggeplan, bryggeassistent, BeerSmith
+Oppdatert 2026-10-05 (assistentens forståelse av sammensatte spørsmål og fullført utkastflyt, se steg 14d og 15; oppskrifter med assistenten, se B18 og steg 14; vann og pH som del av datamodellen, se B17 og steg 13; tidligere: bryggeplan, bryggeassistent, BeerSmith
 som grunnlag for kalibrering og meskehjelp, se B13–B15; bryggedagen bygges om i steg 12, se B16). Levende dokument: kryss av
 oppgaver i samme PR som gjør dem ferdige.
 
@@ -19,9 +19,9 @@ før neste bryggedag.
 
 ---
 
-## 0. Slik fortsetter du i Claude Code (cloud)
+## 0. Arbeidsflyt i Claude Code eller Codex
 
-1. Åpne repoet `BrageSte/slump-bryggeri` i Claude Code på web. Oppsettsskript: `npm ci`
+1. Åpne repoet `BrageSte/slump-bryggeri` i Claude Code eller Codex. Oppsettsskript: `npm ci`
    (for `npm run dev` i tillegg `cp .dev.vars.example .dev.vars` og en tilfeldig `BETTER_AUTH_SECRET`).
 2. Ta neste åpne steg under. Én PR per steg, rett mot `main` — ikke stablede PR-er mot andre brancher.
 3. Kjør `npm run typecheck`, `npm test` og `npm run build`, se på endringen i mobilbredde, og kryss av her.
@@ -349,16 +349,51 @@ redigereren og lagre selv. Assistenten skriver ingenting selv, og modellen regne
 - [x] **14a. Omvendt saltberegning og «Foreslå salter» i oppskriftsredigereren.** `solveSaltAdditions` (rent, testet) finner gram
       gips, kalsiumklorid, epsomsalt og bordsalt som kommer nærmest målprofilen for Slumps basisvann; «Foreslå salter» under
       «Vann» viser ett kort forslag og «Legg inn som tilsetninger». Detaljer under «Hva det gir».
-- [ ] **14b. Rene funksjoner med tester:** `fitGrainBillToOg` (maltmengder som treffer OG), `fitHopsToIbu` (humlemengder som treffer
+- [x] **14b. Rene funksjoner med tester:** `fitGrainBillToOg` (maltmengder som treffer OG), `fitHopsToIbu` (humlemengder som treffer
       IBU) og `diffRecipes` (hva er endret mellom to versjoner), i `src/domain/brewing-calculations/`.
-- [ ] **14c. Assistent på bryggerinivå.** Tråd uten batch (`assistant_messages.batch_id` er NOT NULL, så dette krever en migrasjon).
-      Kontekst fra aktiv utstyrsprofil, basisvann og bryggerihistorikk. Verktøy `list_recipes`, `get_recipe` og `design_recipe`
-      (modellen gir struktur og mål; appen regner mengdene).
-- [ ] **14d. Handlinger.** «Åpne utkast» åpner redigeren forhåndsutfylt (`source.kind: "assistant"` med forespørselen som
-      `original_text`) og «Brygg denne» åpner `/brygg/ny` med oppskriften valgt. Playwright-test av begge.
+- [x] **14c. Assistent på bryggerinivå.** Én delt tråd for hele bryggeriet, lagret i `assistant_messages` med `batch_id` NULL
+      (migrasjon `0013` bygger om tabellen, eksisterende batchmeldinger er urørt). Under **Assistent → Oppskrifter og bryggeriet**.
+      - Kontekst: kort brief med aktiv utstyrsprofil (og hvor hver verdi kommer fra), Slumps basisvann og oppskriftslisten
+        (`brewery-brief.ts`); bryggerihistorikk hentes med `brewery_history`. Egen systemprompt med B18-prinsippene.
+      - Verktøy med omfang (`batch`, `brewery`, `both`): `list_recipes`, `get_recipe` og `design_recipe` finnes bare i
+        bryggeritråden, batchverktøyene bare i batchtråden. `design_recipe` tar struktur og mål (malt som andel, humle som bruk,
+        tid og IBU-andel, tørrhumle som g/L, gjær, mesk, gjæring, ønsket vannprofil) og **appen regner mengdene**
+        (`designRecipe` og `applyWaterPlan` i `brewing-calculations/recipe-design.ts`, bygget på 14a og 14b). Verktøyet har ikke
+        noe felt for mengder, og resultatet kontrolleres mot oppskriftsskjemaet.
+      - Resultatet er et utkast (`recipe_draft` i meldingens `actions`) som vises som kort med navn, stil og appens egne tall;
+        hele oppskriften på forespørsel. Bare `design_recipe` kan lage et utkast, høyst tre per svar, og ingenting lagres.
+      - Samme dagskvote, kostnadsvisning og rate limit som batchtrådene; inntil 8 verktøyrunder (6 i batchtråden).
+- [x] **14d. Handlinger.** «Åpne utkast» åpner redigereren forhåndsutfylt. Først ved «Lagre» blir forespørselen lagret som
+      kilde (`source.kind: "assistant"`, `original_text`), også som egen kilde på en ny versjon. «Brygg denne» åpner samme
+      gjennomgang og går etter lagring til `/brygg/ny` med oppskriften valgt; batchen opprettes først i veiviseren.
+      Grunnversjonen fryses når assistenten lager utkastet; et gammelt utkast blokkeres i UI, og API-et avviser samtidige
+      endringer med 409. Playwright dekker begge nye-oppskrift-flytene og gammelt versjonsutkast; integrasjonstest dekker
+      versjonskilde, uforanderlig original, ingen automatisk batch og bryggeri-isolasjon.
 
 **Akseptanse:** Fra en fritekstforespørsel kommer bryggeren til et ferdig utkast i redigereren i to trykk, med mengder fra
 appens beregninger, og ingenting er lagret før hen trykker «Lagre».
+
+---
+
+### Steg 15 — Assistenten: forstå spørsmålet før loggforslag (2026-10-05)
+
+- [x] Les hele meldingen og besvar alle delspørsmål før loggforslag. Skill nye faktiske målinger fra mål, planer,
+      hypotetiske spørsmål, sitater og allerede loggede verdier. Respekter «ikke logg». Loggkortet er valgfri bekreftelse.
+- [x] Hent oppskriftsplanen ved batchspesifikke råd når gjær, mål og tidspunkt ikke står i briefet; stabil målt SG og
+      oppskriftens kriterier brukes ved avslutning, ikke samsvar med beregnet FG eller bobling alene.
+- [x] Modelltilpasset API-oppsett: Haiku/4.5 får ingen adaptive thinking som modellen ikke støtter, og bruker enkelt, direkte nettsøk.
+      Eget cachepunkt for stabil instruks, i tillegg til brief; riktig cachepris for Opus 5.5.
+- [x] Åtte syntetiske norske evaltilfeller og eksplisitt `npm run eval:assistant -- --live`, uten produksjonsdata eller
+      databaseskriving. Automatiske handlingssjekker og separate kriterier for menneskelig vurdering av svarteksten.
+- [x] Gjennomgang av API-tilgang, modellvalg, TypeSafe Jev og skills: [assistant-review.md](assistant-review.md).
+- [ ] Utvid til minst 20 tilfeller med delte kar, tidspunkt, korreksjoner og flere samtalerunder; gjør en gjentatt sammenligning
+      av Sonnet medium/high og Haiku, med vurdering av relevans, grunnlag, fullstendighet, lengde, pris og ventetid.
+- [ ] Vurder Jev i en avgrenset skyggetest først dersom evalene fortsatt viser feil intensjon. Kriterier og skill-plan står i
+      gjennomgangen; ingen ny leverandør er integrert ennå.
+
+**Akseptanse for denne leveransen:** Et sammensatt spørsmål om 18 °C skal få råd om brygget, ikke bare loggbekreftelse.
+Plan/hypotese/sitat/gammel måling/«ikke logg» skal ikke føre til et nytt loggforslag. Faktisk ny måling vises som valgfritt kort.
+De åtte prøvene er et begrenset kontrollsett, ikke en garanti for alle spørsmål.
 
 ---
 

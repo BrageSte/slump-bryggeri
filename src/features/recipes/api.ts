@@ -1,13 +1,15 @@
+import type { z } from "zod";
 import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreatedResponse,
+  createRecipeSchema,
+  saveRecipeVersionSchema,
   LibraryRecipeDetail,
   LibrarySearchResponse,
   RecipeDetail,
   RecipeSummary,
 } from "../../domain/model/api.ts";
 import type { LibraryCategory } from "../../domain/model/library.ts";
-import type { RecipeDocument } from "../../domain/model/recipe.ts";
 import { api } from "../../lib/api.ts";
 import { saveFile } from "../../lib/save-file.ts";
 import { breweryKey } from "../breweries/api.ts";
@@ -33,7 +35,7 @@ export function useCreateRecipe() {
   const { breweryId } = useBrewery();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { recipe: RecipeDocument; source?: { kind: string } }) =>
+    mutationFn: (input: z.input<typeof createRecipeSchema>) =>
       api.post<CreatedResponse>(`/breweries/${breweryId}/recipes`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: recipesKey(breweryId) }),
   });
@@ -60,7 +62,7 @@ export function useSaveRecipeVersion(recipeId: string) {
   const { breweryId } = useBrewery();
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (input: { recipe: RecipeDocument; baseVersionId: string; changeNote?: string; kind?: "normalized" | "adaptation" }) =>
+    mutationFn: (input: z.input<typeof saveRecipeVersionSchema>) =>
       api.post<CreatedResponse>(`/breweries/${breweryId}/recipes/${recipeId}/versions`, input),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: recipesKey(breweryId) }),
   });

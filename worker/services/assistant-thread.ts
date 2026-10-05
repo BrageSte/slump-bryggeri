@@ -2,7 +2,8 @@ import type {
   AssistantCitation,
   AssistantMessageAction,
   AssistantPostResponse,
-  AssistantProposedAction,
+  AssistantRecipeDraft,
+  AssistantReplyAction,
   AssistantThreadMessage,
   AssistantThreadResponse,
 } from "../../src/domain/model/api.ts";
@@ -12,11 +13,20 @@ import { conflict, notFound } from "../lib/errors.ts";
 import { getBatch } from "./batches.ts";
 import { askAssistant, type AssistantEnv } from "./assistant.ts";
 import type { MessagesClient } from "../assistant/run.ts";
+import { draftForModel } from "../assistant/recipe-tools.ts";
 
 const THREAD_LIMIT = 100;
 const HISTORY_LIMIT = 12;
 
-function pendingActions(actions: AssistantProposedAction[] | null): AssistantMessageAction[] | null {
+/**
+ * Which thread: a batch's own (`batchId`), or the brewery's (`null`, stored with a NULL `batch_id`). Both are scoped by
+ * the verified brewery id, so the two kinds never mix and no thread is reachable from another brewery.
+ */
+async function assertThread(db: DB, breweryId: string, batchId: string | null): Promise<void> {
+  if (batchId !== null) await getBatch(db, breweryId, batchId);
+}
+
+function pendingActions(actions: AssistantReplyAction[] | null): AssistantMessageAction[] | null {
   if (!actions?.length) return null;
   return actions.map((action) => ({
     ...action,
@@ -27,13 +37,35 @@ function pendingActions(actions: AssistantProposedAction[] | null): AssistantMes
   }));
 }
 
-function modelHistory(rows: Awaited<ReturnType<typeof threadRows>>): { role: "user" | "assistant"; content: string }[] {
+type ThreadRow = Awaited<ReturnType<typeof threadRows>>[number];
+
+function draftsOf(row: Pick<ThreadRow, "role" | "actions">): AssistantRecipeDraft[] {
+  if (row.role !== "assistant") return [];
+  return (actionsFromJson(row.actions) ?? []).filter((action): action is AssistantMessageAction & AssistantRecipeDraft => action.kind === "recipe_draft");
+}
+
+/**
+ * What the model is told about the drafts it showed: the latest ones in full (so it can refine them), older ones by name.
+ * The drafts are stored with the message, not as recipes, so this is the only way the model can see them again.
+ */
+function draftNote(drafts: AssistantRecipeDraft[], full: boolean): string {
+  if (drafts.length === 0) return "";
+  const shown = full
+    ? drafts.map((draft) => JSON.stringify(draftForModel(draft))).join("\n")
+    : drafts.map((draft) => `«${draft.recipe.name}»`).join(", ");
+  return `\n\n[Utkast vist til bryggeren${full ? ", regnet av appen" : ""}: ${shown}]`;
+}
+
+function modelHistory(rows: ThreadRow[]): { role: "user" | "assistant"; content: string }[] {
+  const oldestFirst = [...rows].reverse();
+  const latestWithDraft = oldestFirst.findLastIndex((row) => draftsOf(row).length > 0);
   const history: { role: "user" | "assistant"; content: string }[] = [];
-  for (const row of [...rows].reverse()) {
+  oldestFirst.forEach((row, index) => {
+    const content = row.content + draftNote(draftsOf(row), index === latestWithDraft);
     const previous = history.at(-1);
-    if (previous?.role === row.role) previous.content += `\n\n${row.content}`;
-    else history.push({ role: row.role, content: row.content });
-  }
+    if (previous?.role === row.role) previous.content += `\n\n${content}`;
+    else history.push({ role: row.role, content });
+  });
   // The API requires a user turn at the beginning; this can happen when the 12-message window starts mid-thread.
   while (history[0]?.role === "assistant") history.shift();
   return history;
@@ -47,8 +79,8 @@ function citationsFromJson(value: string | null): AssistantCitation[] {
   return parseJson<AssistantCitation[]>(value) ?? [];
 }
 
-async function threadRows(db: DB, breweryId: string, batchId: string, limit: number) {
-  return db
+async function threadRows(db: DB, breweryId: string, batchId: string | null, limit: number) {
+  const thread = db
     .selectFrom("assistant_messages as m")
     .leftJoin("users as u", "u.id", "m.created_by")
     .select([
@@ -61,8 +93,8 @@ async function threadRows(db: DB, breweryId: string, batchId: string, limit: num
       "m.created_at",
       "u.name as author_name",
     ])
-    .where("m.brewery_id", "=", breweryId)
-    .where("m.batch_id", "=", batchId)
+    .where("m.brewery_id", "=", breweryId);
+  return (batchId === null ? thread.where("m.batch_id", "is", null) : thread.where("m.batch_id", "=", batchId))
     .orderBy("m.created_at", "desc")
     .orderBy("m.id", "desc")
     .limit(limit)
@@ -90,8 +122,8 @@ function messageFromRow(row: {
   };
 }
 
-export async function getAssistantThread(db: DB, breweryId: string, batchId: string): Promise<AssistantThreadResponse> {
-  await getBatch(db, breweryId, batchId);
+export async function getAssistantThread(db: DB, breweryId: string, batchId: string | null): Promise<AssistantThreadResponse> {
+  await assertThread(db, breweryId, batchId);
   const rows = await threadRows(db, breweryId, batchId, THREAD_LIMIT);
   return { messages: rows.reverse().map(messageFromRow) };
 }
@@ -100,14 +132,15 @@ export async function sendAssistantMessage(input: {
   env: AssistantEnv;
   db: DB;
   breweryId: string;
-  batchId: string;
+  /** The batch whose thread this is; null for the brewery's own thread. */
+  batchId: string | null;
   user: SessionUser;
   content: string;
   client?: MessagesClient;
   now?: number;
 }): Promise<AssistantPostResponse> {
   const { db, breweryId, batchId, user } = input;
-  await getBatch(db, breweryId, batchId);
+  await assertThread(db, breweryId, batchId);
 
   const createdAt = input.now ?? Date.now();
   const userId = newId();
@@ -171,22 +204,22 @@ export async function sendAssistantMessage(input: {
 export async function resolveAssistantAction(input: {
   db: DB;
   breweryId: string;
-  batchId: string;
+  batchId: string | null;
   messageId: string;
   actionIndex: number;
   user: SessionUser;
   status: "done" | "dismissed";
+  /** The log entry (batch thread) or the saved recipe (brewery thread) the action led to. */
   logEntryId?: string;
 }): Promise<void> {
-  await getBatch(input.db, input.breweryId, input.batchId);
-  const message = await input.db
+  await assertThread(input.db, input.breweryId, input.batchId);
+  const found = input.db
     .selectFrom("assistant_messages")
     .select(["id", "actions"])
     .where("id", "=", input.messageId)
     .where("brewery_id", "=", input.breweryId)
-    .where("batch_id", "=", input.batchId)
-    .where("role", "=", "assistant")
-    .executeTakeFirst();
+    .where("role", "=", "assistant");
+  const message = await (input.batchId === null ? found.where("batch_id", "is", null) : found.where("batch_id", "=", input.batchId)).executeTakeFirst();
   if (!message?.actions) throw notFound("Assistentforslaget");
 
   const actions = actionsFromJson(message.actions);
@@ -201,13 +234,12 @@ export async function resolveAssistantAction(input: {
     resolvedAt: Date.now(),
     logEntryId: input.status === "done" ? input.logEntryId ?? null : null,
   };
-  const result = await input.db
+  const update = input.db
     .updateTable("assistant_messages")
     .set({ actions: JSON.stringify(actions) })
     .where("id", "=", message.id)
     .where("brewery_id", "=", input.breweryId)
-    .where("batch_id", "=", input.batchId)
-    .where("actions", "=", message.actions)
-    .executeTakeFirst();
+    .where("actions", "=", message.actions);
+  const result = await (input.batchId === null ? update.where("batch_id", "is", null) : update.where("batch_id", "=", input.batchId)).executeTakeFirst();
   if (result.numUpdatedRows === 0n) throw conflict("Forslaget ble behandlet samtidig av noen andre. Last inn tråden på nytt.");
 }

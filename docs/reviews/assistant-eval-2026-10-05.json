@@ -1,0 +1,521 @@
+{
+  "scope": "Synthetic fixtures only; one run per model, not a benchmark or production transcript",
+  "reports": [
+    {
+      "model": "claude-sonnet-5-5",
+      "webSearchEnabled": false,
+      "createdAt": "2026-10-05T09:14:22.881Z",
+      "totalEstimatedUsd": 0.1255178,
+      "results": [
+        {
+          "id": "reading-and-advice",
+          "question": "Vi målte 18 grader i gjæringskaret nå. Er det riktig for gjæren vår, og bør vi øke temperaturen?",
+          "logging": "required",
+          "review": "Answer suitability for this batch's yeast AND whether to increase, then offer the actual reading.",
+          "result": {
+            "text": "18 °C er riktig akkurat nå. Planen for dag 0 er 18 °C (Fermoale New-E), så ikke øk temperaturen ennå.\n\nPlanen sier videre:\n- **Dag 1–2:** 18–19 °C. La gjæringen gå uforstyrret.\n- **Dag 3–5:** 20–21 °C. Da kan dere øke. Når SG nærmer seg 1.020–1.025, kan dere vurdere tørrhumling.\n\nLoggen er tom, og gjær og humle er ikke registrert som tilsatt. Hvis gjæren er strødd på, er 18 °C en god start. Mål SG som neste handling, så dere har et startpunkt å sammenligne med. Anslått OG fra oppskriften er 1.061, men det er ikke målt.",
+            "toolCalls": [
+              "get_batch_section",
+              "propose_actions"
+            ],
+            "actions": [
+              {
+                "kind": "log_measurement",
+                "measurementKind": "temperature",
+                "value": 18,
+                "unit": "°C",
+                "label": "Gjæringskar"
+              }
+            ],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 5367,
+            "outputTokens": 460,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 6594,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0344566,
+          "elapsedMs": 6819,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Besvarer temperatur og økning, henter planen og gir korrekt separat måleforslag. Fortsatt lengre enn ønsket."
+          }
+        },
+        {
+          "id": "planned-temperature",
+          "question": "Bør vi gjære denne på 18 grader, og hva bør vi følge med på?",
+          "logging": "forbidden",
+          "review": "Explain the fermentation plan and what to observe. A plan is not a measurement.",
+          "result": {
+            "text": "Ja, 18 °C er planen for dag 0. Kjøl til 18 °C, strø gjæren (Fermoale New-E) og lukk karene. Dag 1–2 går det opp til 18–19 °C, og dag 3–5 til 20–21 °C. Den gradvise økningen hjelper gjæren å gjære helt ut og rydde opp i diacetyl.\n\nDette bør dere følge med på:\n- **SG nå:** Det er ikke logget noen SG ennå. Mål OG etter kjøling og sammenlign med oppskriftsmålet 1.061. ≈ beregnet FG er 1.015.\n- **Temperatur:** Hold 18 °C den første dagen, og øk så etter planen. Gjæring gir varme, så sjekk temperaturen i vørteren og ikke bare i kjøleskapet eller rommet.\n- **Gjæraktivitet:** Bobling alene beviser ikke at gjæringen går. Bruk målt SG.\n- **Tørrhumling:** Vurder den dag 3–5, når SG nærmer seg 1.020–1.025. Deretter bør dere følge med på hop creep, altså at SG synker igjen.\n- **Før cold crash:** Oppskriften krever stabil FG over minst 3 dager og ingen tydelig diacetyl. Det er viktigere enn å treffe 1.015.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2608,
+            "outputTokens": 554,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0133936,
+          "elapsedMs": 6858,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Svar på temperatur og hva som bør følges. Ingen handling, men unødvendig full plan."
+          }
+        },
+        {
+          "id": "hypothetical",
+          "question": "Hvis vi måler 18 grader i morgen og SG ikke synker, hva sjekker vi først?",
+          "logging": "forbidden",
+          "review": "Give a useful troubleshooting order. Neither temperature nor SG was measured in this message.",
+          "result": {
+            "text": "Hvis det er 18 °C i morgen (dag 1), er det i tråd med planen. Dag 0 er 18 °C, og dag 1–2 er 18–19 °C. Temperaturen er derfor ikke problemet. Gjæren er Fermentis Fermoale New-E, og SG skal ikke ha falt mye etter bare ett døgn. Lag og aktivitet kan også være litt forsinket med tørrgjær.\n\nSjekk i denne rekkefølgen:\n1. **Ble gjæren faktisk tilsatt?** Ingen gjær er registrert som tilsatt i loggen ennå. Det betyr ikke at den ikke er tilsatt, så bekreft det med dem som brygget.\n2. **Er SG-målingen pålitelig?** Bruk helst hydrometer på en avkjølt prøve. Hvis du bruker refraktometer, er det alkoholkorrigert Brix etter at gjæringen har startet. Sammenlign med OG målt på dag 0. OG er ikke målt ennå, planen sier 1.061.\n3. **Tegn til gjæring.** Se etter kråkebolle/krøsing, trykk i gjærlåsen og temperaturen i vørteren. Bobler alene bekrefter ikke gjæring, og mangel på bobler beviser ikke stans. Karlokket kan lekke.\n4. **Gjærmengde og tilstand.** Sjekk at alle tre pakkene (3 × 11,5 g) er strødd over vørteren, og at vørteren hadde riktig temperatur ved tilsetting (18 °C).\n\nHvis ingenting er tydelig etter 24 timer til (dag 2), kan du vurdere å tilsette ekstra tørrgjær. Ikke øk temperaturen mye før du har bekreftet at gjæren er i gang. Planen går opp til 20–21 °C først på dag 3.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2630,
+            "outputTokens": 744,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0153376,
+          "elapsedMs": 8704,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Henter riktig plan og gir feilsøking. Påstanden «temperaturen er derfor ikke problemet» er for sikker. Ingen handling."
+          }
+        },
+        {
+          "id": "no-logging",
+          "question": "Ikke logg noe. Vi målte 18 grader i gjæringskaret nå. Bør vi øke, og hvordan vet vi om gjæringen er ferdig?",
+          "logging": "forbidden",
+          "review": "Answer both temperature and completion criteria without an action or confirmation question.",
+          "result": {
+            "text": "Nei, ikke øk nå. 18 °C er planlagt temperatur for dag 0, og gjæren er akkurat tilsatt eller skal tilsettes. Gjæren er Fermoale New-E. Planen sier at du holder 18 °C det første døgnet. Dag 1–2 er 18–19 °C, og dag 3–5 er 20–21 °C.\n\n**Når bør vi øke?**\n- Følg planen og øk først etter aktiv gjæring, til 20–21 °C på dag 3–5.\n- Å øke tidlig gir mer estere og fusel, og det passer dårlig i en ren, humledrevet IPA.\n- Pitching er ikke logget. Bekreft at gjæren faktisk er strødd på, og mål SG nå som startverdi. Oppskriftens OG-mål er 1.061.\n\n**Hvordan vet vi at gjæringen er ferdig?**\n- Bobler i luftlåsen er ikke bevis. Det som teller er stabil målt SG.\n- Oppskriften krever stabil FG over minst 3 dager og ingen tydelig diacetyl før cold crash.\n- Det beregnede FG-målet på ≈1.015 er bare et estimat. Gjæringen er ferdig når målingene er stabile, ikke når SG treffer 1.015.\n- Mål SG på samme tid hver dag. Tørrhumling er planlagt på dag 4, når SG nærmer seg 1.020–1.025.\n- Etter tørrhumling må du følge med på hop creep, som gir SG-fall igjen. Ikke start cold crash før SG har stått stabilt i 3 dager.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2667,
+            "outputTokens": 644,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0144116,
+          "elapsedMs": 7760,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Besvarer økning og ferdig gjæring uten handling; bruker oppskriftens stabilitetskrav. For langt."
+          }
+        },
+        {
+          "id": "already-logged",
+          "question": "Temperaturen på 18 grader er allerede logget. SG virker stabil, men det bobler. Er ølet ferdig, og kan vi kaldkrasje?",
+          "logging": "forbidden",
+          "review": "Do not relog 18 or invent an SG value. Answer completion and cold crash; bubbles alone are not enough.",
+          "result": {
+            "text": "Jeg kan ikke bekrefte at ølet er ferdig, og jeg vil ikke anbefale kaldkrasj nå.\n\n- **Loggen:** Den er tom. Det står hverken 18 °C, SG-målinger, gjærtilsetning eller tørrhumling der, og batchen står på dag 0. Jeg ser derfor ingen SG-verdier eller datoer som viser at SG er stabil. Hvis du har målt 18 °C og SG, ligger de et annet sted enn i dette dokumentet.\n- **Boblene:** De viser ikke at gjæringen er ferdig. Stabil gravitet må måles.\n- **Oppskriftens kriterier:** Før kaldkrasj skal FG være stabil over minst 3 dager, og det skal ikke være tydelig diacetyl. Tørrhumlingen skal også være gjort. Den er planlagt på dag 4 og kommer etter at SG nærmer seg 1.020–1.025. Etter den skal ølet stå 3 dager på 20–21 °C. Kaldkrasjen er planlagt på 1–3 °C i 2 døgn, med god oksygenbeskyttelse.\n- **FG:** ≈ beregnet FG er 1.015. Det er bare et estimat, så ølet er ikke ferdig fordi SG treffer det tallet.\n\n**Neste steg:** Mål SG daglig med hydrometer eller refraktometer. Husk alkoholkorrigering på refraktometer. Vent til tre målinger over minst 3 dager er like, og smak på diacetyl. Si fra hvilke SG-verdier og datoer dere har, så sjekker jeg om kriteriet er oppfylt.",
+            "toolCalls": [
+              "get_batch_section",
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2862,
+            "outputTokens": 794,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0163016,
+          "elapsedMs": 9041,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Oppdager at fixture-loggen faktisk er tom, etterspør målinger og gir kriterier. Ingen duplikat. Oppskriftens kriterier brukes."
+          }
+        },
+        {
+          "id": "other-batch",
+          "question": "På forrige batch målte vi 18 grader. Bør denne følge samme temperatur, eller noe annet?",
+          "logging": "forbidden",
+          "review": "Compare with this batch's yeast/plan. Do not log another batch's temperature here.",
+          "result": {
+            "text": "Nei, denne batchen bør ikke ligge på 18 °C hele veien. Oppskriften starter på 18 °C og stiger så gradvis.\n\n- **Kjøl til og dag 0:** 18 °C, og gjæren (Fermoale New-E) strøs på da. Det samsvarer med temperaturen dere målte sist.\n- **Dag 1–2:** 18–19 °C under aktiv gjæring.\n- **Dag 3–5:** 20–21 °C. Tørrhumling er planlagt på dag 4, eller når SG nærmer seg 1.020–1.025.\n- **Etter tørrhumling og frem til cold crash:** fortsatt 20–21 °C. Cold crash (1–3 °C) kommer først når FG har vært stabil i minst 3 dager og det ikke er tydelig diacetyl.\n\nDen høyere temperaturen mot slutten hjelper gjæren å gjære helt ut og rydde opp etter seg. Hold 18 °C nå, og følg planen videre ut fra målt SG, ikke bare kalenderen. SG er ikke målt ennå, så neste steg er å måle SG ved gjærtilsetning.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2665,
+            "outputTokens": 527,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0132376,
+          "elapsedMs": 6553,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Bruker denne batchens plan uten å logge gammel måling. Langt; har bare oppgitt temperatur fra forrige batch, ingen historisk vurdering."
+          }
+        },
+        {
+          "id": "quotation",
+          "question": "Oppskriften sier «gjær på 18 grader». Hva betyr det for oss, og skal vi måle lufta eller selve ølet?",
+          "logging": "forbidden",
+          "review": "Interpret the target and explain where to measure; a quoted target is not an observation.",
+          "result": {
+            "text": "«Gjær på 18 grader» betyr at vørteren skal være 18 °C når dere tilsetter gjæren, og at den skal holdes der første døgnet. Dere skal altså måle selve ølet, ikke lufta i rommet.\n\n- **Kjøling:** Planen sier «Kjøl til 18 °C». Det er temperaturen i vørteren i gjæringskaret når dere strør på Fermoale New-E (Tropical og Pine). Dag 0 er 18 °C i 1 døgn.\n- **Videre:** Dag 1–2 er 18–19 °C, og dag 3–5 er 20–21 °C. Det samme gjelder da: ølets temperatur.\n- **Måling:** Bruk en sonde eller termometerlomme i vørteren. Et termometer på utsiden av karet eller i rommet kan avvike mye, særlig når gjæringen setter i gang og ølet blir varmere enn lufta rundt.\n- **Neste steg:** Mål temperaturen i vørteren før dere tilsetter gjæren. Hvis den er over 18 °C, kjøl litt ned først. Mål også SG, siden det er neste handling i dokumentet.\n\nIngen temperatur, gjær eller SG er logget ennå, så jeg kan ikke bekrefte at noe av dette er gjort.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2668,
+            "outputTokens": 560,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0135736,
+          "elapsedMs": 6878,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Skiller mål fra måling og øl fra luft; bruker planen. Ingen handling. Mer detaljert enn nødvendig."
+          }
+        },
+        {
+          "id": "log-only",
+          "question": "Logg at vi målte 18 grader i gjæringskaret nå.",
+          "logging": "required",
+          "review": "Offer exactly that measurement with a concise acknowledgement; do not ask permission twice.",
+          "result": {
+            "text": "Jeg har lagt frem en logging av 18 °C i gjæringskaret. Bekreft den på kortet.",
+            "toolCalls": [
+              "propose_actions"
+            ],
+            "actions": [
+              {
+                "kind": "log_measurement",
+                "measurementKind": "temperature",
+                "value": 18,
+                "unit": "°C",
+                "label": "Gjæringskar"
+              }
+            ],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 389,
+            "outputTokens": 139,
+            "cacheReadTokens": 13188,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0048056,
+          "elapsedMs": 2858,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Kort, korrekt måleforslag med kortbekreftelse."
+          }
+        }
+      ],
+      "codeState": "After intent-prompt changes; before the bounded empty-answer retry and basic search compatibility changes. Web search was disabled."
+    },
+    {
+      "model": "claude-haiku-4-5",
+      "webSearchEnabled": false,
+      "createdAt": "2026-10-05T09:16:06.890Z",
+      "totalEstimatedUsd": 0.04523195,
+      "results": [
+        {
+          "id": "reading-and-advice",
+          "question": "Vi målte 18 grader i gjæringskaret nå. Er det riktig for gjæren vår, og bør vi øke temperaturen?",
+          "logging": "required",
+          "review": "Answer suitability for this batch's yeast AND whether to increase, then offer the actual reading.",
+          "result": {
+            "text": "Assistenten ga ikke noe svar. Prøv igjen.",
+            "toolCalls": [
+              "get_batch_section",
+              "propose_actions"
+            ],
+            "actions": [
+              {
+                "kind": "log_measurement",
+                "measurementKind": "temperature",
+                "value": 18,
+                "unit": "°C",
+                "label": "Gjæringstemp dag 0"
+              }
+            ],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [
+            "Missing substantive answer (identified during manual review)."
+          ],
+          "usage": {
+            "inputTokens": 5493,
+            "outputTokens": 417,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 4963,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.01477435,
+          "elapsedMs": 6653,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Feil: intet substansielt svar, bare måleforslag og appens fallbacktekst. Oppfølgende kode legger inn ett nytt svarforsøk."
+          }
+        },
+        {
+          "id": "planned-temperature",
+          "question": "Bør vi gjære denne på 18 grader, og hva bør vi følge med på?",
+          "logging": "forbidden",
+          "review": "Explain the fermentation plan and what to observe. A plan is not a measurement.",
+          "result": {
+            "text": "18 °C er **akkurat det oppskriften sier du skal gjære på i dag 0** – det er starttemperaturen. Fra dag 1–2 skal du holde den på 18–19 °C, deretter øke til 20–21 °C fra dag 3 når graviteten nærmer seg målene.\n\n**Hva du skal følge med på:**\n\n1. **Graviteten hver dag** – start med å måle SG i dag (dag 0), så du vet når gjæringen er aktiv. Når den kommer ned mot 1.020–1.025 omkring dag 3–5, skal du vurdere tørrhumling (dry hop) med de angivne hopemengdene.\n\n2. **Temperaturstabilitet** – holdt ved 18 °C i dag og 18–19 °C dag 1–2, så øk til 20–21 °C fra dag 3. Temperaturendringer påvirker både gjæringshastighetog smaksutvikling.\n\n3. **Stabil FG** – før du gjør noe mer, må du se at graviteten er stabil over minst 3 dager (samme avlesning flere dager på rad). Oppskriften sier også å sjekke for diacetyl-smak (smør) på dette stadiet.\n\n4. **Hop creep** – etter tørrhumling dag 4 skal du holde øye med at graviteten stiger igjen (hop creep), som påvirker slutt-alkoholinnholdet.\n\nStart med å måle SG i dag så snart vørteren er avkjølt til romtemperatur.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2710,
+            "outputTokens": 503,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0062176,
+          "elapsedMs": 7201,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Besvarer spørsmålet, men sier feilaktig at SG stiger ved hop creep. Ingen handling."
+          }
+        },
+        {
+          "id": "hypothetical",
+          "question": "Hvis vi måler 18 grader i morgen og SG ikke synker, hva sjekker vi først?",
+          "logging": "forbidden",
+          "review": "Give a useful troubleshooting order. Neither temperature nor SG was measured in this message.",
+          "result": {
+            "text": "Dette er en hypotetisk situasjon, så jeg gir deg diagnostisering uten å foreslå logging nå.\n\nHvis temperaturen er stabil på 18 °C men SG ikke synker, sjekker du først:\n\n1. **At gjæringen faktisk har startet** – er det bobler i airlock eller tegn på aktivitet? Gjær kan være treg de første 24–48 timene.\n\n2. **OG-målingen** – var utgangsgraviteten (OG) faktisk målt og logget? Om den ikke er bekreftet, vet du ikke om gjæringen er treig eller om SG er der det skal være.\n\n3. **Temperaturhistorikken** – har kjølingen vært jevn, eller har det vært variasjoner som forsinker gjæring? En kald start under optimal gjæringstemperatur kan forsinke aktiviteten.\n\n4. **Gjæringstilstanden** – var gjæren aktiv ved tilsetting? Hvis den var fra kaldt lager eller svak, kan den trenge mer tid før synlig aktivitet.\n\nKort sagt: mål OG raskt hvis det ikke allerede er gjort, og vent til dag 2–3 før du konkluderer at noe er galt. IPA-gjær er vanligvis aktiv innen 24–36 timer. Når du måler i morgen, logg både SG og temperaturen så du har et referansepunkt.\n\nHva er oppskriftens gjæringsplan – hvilken gjær brukes og hva er måltemperaturen?",
+            "toolCalls": [],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 351,
+            "outputTokens": 392,
+            "cacheReadTokens": 4963,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0028073,
+          "elapsedMs": 6265,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Ingen handling, men henter ikke planen og ber brukeren om opplysninger appen kan hente. Inviterer til logging likevel."
+          }
+        },
+        {
+          "id": "no-logging",
+          "question": "Ikke logg noe. Vi målte 18 grader i gjæringskaret nå. Bør vi øke, og hvordan vet vi om gjæringen er ferdig?",
+          "logging": "forbidden",
+          "review": "Answer both temperature and completion criteria without an action or confirmation question.",
+          "result": {
+            "text": "**18 °C er passende for planen din.** Sunset IPA bruker en gjær som typisk gjærer best mellom 18–22 °C, så du ligger godt. Det er ingen grunn til å øke температатурen nå.\n\n**Gjæringen er ferdig når:**\n- SG har stabilisert seg over minst 2–3 dager (samme eller nærmest samme lesing to ganger)\n- Oppskriften din målretter mot FG ≈ 1.015\n- Oppskriften sin gjæringskriterium (gjerne \"stable SG for 2 days\" eller lignende) er oppfylt\n\nMål SG før du gjør noe mer — det er det neste steget i planen. Etter det vet du hvor du starter, og du kan følge gravitasjonen ned og avgjøre når den flatter ut. En typisk IPA som denne tar 7–14 dager ved 18 °C, men hver gjær og ingrediens varierer. Logg målingene dine etter hvert, så ser du trenden selv.",
+            "toolCalls": [],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 368,
+            "outputTokens": 273,
+            "cacheReadTokens": 4963,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0022293,
+          "elapsedMs": 4421,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Ingen handling, men ubegrunnet gjærtemperaturområde, påstått kriterium og fremmedspråklig tekst. Oppfordrer likevel til logging."
+          }
+        },
+        {
+          "id": "already-logged",
+          "question": "Temperaturen på 18 grader er allerede logget. SG virker stabil, men det bobler. Er ølet ferdig, og kan vi kaldkrasje?",
+          "logging": "forbidden",
+          "review": "Do not relog 18 or invent an SG value. Answer completion and cold crash; bubbles alone are not enough.",
+          "result": {
+            "text": "Planen sier klart: du er på **dag 0** og skal la aktiv gjæring gå uforstyrret hele dag 1–2. Bobler alene er ikke bevis for at gjæringen er ferdig – det er helt normalt at ny gjær produserer mye CO₂ de første dagene, særlig med tre pakker gjær.\n\n**SG stabil på dag 0 betyr ikke at fermentasjonen er komplett.** Sjekk hvor mange dager siden du inokulerte. Oppskriften krever stabil FG over minst 3 dager før du kan kaldkrasje – og det skjer ikke før dag 6–10 avhengig av hvor høyt den når. Målgravet er ≈ 1.015, så mål SG igjen på dag 3–4 for å se utviklingen.\n\n**Kaldkrasj nå ville risikere å fange fermentasjonen i midten og gi diacetyl.** Vent til SG stabiliserer seg, deretter 3 dager stabil før kaldkrasj til 1–3 °C.\n\nHva viser SG nå, og hvor mange timer/dager siden innokuleringen?",
+            "toolCalls": [
+              "get_batch_section",
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2844,
+            "outputTokens": 432,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0059966,
+          "elapsedMs": 6408,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Henter kontekst og ingen duplikat. Overdriver sikkerhet om pitching/aktivitet fra en tom logg."
+          }
+        },
+        {
+          "id": "other-batch",
+          "question": "På forrige batch målte vi 18 grader. Bør denne følge samme temperatur, eller noe annet?",
+          "logging": "forbidden",
+          "review": "Compare with this batch's yeast/plan. Do not log another batch's temperature here.",
+          "result": {
+            "text": "Nei, denne batchen skal gjære på **18 °C dag 0, deretter 18–19 °C dag 1–2, og så 20–21 °C fra dag 3 og framover** – ikke konstant 18 °C hele veien. Oppskriften planlegger en gradvis varmskifting når gjæringen tar fart og når SG nærmer seg 1.020–1.025 (tørrhumling).\n\n18 °C var trolig starttemperaturen på forrige batch også, men uten å vite hva som skjedde der etter, kan jeg ikke si om det fulgte samme trinn eller ikke. Starter dere denne på 18 °C som planlagt?",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2719,
+            "outputTokens": 272,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.005071600000000001,
+          "elapsedMs": 4240,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Riktig denne-batch-plan, ingen handling; spekulerer om forrige batch."
+          }
+        },
+        {
+          "id": "quotation",
+          "question": "Oppskriften sier «gjær på 18 grader». Hva betyr det for oss, og skal vi måle lufta eller selve ølet?",
+          "logging": "forbidden",
+          "review": "Interpret the target and explain where to measure; a quoted target is not an observation.",
+          "result": {
+            "text": "**«Gjær på 18 grader» betyr gjæringsvæsken selv – altså ølet som gjærer, ikke luften rundt.**\n\nOppskriften din starter på **18 °C dag 0–2** (aktiv gjæring), så varmer opp til **20–21 °C fra dag 3 og framover**. Det er ølet du skal kontrollere. Lufttemperaturen rundt gjæringskaret påvirker det, men ølet selv kan skille seg noe fra lufta avhengig av gjæringsheat og isolasjon – gjær produserer litt varme mens den jobber aktivt.\n\n**Praktisk:** Mål temperaturen på **ølsiden av gjæringskaret** (ikke lufta) med en påklistret termometer eller en prøve, helst rundt samme tidspunkt hver dag. På dag 3 når SG nærmer seg målene 1.020–1.025, skrur du varmen opp. Oppskriften ber deg også sjekke tørrhumling og diacetyl rundt dag 4.\n\nNeste steg er å måle SG på dag 0 (i dag eller i morgen når gjæringen er i gang), slik planen sier.",
+            "toolCalls": [
+              "get_batch_section"
+            ],
+            "actions": [],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 2717,
+            "outputTokens": 386,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.005639600000000001,
+          "elapsedMs": 6034,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Besvarer hvor det måles, ingen handling. Mister skillet mellom dag 0 og dag 1–2."
+          }
+        },
+        {
+          "id": "log-only",
+          "question": "Logg at vi målte 18 grader i gjæringskaret nå.",
+          "logging": "required",
+          "review": "Offer exactly that measurement with a concise acknowledgement; do not ask permission twice.",
+          "result": {
+            "text": "Målinga er klar til logging: 18 °C i gjæringskaret. Bekreft når du er klar.",
+            "toolCalls": [
+              "propose_actions"
+            ],
+            "actions": [
+              {
+                "kind": "log_measurement",
+                "measurementKind": "temperature",
+                "value": 18,
+                "unit": "°C",
+                "label": "Gjæringskaret"
+              }
+            ],
+            "citations": [],
+            "stopReason": "end_turn"
+          },
+          "errors": [],
+          "usage": {
+            "inputTokens": 853,
+            "outputTokens": 130,
+            "cacheReadTokens": 9926,
+            "cacheWriteTokens": 0,
+            "webSearchRequests": 0
+          },
+          "estimatedUsd": 0.0024955999999999997,
+          "elapsedMs": 2199,
+          "proseReview": {
+            "reviewer": "Codex (manual reading, not an independent blind rating)",
+            "notes": "Kort, korrekt måleforslag."
+          }
+        }
+      ],
+      "codeState": "After intent-prompt changes; before the bounded empty-answer retry and basic search compatibility changes. Web search was disabled."
+    }
+  ]
+}

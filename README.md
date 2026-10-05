@@ -50,20 +50,27 @@ kan endres fra batchmenyen.
 | 1 Brewery | Bryggerier, medlemmer, invitasjoner, roller, utstyr, versjonert kalibreringsprofil, BeerSmith-avvik som advarsel | ✅ |
 | 2 Recipes | Normalisert oppskriftsmodell, manuell editor, versjoner, skalering, tilpasning til bryggeriet, oppskriftsbibliotek (415 DIY Dog-oppskrifter) | ✅ inkl. BeerSmith-import (.bsmx) med originalfilen tatt vare på |
 | 3 Brew Day | Batcher med snapshots, stadier, mål vs. målt, mesketemperaturhjelp, tilsetninger, felles logg, kommentarer, bilder (R2), split-gjæring, enheter, pH-strips, korrigering, gjæring per variant med graf, etterregistrering, resultater per variant, bryggerapport (PDF), delte timere og alarmer | ✅ |
-| 4 Assistant | Delt Veileder-tråd per batch, Claude med bryggedokumentet og bryggeriets egne beregninger, bekreftbare loggforslag, avgrenset nettsøk med kilder og kostnadsanslag | ✅ se [docs/assistant.md](docs/assistant.md) |
+| 4 Assistant | Delt Veileder-tråd per batch, Claude med bryggedokumentet og bryggeriets egne beregninger, bekreftbare loggforslag, avgrenset nettsøk med kilder og kostnadsanslag. En tråd for hele bryggeriet leser oppskrifter, utstyr og historikk og lager oppskriftsutkast der appen regner mengdene | ✅ se [docs/assistant.md](docs/assistant.md) |
 
 Bryggedagen viser hele bryggeplanen samtidig (2026-09-28). Meskekortet kan foreslå og loggføre vann for
 temperaturjustering. BeerSmith-kalibreringsstartpunkt viser veiledende advarsel ved store avvik eller gammel
 kildedato. Vann og pH er en del av datamodellen (2026-10-01): Slumps basisvann fra Holsfjorden med kilde, planlagt vann,
-salter og syre, og pH med prøvepunkt og temperatur ([docs/water.md](docs/water.md)); kalkulatorer for salt, syre og pH-modell
-er ikke bygget. Inventar, smart import, automatiske kalibreringsforslag og innlogging for andre er strøket. Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
+salter og syre, og pH med prøvepunkt og temperatur ([docs/water.md](docs/water.md)); omvendt saltberegning er bygget, mens syredosering og pH-modell
+ikke er bygget. Inventar, smart import, automatiske kalibreringsforslag og innlogging for andre er strøket. Rekkefølgen videre står i [implementeringsplanen](docs/implementation-plan.md).
 
 ## Dokumentasjon
 
-- **[Implementeringsplan v0.5](docs/implementation-plan.md)** — steg 1–13 og oppdateringer
+- **[Implementeringsplan v0.6](docs/implementation-plan.md)** — steg 1–15 og oppdateringer
 - [Arkitektur](docs/architecture.md)
 - [Bryggeassistenten](docs/assistant.md) — oppsett, oppførsel, kostnad
 - [Designsystem](docs/design-system.md)
 - [Vann og pH](docs/water.md) — Slumps basisvann, kunnskap, målestrategi, hva som mangler
 - [Beregningsmotor](docs/calculations.md)
 - [BeerSmith-import (BSMX)](docs/import-bsmx.md)
+
+### Assistentkvalitet og videre arbeid
+
+Oppskriftsutkast kan åpnes, kontrolleres og lagres i den vanlige redigereren; «Brygg denne» går deretter til batchveiviseren.
+Gjennomgang av Claude-oppsettet, TypeSafe Jev og skill-plan: [docs/assistant-review.md](docs/assistant-review.md).
+`npm run eval:assistant` viser det syntetiske kontrollsettet uten API-kall; `-- --live` er en separat, betalt prøve med
+Anthropic-nøkkelen. Ingen produksjonsdata eller databaseskriving.

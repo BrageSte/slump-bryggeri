@@ -2,10 +2,11 @@ import { useSearchParams } from "react-router";
 import { buildBrewDocument } from "../../domain/brew-document/brew-document.ts";
 import type { AssistantStatus, BatchSummary } from "../../domain/model/api.ts";
 import { brewStageLabels } from "../../domain/model/brewing.ts";
-import { Button, Card, EmptyState, ErrorState, ListCard, ListLink, LoadingState, PageHeader, StatusChip, useToast } from "../../design-system/index.ts";
+import { Button, Card, EmptyState, ErrorState, Icon, ListCard, ListLink, LoadingState, PageHeader, Section, StatusChip, useToast } from "../../design-system/index.ts";
 import { useBatch, useBatches, useTimeline } from "../batches/api.ts";
 import { statusLabel, statusTones } from "../batches/helpers.ts";
 import { AssistantThread } from "./AssistantThread.tsx";
+import { BreweryThread } from "./BreweryThread.tsx";
 import { useAssistantStatus } from "./api.ts";
 
 function usd(value: number | null): string {
@@ -60,6 +61,8 @@ export function AssistantPage() {
     return <><PageHeader title="Bryggeassistent" /><ErrorState error={batches.error ?? status.error} onRetry={() => void (batches.refetch(), status.refetch())} /></>;
   }
 
+  if (params.get("tema") === "bryggeri") return <BreweryConversation configured={status.data.configured} />;
+
   const choices = activeFirst(batches.data);
   const batchId = params.get("batch");
   const selected = batchId ? choices.find((batch) => batch.id === batchId) ?? null : null;
@@ -68,24 +71,43 @@ export function AssistantPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Bryggeassistent" subtitle="Velg et brygg for å spørre. Samtalen deles med hele bryggeriet." />
+      <PageHeader title="Bryggeassistent" subtitle="Velg en samtale. Samtalene deles med hele bryggeriet." />
       {!status.data.configured && <SetupCard />}
-      {choices.length === 0 ? (
-        <EmptyState icon="kettle" title="Ingen batcher ennå">Assistenten svarer om et konkret brygg. Opprett en batch først.</EmptyState>
-      ) : (
-        <ListCard>
-          {choices.map((batch) => (
-            <ListLink
-              key={batch.id}
-              to={`/assistent?batch=${batch.id}`}
-              title={<><span className="text-muted tabular">#{batch.number}</span> {batch.name}</>}
-              subtitle={batch.currentStage && batch.status !== "completed" ? brewStageLabels[batch.currentStage] : batch.recipe.name}
-              trailing={<StatusChip tone={statusTones[batch.status]}>{statusLabel(batch.status)}</StatusChip>}
-            />
-          ))}
-        </ListCard>
-      )}
+      <ListCard>
+        <ListLink
+          to="/assistent?tema=bryggeri"
+          icon={<Icon name="book" className="shrink-0 text-primary-strong" />}
+          title="Oppskrifter og bryggeriet"
+          subtitle="Lag eller endre en oppskrift, spør om utstyr og historikk"
+        />
+      </ListCard>
+      <Section title="Et brygg">
+        {choices.length === 0 ? (
+          <EmptyState icon="kettle" title="Ingen batcher ennå">Spørsmål om et konkret brygg krever en batch. Opprett en først.</EmptyState>
+        ) : (
+          <ListCard>
+            {choices.map((batch) => (
+              <ListLink
+                key={batch.id}
+                to={`/assistent?batch=${batch.id}`}
+                title={<><span className="text-muted tabular">#{batch.number}</span> {batch.name}</>}
+                subtitle={batch.currentStage && batch.status !== "completed" ? brewStageLabels[batch.currentStage] : batch.recipe.name}
+                trailing={<StatusChip tone={statusTones[batch.status]}>{statusLabel(batch.status)}</StatusChip>}
+              />
+            ))}
+          </ListCard>
+        )}
+      </Section>
       <UsageLine status={status.data} />
+    </div>
+  );
+}
+
+function BreweryConversation({ configured }: { configured: boolean }) {
+  return (
+    <div className="space-y-3">
+      <PageHeader back="/assistent" title="Oppskrifter og bryggeriet" subtitle="Delt samtale for hele bryggeriet" />
+      <BreweryThread configured={configured} />
     </div>
   );
 }

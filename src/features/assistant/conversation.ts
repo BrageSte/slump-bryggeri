@@ -1,4 +1,4 @@
-import type { AssistantCitation, AssistantProposedAction } from "../../domain/model/api.ts";
+import type { AssistantCitation, AssistantReplyAction } from "../../domain/model/api.ts";
 import { assistantWebSourceForUrl } from "../../domain/model/assistant-sources.ts";
 import { eventTypeLabels, measurementKindSpecs, type BrewStage } from "../../domain/model/brewing.ts";
 
@@ -13,6 +13,15 @@ export function starterQuestions(stage: BrewStage | null): string[] {
   return ["Hvordan ligger vi an mot planen?", "Hva bør vi måle i dag?", calibration];
 }
 
+/** Starters for the brewery thread: a recipe, a change to one, and what the brewery's own numbers say. */
+export function breweryStarterQuestions(): string[] {
+  return [
+    "Lag en oppskrift på en humlerik IPA rundt 6 %",
+    "Hva bør jeg endre i en av oppskriftene våre?",
+    "Hva sier historikken om utstyret vårt?",
+  ];
+}
+
 const number = (value: number, digits = 1, minimumDigits = 0) => value.toLocaleString("nb-NO", { minimumFractionDigits: minimumDigits, maximumFractionDigits: digits });
 
 export function assistantCitationLabel(citation: AssistantCitation): string | null {
@@ -21,7 +30,8 @@ export function assistantCitationLabel(citation: AssistantCitation): string | nu
   return citation.title ? `${source.organization} – ${citation.title}` : source.organization;
 }
 
-export function assistantActionLabel(action: AssistantProposedAction): string {
+export function assistantActionLabel(action: AssistantReplyAction): string {
+  if (action.kind === "recipe_draft") return `Utkast: ${action.recipe.name}`;
   if (action.kind === "log_measurement") {
     const label = action.label || measurementKindSpecs[action.measurementKind].label.toLowerCase();
     const decimals = measurementKindSpecs[action.measurementKind].decimals;

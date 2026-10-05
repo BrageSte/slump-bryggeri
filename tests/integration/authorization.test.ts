@@ -19,6 +19,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
   let importedA: string;
   let batchA: string;
   let assistantMessageA: string;
+  let breweryDraftA: string;
   let eventA: string;
   let attachmentA: string;
 
@@ -35,6 +36,23 @@ describe("brewery isolation (Alice vs Bob)", () => {
     const unanswered = await alice.post(`/breweries/${breweryA}/batches/${batchA}/assistant/messages`, { content: "Dette spørsmålet blir lagret." });
     expect(unanswered.status).toBe(503);
     assistantMessageA = (await alice.get(`/breweries/${breweryA}/batches/${batchA}/assistant/messages`)).body.messages[0].id;
+    // The brewery-level thread: Alice's question and an assistant answer carrying a pending recipe draft.
+    expect((await alice.post(`/breweries/${breweryA}/assistant/messages`, { content: "Lag en pils." })).status).toBe(503);
+    breweryDraftA = crypto.randomUUID();
+    await createDb(env.DB)
+      .insertInto("assistant_messages")
+      .values({
+        id: breweryDraftA,
+        brewery_id: breweryA,
+        batch_id: null,
+        role: "assistant",
+        content: "Her er et utkast.",
+        actions: JSON.stringify([{ kind: "recipe_draft", recipe: sunsetIpaRecipe, baseRecipeId: null, status: "pending", resolvedBy: null, resolvedAt: null, logEntryId: null }]),
+        citations: null,
+        created_by: null,
+        created_at: Date.now(),
+      })
+      .execute();
     eventA = (await alice.post(`/breweries/${breweryA}/batches/${batchA}/measurements`, { kind: "temperature", value: 66.8 })).body.id;
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/splits`, { name: "Lille tank", volumeL: 24 });
     await alice.post(`/breweries/${breweryA}/batches/${batchA}/comments`, { body: "Backup test comment" });
@@ -50,6 +68,18 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect(attachmentA).toBeTruthy();
   });
 
+  it("cannot save an assistant version into another brewery through either URL", async () => {
+    const version = (await alice.get(`/breweries/${breweryA}/recipes/${recipeA}`)).body.current.id;
+    const db = createDb(env.DB);
+    const before = await db.selectFrom("recipe_sources").selectAll().where("recipe_id", "=", recipeA).execute();
+    for (const breweryId of [breweryA, breweryB]) {
+      expect((await bob.post(`/breweries/${breweryId}/recipes/${recipeA}/versions`, {
+        recipe: sunsetIpaRecipe, baseVersionId: version, source: { kind: "assistant", originalText: "Change another brewery's recipe" },
+      })).status).toBe(404);
+    }
+    expect(await db.selectFrom("recipe_sources").selectAll().where("recipe_id", "=", recipeA).execute()).toEqual(before);
+  });
+
   it("hides Brewery A from Bob entirely (404, not 403)", async () => {
     for (const path of [
       `/breweries/${breweryA}`,
@@ -60,6 +90,7 @@ describe("brewery isolation (Alice vs Bob)", () => {
       `/breweries/${breweryA}/batches/${batchA}`,
       `/breweries/${breweryA}/batches/${batchA}/timeline`,
       `/breweries/${breweryA}/batches/${batchA}/assistant/messages`,
+      `/breweries/${breweryA}/assistant/messages`,
       `/breweries/${breweryA}/export`,
       `/breweries/${breweryA}/equipment-profile`,
       `/breweries/${breweryA}/attachments/${attachmentA}`,
@@ -153,6 +184,8 @@ describe("brewery isolation (Alice vs Bob)", () => {
     expect((await bob.get(`/breweries/${breweryB}/batches/${batchA}/assistant/messages`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryA}/assistant`)).status).toBe(404);
     expect((await bob.get(`/breweries/${breweryB}/attachments/${attachmentA}`)).status).toBe(404);
+    // Bob's own brewery thread is his own: none of Alice's messages or drafts show up in it.
+    expect((await bob.get(`/breweries/${breweryB}/assistant/messages`)).body.messages).toEqual([]);
 
     const history = await loadBreweryHistory(createDb(env.DB), breweryB);
     expect(history.batches).toEqual([]);
@@ -183,9 +216,15 @@ describe("brewery isolation (Alice vs Bob)", () => {
       bob.post(`/breweries/${breweryB}/batches/${batchA}/assistant/messages`, { content: "Hvor er vi?" }),
       bob.patch(`/breweries/${breweryA}/batches/${batchA}/assistant/messages/${assistantMessageA}/actions/0`, { status: "done" }),
       bob.patch(`/breweries/${breweryB}/batches/${batchA}/assistant/messages/${assistantMessageA}/actions/0`, { status: "done" }),
+      bob.post(`/breweries/${breweryA}/assistant/messages`, { content: "Hvor er vi?" }),
+      bob.patch(`/breweries/${breweryA}/assistant/messages/${breweryDraftA}/actions/0`, { status: "done" }),
+      bob.patch(`/breweries/${breweryB}/assistant/messages/${breweryDraftA}/actions/0`, { status: "done" }),
     ];
     for (const res of await Promise.all(writes)) expect(res.status).toBe(404);
     expect((await alice.get(`/breweries/${breweryA}/recipes`)).body).toHaveLength(2);
+    const breweryThread = (await alice.get(`/breweries/${breweryA}/assistant/messages`)).body.messages;
+    expect(breweryThread.map((m: { content: string }) => m.content)).toEqual(["Lag en pils.", "Her er et utkast."]);
+    expect(breweryThread[1].actions[0].status).toBe("pending");
 
     const batch = await alice.get(`/breweries/${breweryA}/batches/${batchA}`);
     expect(batch.body.outcomes).toMatchObject([{ splitId: null, rating: 4, tastingNotes: "Backup test result" }]);

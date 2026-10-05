@@ -1,7 +1,7 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { describe, expect, it } from "vitest";
 import { assistantToolDefinitions, runAssistantTool } from "../../worker/assistant/tools.ts";
-import { ASSISTANT_SYSTEM_PROMPT, runAssistant, type MessagesClient } from "../../worker/assistant/run.ts";
+import { ASSISTANT_SYSTEM_PROMPT, runAssistant, thinkingSettings, type MessagesClient } from "../../worker/assistant/run.ts";
 import { estimateCostUsd } from "../../worker/assistant/pricing.ts";
 import { calculateStrikeTemperature } from "../../src/domain/brewing-calculations/index.ts";
 import { holsfjordenWater20261001 } from "../../src/domain/water/slump-water.ts";
@@ -194,7 +194,7 @@ describe("assistant tools", () => {
 
   it("tells the model not to do arithmetic and to propose reported log entries", () => {
     expect(ASSISTANT_SYSTEM_PROMPT.toLowerCase()).toContain("never do arithmetic yourself, including sums and differences");
-    expect(ASSISTANT_SYSTEM_PROMPT).toContain("propose logging it with propose_actions");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("propose logging it with propose_actions after addressing their questions");
     expect(ASSISTANT_SYSTEM_PROMPT).toContain("Search the web only when the answer depends on specific external facts");
     expect(ASSISTANT_SYSTEM_PROMPT).toContain("Never search this batch's data, brewery history, or anything a calculation tool answers");
     expect(ASSISTANT_SYSTEM_PROMPT).toContain("note crop-year and lot variation for hops");
@@ -203,6 +203,30 @@ describe("assistant tools", () => {
 });
 
 describe("assistant loop", () => {
+  it("asks once for a missing answer after a log proposal without duplicating it", async () => {
+    const { client, requests } = fakeClient([
+      message([{ type: "tool_use", id: "t", name: "propose_actions", input: { actions: [{ kind: "log_measurement", measurementKind: "temperature", value: 18, unit: "°C" }] } }], "tool_use"),
+      message([], "end_turn"),
+      message([{ type: "text", text: "18 °C følger planen. Ikke øk ennå; følg målt SG." }], "end_turn"),
+    ]);
+    const result = await runAssistant({ client, model: "claude-haiku-4-5", brief: "Brief", batch,
+      history: [{ role: "user", content: "Vi målte 18 grader. Bør vi øke?" }], onUsage: () => {} });
+    expect(result.text).toContain("Ikke øk ennå");
+    expect(result.actions).toHaveLength(1);
+    expect(requests).toHaveLength(3);
+    expect(requests[2]?.messages.at(-1)?.content).toContain("Answer every part");
+  });
+
+  it("bounds an empty-answer retry even if the model stays silent", async () => {
+    const { client, requests } = fakeClient([
+      message([{ type: "tool_use", id: "t", name: "get_batch_section", input: { section: "plan" } }], "tool_use"),
+      message([], "end_turn"), message([], "end_turn"),
+    ]);
+    const result = await runAssistant({ client, model: "claude-sonnet-5-5", brief: "Brief", brewDocumentSections, batch,
+      history: [{ role: "user", content: "Hva sier planen?" }], onUsage: () => {} });
+    expect(requests).toHaveLength(3);
+    expect(result.text).toBe("Assistenten ga ikke noe svar. Prøv igjen.");
+  });
   it("runs a tool, returns its result to the model and answers", async () => {
     const thinking = { type: "thinking", thinking: "", signature: "sig" };
     const { client, requests } = fakeClient([
@@ -230,7 +254,7 @@ describe("assistant loop", () => {
     expect(results[0]).toMatchObject({ type: "tool_result", tool_use_id: "t1", is_error: false });
     // The brief is sent as a cached system block.
     expect(requests[0]!.system).toEqual([
-      expect.objectContaining({ type: "text" }),
+      expect.objectContaining({ type: "text", cache_control: { type: "ephemeral" } }),
       { type: "text", text: "Kort assistentbrief", cache_control: { type: "ephemeral" } },
     ]);
     expect(requests[0]!.model).toBe("claude-sonnet-5");
@@ -360,5 +384,27 @@ describe("assistant cost estimate", () => {
     expect(estimateCostUsd("claude-sonnet-5", { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 2 })).toBeCloseTo(0.02, 10);
     expect(estimateCostUsd("claude-sonnet-5-5", { inputTokens: 30_000, outputTokens: 1_500, cacheReadTokens: 10_000, cacheWriteTokens: 4_000, webSearchRequests: 0 })).toBeCloseTo(cost!, 10);
     expect(estimateCostUsd("some-future-model", { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0, webSearchRequests: 0 })).toBeNull();
+  });
+});
+
+
+describe("model compatibility", () => {
+  it("uses basic direct search and no adaptive thinking for Haiku", async () => {
+    const { client, requests } = fakeClient([message([{ type: "text", text: "Hei" }], "end_turn")]);
+    await runAssistant({ client, model: "claude-haiku-4-5", brief: "Brief", batch, history: [{ role: "user", content: "Hei" }], onUsage: () => {} });
+    expect(requests[0]).not.toHaveProperty("thinking");
+    expect(requests[0]).not.toHaveProperty("output_config");
+    expect(requests[0]?.tools?.find((tool) => "name" in tool && tool.name === "web_search")).toMatchObject({ type: "web_search_20250305", allowed_callers: ["direct"], max_uses: 2 });
+  });
+  it.each(["claude-haiku-4-5", "claude-haiku-4-5-20251001", "claude-sonnet-4-5-20250929", "claude-opus-4-5", "unknown-model"])("does not send unsupported adaptive settings to %s", (model) => {
+    expect(thinkingSettings(model)).toEqual({});
+  });
+  it.each(["claude-sonnet-5-5", "claude-opus-5-5", "claude-sonnet-4-6", "claude-opus-4-8"])("retains adaptive thinking and medium effort for %s", (model) => {
+    expect(thinkingSettings(model)).toEqual({ thinking: { type: "adaptive" }, output_config: { effort: "medium" } });
+  });
+  it("uses Opus 5.5's 0.05x cache rate and dated Haiku pricing", () => {
+    const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 1_000_000, cacheWriteTokens: 0, webSearchRequests: 0 };
+    expect(estimateCostUsd("claude-opus-5-5", usage)).toBeCloseTo(0.2, 10);
+    expect(estimateCostUsd("claude-haiku-4-5-20251001", usage)).toBeCloseTo(0.1, 10);
   });
 });

@@ -1,6 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import type { BrewDocumentSections } from "../../src/domain/brew-document/brew-document.ts";
 import {
   assistantProposedActionSchema,
   createCommentSchema,
@@ -24,36 +23,29 @@ import {
   mashedGrainKg,
   refractometerFinalGravity,
 } from "../../src/domain/brewing-calculations/index.ts";
-import type { BatchDetail, TimelineItem } from "../../src/domain/model/api.ts";
 import { profileValue } from "../../src/domain/model/equipment-profile.ts";
 import { addSaltsToWater, deriveWaterValues } from "../../src/domain/brewing-calculations/water-chemistry.ts";
 import { ionInfo, isSaltAgent, waterAgents, waterValueBasisLabels, getWaterAgent, type IonConcentrations } from "../../src/domain/model/water.ts";
 import { guidanceDisclaimer, ionGuidance, mashPhGuidance } from "../../src/domain/water/guidance.ts";
 import { summarizeWaterOfBatch } from "../../src/domain/water/batch-water.ts";
+import { breweryTools } from "./recipe-tools.ts";
+import {
+  batchTool,
+  equipmentValuesOf,
+  sharedTool,
+  type BatchToolContext,
+  type ToolContext,
+  type ToolScope,
+} from "./tool-kit.ts";
+
+export type { BreweryToolContext, RecipeListing, ToolContext } from "./tool-kit.ts";
 
 /**
  * The assistant's tools: thin wrappers around `src/domain/brewing-calculations`, so every number
  * the assistant gives comes from the same tested functions as the rest of the app (AGENTS.md: an
- * LLM never computes brewing values). Defaults come from the batch's frozen snapshots. All tools are
- * read-only; nothing here writes to the database.
+ * LLM never computes brewing values). Batch tools default to the batch's frozen snapshots, brewery tools
+ * (`recipe-tools.ts`) to the active equipment profile. All tools are read-only; nothing here writes to the database.
  */
-
-interface ToolContext {
-  batch: BatchDetail;
-  timeline?: TimelineItem[];
-  brewDocumentSections?: BrewDocumentSections;
-  loadBreweryHistory?: () => Promise<unknown>;
-  proposedActions?: AssistantProposedAction[];
-}
-
-interface AssistantTool<S extends z.ZodType> {
-  name: string;
-  description: string;
-  input: S;
-  run: (input: z.output<S>, context: ToolContext) => unknown | Promise<unknown>;
-}
-
-const tool = <S extends z.ZodType>(definition: AssistantTool<S>) => definition;
 
 const waterAddedDataSchema = z.object({
   volumeL: z.number().positive().max(10_000),
@@ -61,7 +53,7 @@ const waterAddedDataSchema = z.object({
   reason: z.string().trim().max(300).optional(),
 }).strict();
 
-function validateProposedAction(value: unknown, context: ToolContext): { action?: AssistantProposedAction; error?: string } {
+function validateProposedAction(value: unknown, context: BatchToolContext): { action?: AssistantProposedAction; error?: string } {
   const actionResult = assistantProposedActionSchema.safeParse(value);
   if (!actionResult.success) return { error: actionResult.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ") };
   const action = actionResult.data;
@@ -133,7 +125,7 @@ function ionsRounded(ions: IonConcentrations) {
 }
 
 const tools = [
-  tool({
+  batchTool({
     name: "strike_temperature",
     description:
       "Strike (mash-in) water temperature for a single infusion. Defaults: grain temperature, mash thickness and the brewery's system offset from the batch's equipment snapshot.",
@@ -155,7 +147,7 @@ const tools = [
       return { strikeTempC: round(result.strikeTempC, 1), baseStrikeTempC: round(result.baseStrikeTempC, 1), inputsUsed: used };
     },
   }),
-  tool({
+  batchTool({
     name: "water_volumes",
     description:
       "Mash water, sparge water, total water and pre/post-boil volumes working back from the fermenter volume. Defaults: the recipe's batch size, mashed grain and boil time, and losses/boil-off from the batch's equipment snapshot. Fails if no boil-off rate is known and none is given.",
@@ -188,7 +180,7 @@ const tools = [
       return { ...Object.fromEntries(Object.entries(result).map(([key, value]) => [key, round(value, 1)])), inputsUsed: used };
     },
   }),
-  tool({
+  batchTool({
     name: "mash_temperature_adjustment",
     description:
       "Litres of water at a given temperature to add to move the mash from its current to its target temperature (heat balance). Defaults: mashed grain from the recipe. Returns null additionL when the water cannot reach the target.",
@@ -207,7 +199,7 @@ const tools = [
       return { additionL: result ? round(result.additionL, 2) : null, inputsUsed: used };
     },
   }),
-  tool({
+  batchTool({
     name: "gravity_from_brix",
     description:
       "Refractometer reading to SG. Before fermentation: Brix → SG. After fermentation has started, pass originalBrix (the pre-fermentation Brix) to get an alcohol-corrected estimate (Terrill 2011). WCF defaults to the batch's refractometer correction factor.",
@@ -228,13 +220,13 @@ const tools = [
       return { sg: round(brixToSg(input.brix, wcf), 4), method: "Brix to SG before fermentation", wcf };
     },
   }),
-  tool({
+  sharedTool({
     name: "abv_and_attenuation",
     description: "ABV and apparent attenuation from OG and FG.",
     input: z.object({ og: z.number().min(1).max(1.2), fg: z.number().min(0.98).max(1.1) }),
     run: ({ og, fg }) => ({ abvPct: round(calculateAbv(og, fg), 2), apparentAttenuationPct: round(calculateApparentAttenuation(og, fg), 1) }),
   }),
-  tool({
+  batchTool({
     name: "brewhouse_efficiency",
     description: "Actual brewhouse efficiency (%) from a measured gravity and the volume it was measured at, using the recipe's grain bill.",
     input: z.object({ measuredSg: z.number().min(1).max(1.2), volumeL: z.number().positive().max(10_000) }),
@@ -243,7 +235,7 @@ const tools = [
       plannedEfficiencyPct: batch.recipeSnapshot.efficiencyPct,
     }),
   }),
-  tool({
+  batchTool({
     name: "observed_boil_off",
     description: "Boil-off rate (L/h) from volumes measured before and after the boil.",
     input: z.object({
@@ -260,16 +252,16 @@ const tools = [
       };
     },
   }),
-  tool({
+  sharedTool({
     name: "convert_units",
     description: "Convert between supported units: L ↔ US gal, °C ↔ °F, g/kg ↔ oz/lb, bar ↔ psi, SG ↔ °P, °Bx ↔ SG (before fermentation).",
     input: z.object({ value: z.number(), fromUnit: z.string().max(10), toUnit: z.string().max(10) }),
-    run: ({ value, fromUnit, toUnit }, { batch }) => {
-      const result = convertUnitValue(value, fromUnit, toUnit, { wcf: batch.equipmentSnapshot.values.refractometer_wcf });
+    run: ({ value, fromUnit, toUnit }, context) => {
+      const result = convertUnitValue(value, fromUnit, toUnit, { wcf: equipmentValuesOf(context).refractometer_wcf });
       return result === null ? { error: `Cannot convert ${fromUnit} to ${toUnit}.` } : { value: round(result, 4), unit: toUnit };
     },
   }),
-  tool({
+  batchTool({
     name: "water_chemistry",
     description:
       "This batch's water chemistry in four separate parts: sourceWater (ions as the supplier reports them, frozen into the batch; frozen=false means an older batch assumed to have used the brewery's base water), calculated (values we derive from it: alkalinity, residual alkalinity, hardness, and the profile after the recipe's planned salts), plan (the recipe's target ions, mash pH target, planned salts and acids) and measured (pH readings with sample point, sample temperature and instrument, and the salts and acids actually logged). Optionally pass whatIfSalts to see the profile after dissolving salts (grams) in totalWaterL (defaults to the plan's mash plus sparge water). guidance holds general windows, not rules. There is no mash pH prediction and no acid dosing: do not estimate them.",
@@ -330,22 +322,22 @@ const tools = [
       };
     },
   }),
-  tool({
+  batchTool({
     name: "get_batch_section",
     description: "Return the requested section of this batch's brew document. An empty section means no section content is available.",
     input: z.object({ section: z.enum(["plan", "water", "equipment", "status", "results", "calibration", "log"]) }),
     run: ({ section }, context) => context.brewDocumentSections?.[section] ?? { error: "not available" },
   }),
-  tool({
+  sharedTool({
     name: "brewery_history",
     description: "The brewery's own observed boil-off, brewhouse efficiency, strike-temperature offset and attenuation across earlier batches, with counts; per batch also the source water used, mash pH target, pH readings (sample point, temperature, instrument) and salts and acids added. Use only for calibration, questions about what is normal for this brewery, or how earlier batches' water and pH compare.",
     input: z.object({}),
     run: async (_input, context) => (context.loadBreweryHistory ? context.loadBreweryHistory() : { error: "not available" }),
   }),
-  tool({
+  batchTool({
     name: "propose_actions",
     description:
-      "Suggest log entries or a timer for the brewer to confirm. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?,sampleTempC?} (for pH, label «pH før kok», «pH etter kok» or «Slutt-pH» when the stage does not already say where the sample was taken, and sampleTempC when the brewer states it); {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
+      "Suggest only new, actual observations from this batch, or a timer the brewer requested, for confirmation. First address all questions; this tool never replaces advice. Do not propose targets, plans, hypotheticals, already logged values, or anything the brewer says not to log. Never performs a write. Each action must match one of these strict shapes: {kind:'log_measurement',measurementKind,value,unit,label?,splitId?,sampleTempC?} (for pH, label «pH før kok», «pH etter kok» or «Slutt-pH» when the stage does not already say where the sample was taken, and sampleTempC when the brewer states it); {kind:'log_event',type,data} (water_added data is {volumeL,temperatureC,reason?}, ingredient_added/yeast_pitched use ingredient data, comment data is {body}); or {kind:'start_timer',label,durationMin}.",
     // Expose the strict action union to Claude; runAssistantTool has a tolerant item-wise fallback
     // so invalid suggestions are still reported without discarding valid siblings.
     input: z.object({ actions: z.array(assistantProposedActionSchema).max(12) }).strict(),
@@ -364,18 +356,32 @@ const tools = [
       return { accepted, rejected };
     },
   }),
+  ...breweryTools,
 ];
 
-/** Tool definitions in the shape the Messages API expects. Order is fixed so the prompt cache holds. */
-export const assistantToolDefinitions: Anthropic.Tool[] = tools.map((t) => {
-  const { $schema: _schema, ...schema } = z.toJSONSchema(t.input) as Record<string, unknown>;
-  return { name: t.name, description: t.description, input_schema: schema as Anthropic.Tool.InputSchema };
-});
+const definitionsFor = (scopes: readonly ToolScope[]): Anthropic.Tool[] =>
+  tools
+    .filter((t) => scopes.includes(t.scope))
+    .map((t) => {
+      const { $schema: _schema, ...schema } = z.toJSONSchema(t.input) as Record<string, unknown>;
+      return { name: t.name, description: t.description, input_schema: schema as Anthropic.Tool.InputSchema };
+    });
 
-/** Runs one tool call. Invalid input or a failing calculation becomes an error result, never a throw. */
+/** The tools of the batch thread, in the shape the Messages API expects. Order is fixed so the prompt cache holds. */
+export const assistantToolDefinitions: Anthropic.Tool[] = definitionsFor(["batch", "both"]);
+
+/** The tools of the brewery thread (recipes, equipment, history). */
+export const breweryToolDefinitions: Anthropic.Tool[] = definitionsFor(["brewery", "both"]);
+
+/**
+ * Runs one tool call. Invalid input or a failing calculation becomes an error result, never a throw. A tool outside the
+ * thread's scope is unknown to it: the context says which thread this is (`brewery` set, or a `batch`).
+ */
 export async function runAssistantTool(name: string, input: unknown, context: ToolContext): Promise<{ content: string; isError: boolean }> {
-  const definition = tools.find((t) => t.name === name);
+  const scopes: readonly ToolScope[] = context.brewery ? ["brewery", "both"] : ["batch", "both"];
+  const definition = tools.find((t) => t.name === name && scopes.includes(t.scope));
   if (!definition) return { content: `Unknown tool: ${name}`, isError: true };
+  if (definition.scope === "batch" && !context.batch) return { content: `${name} needs a batch.`, isError: true };
   let parsedInput: unknown;
   const parsed = definition.input.safeParse(input);
   if (parsed.success) {

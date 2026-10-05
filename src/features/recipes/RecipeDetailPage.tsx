@@ -26,6 +26,7 @@ import { useEquipmentProfile } from "../equipment/api.ts";
 
 const sourceLabels: Record<string, string> = {
   manual: "Lagt inn manuelt",
+  assistant: "Utkast fra bryggeassistenten",
   example: "Eksempeloppskrift",
   library: "Oppskriftsbiblioteket (BrewDog DIY Dog)",
   beerxml: "BeerXML",
